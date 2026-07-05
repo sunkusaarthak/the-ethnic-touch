@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Portal | The Ethnic Touch</title>
+    <link rel="stylesheet" href="admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            The Ethnic <span>Touch</span>
+        </div>
+        <nav>
+            <ul>
+                <li class="active" data-tab="dashboard">Dashboard</li>
+                <li data-tab="products">Manage Products</li>
+                <li data-tab="orders">View Orders</li>
+                <li data-tab="coupons">Marketing Coupons</li>
+            </ul>
+        </nav>
+        <div class="sidebar-footer">
+            <button id="logoutBtn">Back to Store</button>
+        </div>
+    </aside>
+
+    <main class="content">
+        <header>
+            <h1 id="pageTitle">Store Overview</h1>
+            <div id="headerActions">
+                <!-- Action buttons will inject here -->
+            </div>
+        </header>
+
+        <!-- Dashboard Tab -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Revenue</h3>
+                    <p class="value" id="stat-revenue">₹0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Orders</h3>
+                    <p class="value" id="stat-orders">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Coupons Active</h3>
+                    <p class="value" id="stat-coupons">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products Tab -->
+        <div id="tab-products" class="tab-content">
+            <div class="table-container">
+                <table id="productsTable">
+                    <thead>
+                        <tr>
+                            <th>Preview</th>
+                            <th>Product Name</th>
+                            <th>Category</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Orders Tab -->
+        <div id="tab-orders" class="tab-content">
+            <div class="table-container">
+                <table id="ordersTable">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Coupons Tab -->
+        <div id="tab-coupons" class="tab-content">
+            <div class="table-container">
+                <table id="couponsTable">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Type</th>
+                            <th>Value</th>
+                            <th>Min Order</th>
+                            <th>Uses</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Product Modal -->
+    <div id="productModal" class="modal-overlay">
+        <div class="modal-card">
+            <h2>Add New Product</h2>
+            <form id="productForm">
+                <div>
+                    <label>Name</label>
+                    <input type="text" id="p_name" required>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <div style="flex:1">
+                        <label>Price (₹)</label>
+                        <input type="number" id="p_price" required>
+                    </div>
+                    <div style="flex:1">
+                        <label>Stock</label>
+                        <input type="number" id="p_stock" required>
+                    </div>
+                </div>
+                <div>
+                    <label>Category</label>
+                    <select id="p_category">
+                        <option value="Anarkali">Anarkali</option>
+                        <option value="Straight Cut">Straight Cut</option>
+                        <option value="Tunic">Tunic</option>
+                        <option value="Fusion">Fusion</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Description</label>
+                    <textarea id="p_desc" rows="3"></textarea>
+                </div>
+                <div>
+                    <label>Image URL</label>
+                    <input type="text" id="p_image" value="./images/kurthi_peach.png">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Product</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Coupon Modal -->
+    <div id="couponModal" class="modal-overlay">
+        <div class="modal-card">
+            <h2>Create Coupon</h2>
+            <form id="couponForm">
+                <div>
+                    <label>Coupon Code</label>
+                    <input type="text" id="c_code" placeholder="SAVE20" required>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <div style="flex:1">
+                        <label>Type</label>
+                        <select id="c_type">
+                            <option value="percentage">Percentage (%)</option>
+                            <option value="fixed">Fixed (₹)</option>
+                        </select>
+                    </div>
+                    <div style="flex:1">
+                        <label>Value</label>
+                        <input type="number" id="c_value" required>
+                    </div>
+                </div>
+                <div>
+                    <label>Min Order (₹)</label>
+                    <input type="number" id="c_min" value="0">
+                </div>
+                <div>
+                    <label>Usage Limit</label>
+                    <input type="number" id="c_limit" value="100">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
