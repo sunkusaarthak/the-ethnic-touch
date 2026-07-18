@@ -115,7 +115,7 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
     const [msg, setMsg] = useState('');
     
     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
-    const finalTotal = subtotal - (discount?.amt || 0);
+    const finalTotal = subtotal - (discount?.value || 0); // Wait, discount uses value calculated by server or apply here
 
     const handleCoupon = async () => {
         try {
@@ -125,8 +125,8 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                 body: JSON.stringify({ code: couponCode, total: subtotal })
             });
             if (!res.ok) {
-                const err = await res.text();
-                setMsg(err);
+                const err = await res.json();
+                setMsg(err.error || 'Invalid code');
                 return;
             }
             const coupon = await res.json();
@@ -188,53 +188,97 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
 
 const Checkout = ({ cart, discount, clearCart }) => {
     const [email, setEmail] = useState('');
-    const [done, setDone] = useState(false);
-    const [orderId, setOrderId] = useState('');
-    const [gift, setGift] = useState('');
+    const [ordering, setOrdering] = useState(false);
+    const navigate = useNavigate();
 
     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
     const finalTotal = subtotal - (discount?.amt || 0);
 
     const placeOrder = async () => {
         if (!email) return alert('Email required');
+        setOrdering(true);
+
         const order = {
             customerEmail: email,
-            totalAmount: finalTotal,
-            discountAmt: discount?.amt || 0,
-            couponCode: discount?.code || ''
+            couponCode: discount?.code || '',
+            items: cart.map(item => ({
+                productId: item.id,
+                quantity: 1
+            }))
         };
         
-        const res = await fetch('/api/orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(order)
-        });
-        
-        if (res.ok) {
+        try {
+            const res = await fetch('/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(order)
+            });
+            
+            if (!res.ok) {
+                const errData = await res.json();
+                alert(errData.error || 'Failed to create order');
+                setOrdering(false);
+                return;
+            }
+
             const data = await res.json();
-            setOrderId(data.id);
-            if (finalTotal > 5000) setGift(`GFT-${data.id.slice(-4)}`);
-            setDone(true);
-            clearCart();
+
+            if (data.checkoutUrl !== "razorpay") {
+                clearCart();
+                // Redirect user to Mock checkout SPA route
+                navigate(data.checkoutUrl);
+            } else {
+                // Open live Razorpay standard Checkout dialog modal
+                const options = {
+                    "key": data.razorpayKey,
+                    "amount": data.amount * 100,
+                    "currency": "INR",
+                    "name": "The Ethnic Touch",
+                    "description": "Premium Kurthi E-Commerce Checkout",
+                    "order_id": data.razorpayOrderId,
+                    "handler": async function (response) {
+                        const verifyRes = await fetch('/api/orders/verify', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                orderId: data.orderId,
+                                razorpayOrderId: response.razorpay_order_id,
+                                razorpayPaymentId: response.razorpay_payment_id,
+                                razorpaySignature: response.razorpay_signature,
+                                mock: false
+                            })
+                        });
+
+                        if (verifyRes.ok) {
+                            const verifyData = await verifyRes.json();
+                            clearCart();
+                            navigate('/checkout-success', { 
+                                state: { 
+                                    orderId: data.orderId, 
+                                    gift: verifyData.giftCode, 
+                                    tracking: verifyData.trackingNumber 
+                                } 
+                            });
+                        } else {
+                            alert("Payment verification check failed. Please verify with Support.");
+                        }
+                    },
+                    "prefill": {
+                        "email": email
+                    },
+                    "theme": {
+                        "color": "#FFE5D9"
+                    }
+                };
+                const rzp = new window.Razorpay(options);
+                rzp.open();
+                setOrdering(false);
+            }
+        } catch (err) {
+            alert("Error placing order.");
+            setOrdering(false);
         }
     };
-
-    if (done) return (
-        <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
-            <h1>Success!</h1>
-            <div style={{padding: '3rem', backgroundColor: 'var(--color-mint)', borderRadius: 'var(--border-radius-lg)', margin: '2rem 0'}}>
-                <h2>Order #{orderId} Placed</h2>
-                <p style={{marginTop:'1rem'}}>We've sent a confirmation to {email}.</p>
-                {gift && (
-                    <div style={{marginTop: '2rem', padding: '1rem', border: '2px dashed var(--color-peach)', borderRadius: '8px'}}>
-                        <h4 style={{color: 'var(--color-peach)'}}>Surprise Gift Coupon!</h4>
-                        <p>Use code <strong>{gift}</strong> for 15% off your next order.</p>
-                    </div>
-                )}
-            </div>
-            <Link to="/" className="btn btn-primary">Return to Store</Link>
-        </div>
-    );
 
     return (
         <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh'}}>
@@ -247,17 +291,169 @@ const Checkout = ({ cart, discount, clearCart }) => {
                     onChange={e => setEmail(e.target.value)} 
                     placeholder="you@example.com"
                     style={{padding: '1rem', border: '1px solid #ddd', borderRadius: '8px', width: '100%'}}
+                    disabled={ordering}
                 />
             </div>
             <div style={{padding: '2rem', border: '1px solid #eee', borderRadius: '8px'}}>
                 <p>Items in order: {cart.length}</p>
                 <h3 style={{marginTop: '1rem'}}>Amount to Pay: ₹{finalTotal.toLocaleString('en-IN')}</h3>
             </div>
-            <button className="btn btn-primary" onClick={placeOrder} style={{marginTop: '2rem', width: '100%'}}>Pay & Secure Order</button>
+            <button 
+                className="btn btn-primary" 
+                onClick={placeOrder} 
+                style={{marginTop: '2rem', width: '100%'}}
+                disabled={ordering}
+            >
+                {ordering ? "Verifying Stock & Routing..." : "Pay & Secure Order"}
+            </button>
         </div>
     );
 };
 
+// --- MOCK PAYMENT GATEWAY SIMULATOR ---
+const MockPayment = ({ onPaymentSuccess }) => {
+    const [searchParams] = useState(() => {
+        const hash = window.location.hash;
+        const qIndex = hash.indexOf('?');
+        const qStr = qIndex !== -1 ? hash.slice(qIndex) : '';
+        return new URLSearchParams(qStr);
+    });
+    const orderId = searchParams.get('orderId');
+    const [paying, setPaying] = useState(false);
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!orderId) {
+            navigate('/');
+        }
+    }, [orderId]);
+
+    const handlePay = async () => {
+        setPaying(true);
+        try {
+            const res = await fetch('/api/orders/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderId: orderId,
+                    mock: true
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                onPaymentSuccess(data);
+                navigate('/checkout-success', { 
+                    state: { 
+                        orderId: orderId, 
+                        gift: data.giftCode, 
+                        tracking: data.trackingNumber 
+                    } 
+                });
+            } else {
+                const errData = await res.json();
+                alert("Simulated transaction failed: " + (errData.error || 'Server error'));
+                setPaying(false);
+            }
+        } catch (err) {
+            alert("Server connection failed.");
+            setPaying(false);
+        }
+    };
+
+    return (
+        <div style={{padding: '8rem 5% 4rem', maxWidth: '500px', margin: '0 auto', minHeight: '80vh'}}>
+            <div style={{
+                padding: '3rem 2rem',
+                backgroundColor: 'white',
+                borderRadius: 'var(--border-radius-lg)',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
+                border: '1px solid #f0f0f0',
+                textAlign: 'center'
+            }}>
+                <h2 style={{fontFamily: 'var(--font-title)', color: 'var(--color-peach)', marginBottom: '1rem'}}>
+                    💳 Razorpay Simulator
+                </h2>
+                <p style={{color: 'gray', marginBottom: '2rem'}}>Confirming details for order ref: <strong>{orderId}</strong></p>
+                
+                <div style={{
+                    backgroundColor: '#fffcf9',
+                    padding: '1.5rem',
+                    borderRadius: '8px',
+                    marginBottom: '2rem',
+                    border: '1px dashed var(--color-peach)'
+                }}>
+                    <p style={{fontSize: '0.9rem', color: '#886050', margin: 0}}>
+                        <strong>Dev Sandbox Environment</strong>
+                    </p>
+                    <p style={{fontSize: '0.85rem', color: '#906858', margin: '0.5rem 0 0', lineHeight: '1.5'}}>
+                        This screen simulates RazorPay's secure transaction screen. Clicking below fires the signature webhook checking.
+                    </p>
+                </div>
+
+                <button 
+                    className="btn btn-primary" 
+                    onClick={handlePay} 
+                    disabled={paying}
+                    style={{width: '100%', padding: '1.2rem', fontSize: '1.1rem'}}
+                >
+                    {paying ? "Verifying signature credentials..." : "Simulate Payment Success"}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// --- CHECKOUT SUCCESS PAGE ---
+const CheckoutSuccess = () => {
+    const state = ReactRouterDOM.useLocation().state || {};
+    const { orderId, gift, tracking } = state;
+
+    if (!orderId) {
+        return (
+            <div style={{padding: '10rem 5%', textAlign:'center', minHeight:'80vh'}}>
+                <h2>No Order Context Found</h2>
+                <Link to="/" className="btn btn-primary" style={{marginTop:'1.5rem', display:'inline-block'}}>Back to Catalog</Link>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
+            <div style={{
+                fontSize: '5rem',
+                color: '#2e7d32',
+                marginBottom: '1rem'
+            }}>✓</div>
+            <h1 style={{fontFamily:'var(--font-title)', marginBottom: '1rem'}}>Payment Success!</h1>
+            <div style={{padding: '3rem', backgroundColor: '#f4fbf7', border: '1px solid #c8e6c9', borderRadius: 'var(--border-radius-lg)', margin: '2rem 0'}}>
+                <h2 style={{color: '#2e7d32'}}>Order #{orderId} Confirmed</h2>
+                <p style={{marginTop:'1.5rem', fontSize:'1.05rem', color:'#4caf50', fontWeight:'500'}}>
+                    🚀 Order has been approved and automatically shipped!
+                </p>
+                {tracking && (
+                    <div style={{
+                        marginTop: '1.5rem',
+                        padding: '1rem',
+                        background: 'white',
+                        border: '1px solid #a5d6a7',
+                        borderRadius: '6px',
+                        display: 'inline-block'
+                    }}>
+                        <p style={{margin: 0, fontSize: '0.9rem', color: '#555'}}>Carrier Tracking Number:</p>
+                        <strong style={{fontSize: '1.2rem', color: '#2e7d32'}}>{tracking}</strong>
+                    </div>
+                )}
+                {gift && (
+                    <div style={{marginTop: '2rem', padding: '1.5rem', border: '2px dashed var(--color-peach)', backgroundColor: '#fffdfb', borderRadius: '8px'}}>
+                        <h4 style={{color: 'var(--color-peach)', margin: '0 0 0.5rem'}}>Surprise Gift Coupon Distributed!</h4>
+                        <p style={{margin:0, fontSize:'0.9rem'}}>Use code <strong>{gift}</strong> for 15% off your next purchase.</p>
+                    </div>
+                )}
+            </div>
+            <Link to="/" className="btn btn-primary" style={{padding: '1rem 3rem'}}>Return to Store</Link>
+        </div>
+    );
+};
 
 // --- MAIN APP ---
 
@@ -298,12 +494,13 @@ const App = () => {
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} />} />
                 <Route path="/cart" element={<Cart cart={cart} onApplyCoupon={setDiscount} discount={discount} />} />
                 <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} />} />
+                <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={() => {}} />} />
+                <Route path="/checkout-success" element={<CheckoutSuccess />} />
             </Routes>
             <Footer />
         </HashRouter>
     );
 };
-
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);

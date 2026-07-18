@@ -9,10 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('logoutBtn').addEventListener('click', () => window.location.href = '/');
 });
 
+// Helper to assemble Auth headers dynamically
+function getAuthHeader() {
+    const token = localStorage.getItem('authToken') || 'admin_secret_token_123';
+    return {
+        'Authorization': `Bearer ${token}`
+    };
+}
+
 function initTabs() {
     const tabs = document.querySelectorAll('nav li');
     const contents = document.querySelectorAll('.tab-content');
-    const headerActions = document.getElementById('headerActions');
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -62,8 +69,8 @@ async function loadDashboard() {
     try {
         const [products, orders, coupons] = await Promise.all([
             fetch('/api/products').then(r => r.json()),
-            fetch('/api/admin/orders').then(r => r.json()),
-            fetch('/api/admin/coupons').then(r => r.json())
+            fetch('/api/admin/orders', { headers: getAuthHeader() }).then(r => r.json()),
+            fetch('/api/admin/coupons', { headers: getAuthHeader() }).then(r => r.json())
         ]);
 
         const revenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
@@ -72,7 +79,7 @@ async function loadDashboard() {
         document.getElementById('stat-orders').innerText = orders.length;
         document.getElementById('stat-coupons').innerText = coupons.length;
     } catch (err) {
-        console.error("Dashboard load failed");
+        console.error("Dashboard load failed", err);
     }
 }
 
@@ -80,60 +87,94 @@ async function loadProducts() {
     const body = document.querySelector('#productsTable tbody');
     body.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
     
-    const products = await fetch('/api/products').then(r => r.json());
-    body.innerHTML = '';
-    products.forEach(p => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><img src="${p.imageUrl}" style="width:40px; border-radius:4px;"></td>
-            <td style="font-weight:500">${p.name}</td>
-            <td>${p.category}</td>
-            <td>₹${p.price.toLocaleString('en-IN')}</td>
-            <td>${p.stock}</td>
-            <td><button class="btn-secondary" style="padding:4px 12px; font-size:0.8rem">Edit</button></td>
-        `;
-        body.appendChild(tr);
-    });
+    try {
+        const products = await fetch('/api/products').then(r => r.json());
+        body.innerHTML = '';
+        products.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><img src="${p.imageUrl}" style="width:40px; height:40px; border-radius:4px; object-fit:cover;"></td>
+                <td style="font-weight:500">${p.name}</td>
+                <td>${p.category}</td>
+                <td>₹${p.price.toLocaleString('en-IN')}</td>
+                <td>${p.stock}</td>
+                <td><button class="btn-secondary" style="padding:4px 12px; font-size:0.8rem">Edit</button></td>
+            `;
+            body.appendChild(tr);
+        });
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6" style="color:red">Failed to load products.</td></tr>';
+    }
 }
 
 async function loadOrders() {
     const body = document.querySelector('#ordersTable tbody');
-    body.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+    body.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
     
-    const orders = await fetch('/api/admin/orders').then(r => r.json());
-    body.innerHTML = '';
-    orders.reverse().forEach(o => {
-        const tr = document.createElement('tr');
-        const date = new Date(o.createdAt).toLocaleDateString();
-        tr.innerHTML = `
-            <td style="font-weight:500">${o.id}</td>
-            <td>${o.customerEmail}</td>
-            <td>₹${o.totalAmount.toLocaleString('en-IN')}</td>
-            <td><span style="padding:4px 8px; background:#e8f5e9; color:#2e7d32; border-radius:4px; font-size:0.8rem">${o.status}</span></td>
-            <td>${date}</td>
-        `;
-        body.appendChild(tr);
-    });
+    try {
+        const orders = await fetch('/api/admin/orders', { headers: getAuthHeader() }).then(r => r.json());
+        body.innerHTML = '';
+        orders.forEach(o => {
+            const tr = document.createElement('tr');
+            const date = new Date(o.createdAt).toLocaleDateString();
+            
+            // Format order items list
+            const itemsStr = o.items ? o.items.map(it => `${it.productName || it.productId} (x${it.quantity})`).join(', ') : 'No Details';
+            
+            // Determine tracking badge
+            const trackingStr = o.trackingNumber 
+                ? `<span style="font-family:monospace; color:#2e7d32">🚚 ${o.trackingNumber}</span>`
+                : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
+
+            // Status label style
+            let badgeBg = '#ffe0b2';
+            let badgeColor = '#e65100';
+            if (o.status === 'shipped') {
+                badgeBg = '#e8f5e9';
+                badgeColor = '#2e7d32';
+            } else if (o.status === 'paid') {
+                badgeBg = '#e3f2fd';
+                badgeColor = '#0d47a1';
+            }
+
+            tr.innerHTML = `
+                <td style="font-weight:500">${o.id}</td>
+                <td>${o.customerEmail}</td>
+                <td>₹${o.totalAmount.toLocaleString('en-IN')}</td>
+                <td style="font-size:0.9rem; color:#555; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${itemsStr}">${itemsStr}</td>
+                <td><span style="padding:4px 8px; background:${badgeBg}; color:${badgeColor}; border-radius:4px; font-size:0.8rem; font-weight:500">${o.status}</span></td>
+                <td>${trackingStr}</td>
+                <td>${date}</td>
+            `;
+            body.appendChild(tr);
+        });
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="7" style="color:red">Failed to load orders or Unauthorized. Error: ' + err.message + '</td></tr>';
+    }
 }
 
 async function loadCoupons() {
     const body = document.querySelector('#couponsTable tbody');
     body.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
     
-    const coupons = await fetch('/api/admin/coupons').then(r => r.json());
-    body.innerHTML = '';
-    coupons.forEach(c => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td style="font-weight:600">${c.code}</td>
-            <td style="text-transform:capitalize">${c.type}</td>
-            <td>${c.type === 'fixed' ? '₹' : ''}${c.value}${c.type === 'percentage' ? '%' : ''}</td>
-            <td>≥ ₹${c.minOrder}</td>
-            <td>${c.usedCount} / ${c.usageLimit}</td>
-            <td><span style="color:${c.isActive ? 'green' : 'red'}">${c.isActive ? 'Active' : 'Expired'}</span></td>
-        `;
-        body.appendChild(tr);
-    });
+    try {
+        const coupons = await fetch('/api/admin/coupons', { headers: getAuthHeader() }).then(r => r.json());
+        body.innerHTML = '';
+        coupons.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="font-weight:600">${c.code}</td>
+                <td style="text-transform:capitalize">${c.type}</td>
+                <td>${c.type === 'fixed' ? '₹' : ''}${c.value}${c.type === 'percentage' ? '%' : ''}</td>
+                <td>≥ ₹${c.minOrder}</td>
+                <td>${c.usedCount} / ${c.usageLimit}</td>
+                <td><span style="color:${c.isActive ? 'green' : 'red'}">${c.isActive ? 'Active' : 'Expired'}</span></td>
+            `;
+            body.appendChild(tr);
+        });
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6" style="color:red">Failed to load coupons.</td></tr>';
+    }
 }
 
 async function handleAddProduct(e) {
@@ -149,7 +190,10 @@ async function handleAddProduct(e) {
 
     const res = await fetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            ...getAuthHeader()
+        },
         body: JSON.stringify(data)
     });
 
@@ -157,6 +201,9 @@ async function handleAddProduct(e) {
         closeModals();
         loadProducts();
         document.getElementById('productForm').reset();
+    } else {
+        const errData = await res.json();
+        alert(errData.error || "Failed to create product");
     }
 }
 
@@ -172,7 +219,10 @@ async function handleAddCoupon(e) {
 
     const res = await fetch('/api/admin/coupons', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            ...getAuthHeader()
+        },
         body: JSON.stringify(data)
     });
 
@@ -180,6 +230,9 @@ async function handleAddCoupon(e) {
         closeModals();
         loadCoupons();
         document.getElementById('couponForm').reset();
+    } else {
+        const errData = await res.json();
+        alert(errData.error || "Failed to create coupon");
     }
 }
 
