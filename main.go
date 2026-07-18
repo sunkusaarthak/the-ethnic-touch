@@ -13,7 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
@@ -30,17 +31,17 @@ type Product struct {
 
 // Coupon represents a discount code
 type Coupon struct {
-	ID         string  `json:"id"`
-	Code       string  `json:"code"`
-	Type       string  `json:"type"` // "fixed", "percentage"
-	Value      float64 `json:"value"`
-	MinOrder   float64 `json:"minOrder"`
-	ExpiryDate string  `json:"expiryDate"`
-	IsActive   bool    `json:"isActive"`
-	UsageLimit int     `json:"usageLimit"`
-	UsedCount  int     `json:"usedCount"`
-	MaxDiscount float64 `json:"maxDiscount,omitempty"`
-	FreeShipping bool   `json:"freeShipping,omitempty"`
+	ID           string  `json:"id"`
+	Code         string  `json:"code"`
+	Type         string  `json:"type"` // "fixed", "percentage"
+	Value        float64 `json:"value"`
+	MinOrder     float64 `json:"minOrder"`
+	ExpiryDate   string  `json:"expiryDate"`
+	IsActive     bool    `json:"isActive"`
+	UsageLimit   int     `json:"usageLimit"`
+	UsedCount    int     `json:"usedCount"`
+	MaxDiscount  float64 `json:"maxDiscount,omitempty"`
+	FreeShipping bool    `json:"freeShipping,omitempty"`
 }
 
 // Order represents a customer purchase
@@ -95,10 +96,10 @@ type PriceSummary struct {
 }
 
 type CartResponse struct {
-	Items      []CartItem    `json:"items"`
-	SavedItems []CartItem    `json:"savedItems"`
-	Summary    PriceSummary  `json:"summary"`
-	Warnings   []string      `json:"warnings,omitempty"`
+	Items      []CartItem   `json:"items"`
+	SavedItems []CartItem   `json:"savedItems"`
+	Summary    PriceSummary `json:"summary"`
+	Warnings   []string     `json:"warnings,omitempty"`
 }
 
 type cartItemRequest struct {
@@ -107,11 +108,11 @@ type cartItemRequest struct {
 }
 
 const (
-	maxCartItemQuantity = 10
+	maxCartItemQuantity   = 10
 	freeShippingThreshold = 5000.0
-	standardShippingFee = 99.0
-	platformFee = 10.0
-	gstRate = 0.05
+	standardShippingFee   = 99.0
+	platformFee           = 10.0
+	gstRate               = 0.05
 )
 
 var (
@@ -134,10 +135,52 @@ type FileStorage interface {
 var db *sql.DB
 
 func initDB() {
-	var err error
-	db, err = sql.Open("sqlite", "./ethnictouch.db")
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("No .env file found, using system environment variables and defaults")
+	}
+
+	host := os.Getenv("DB_HOST")
+	port := os.Getenv("DB_PORT")
+	user := os.Getenv("DB_USER")
+	password := os.Getenv("DB_PASSWORD")
+	dbname := os.Getenv("DB_NAME")
+	sslmode := os.Getenv("DB_SSLMODE")
+
+	if host == "" {
+		host = "localhost"
+	}
+	if port == "" {
+		port = "5432"
+	}
+	if user == "" {
+		user = "postgres"
+	}
+	if dbname == "" {
+		dbname = "ethnictouch"
+	}
+	if sslmode == "" {
+		sslmode = "disable"
+	}
+
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, port, user, password, dbname, sslmode)
+	log.Printf("Connecting to DB: host=%s port=%s user=%s dbname=%s sslmode=%s", host, port, user, dbname, sslmode)
+
+	db, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Failed to open db:", err)
+	}
+
+	// Connection Pool Configuration
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	// Verify connection
+	err = db.Ping()
+	if err != nil {
+		log.Fatal("Failed to connect to db (Ping):", err)
 	}
 
 	queries := []string{
@@ -145,7 +188,7 @@ func initDB() {
 			id TEXT PRIMARY KEY,
 			name TEXT,
 			description TEXT,
-			price REAL,
+			price NUMERIC(10,2),
 			image_url TEXT,
 			stock INTEGER DEFAULT 0,
 			category TEXT
@@ -154,18 +197,18 @@ func initDB() {
 			id TEXT PRIMARY KEY,
 			code TEXT UNIQUE,
 			type TEXT,
-			value REAL,
-			min_order REAL,
+			value NUMERIC(10,2),
+			min_order NUMERIC(10,2),
 			expiry_date TEXT,
-			is_active BOOLEAN DEFAULT 1,
+			is_active BOOLEAN DEFAULT TRUE,
 			usage_limit INTEGER,
 			used_count INTEGER DEFAULT 0
 		);`,
 		`CREATE TABLE IF NOT EXISTS orders (
 			id TEXT PRIMARY KEY,
 			customer_email TEXT,
-			total_amount REAL,
-			discount_amt REAL,
+			total_amount NUMERIC(10,2),
+			discount_amt NUMERIC(10,2),
 			coupon_code TEXT,
 			status TEXT,
 			created_at TEXT
@@ -353,7 +396,7 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		// In a real app, generate a unique ID
 		p.ID = "p_" + p.Name[:2] // Simple mock ID
-		_, err := db.Exec("INSERT INTO products (id, name, description, price, image_url, stock, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		_, err := db.Exec("INSERT INTO products (id, name, description, price, image_url, stock, category) VALUES ($1, $2, $3, $4, $5, $6, $7)",
 			p.ID, p.Name, p.Description, p.Price, p.ImageURL, p.Stock, p.Category)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -372,7 +415,7 @@ func couponHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.ID = "c_" + c.Code
-		_, err := db.Exec("INSERT INTO coupons (id, code, type, value, min_order, usage_limit) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		_, err := db.Exec("INSERT INTO coupons (id, code, type, value, min_order, usage_limit) VALUES ($1, $2, $3, $4, $5, $6)",
 			c.ID, c.Code, c.Type, c.Value, c.MinOrder, c.UsageLimit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -424,7 +467,7 @@ func couponValidateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var c Coupon
-	err := db.QueryRow("SELECT id, code, type, value, min_order, usage_limit, used_count FROM coupons WHERE code = ? AND is_active = 1", req.Code).
+	err := db.QueryRow("SELECT id, code, type, value, min_order, usage_limit, used_count FROM coupons WHERE code = $1 AND is_active = TRUE", req.Code).
 		Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &c.UsageLimit, &c.UsedCount)
 	if err != nil {
 		http.Error(w, "Invalid or expired coupon", http.StatusNotFound)
@@ -451,7 +494,7 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 	o.ID = "ORD_" + fmt.Sprint(time.Now().Unix())
 	o.Status = "pending"
 	o.CreatedAt = time.Now().Format(time.RFC3339)
-	_, err := db.Exec("INSERT INTO orders (id, customer_email, total_amount, discount_amt, coupon_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+	_, err := db.Exec("INSERT INTO orders (id, customer_email, total_amount, discount_amt, coupon_code, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
 		o.ID, o.CustomerEmail, o.TotalAmount, o.DiscountAmt, o.CouponCode, o.Status, o.CreatedAt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -463,6 +506,24 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(o)
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	status := "up"
+	dbStatus := "connected"
+
+	err := db.Ping()
+	if err != nil {
+		status = "degraded"
+		dbStatus = "disconnected"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   status,
+		"database": dbStatus,
+		"time":     time.Now().Format(time.RFC3339),
+	})
 }
 
 func getAuthenticatedUserID(r *http.Request) string {

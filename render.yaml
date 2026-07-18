@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: the-ethnic-touch
+    runtime: go
+    plan: free
+    buildCommand: go build -o main main.go
+    startCommand: ./main
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: ethnictouch-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: ethnictouch-db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: ethnictouch-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: ethnictouch-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: ethnictouch-db
+          property: database
+      - key: DB_SSLMODE
+        value: require
+
+databases:
+  - name: ethnictouch-db
+    plan: free
