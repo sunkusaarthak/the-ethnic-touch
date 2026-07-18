@@ -1,5 +1,20 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const { HashRouter, Routes, Route, Link, useParams, useNavigate } = ReactRouterDOM;
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8",
+    authDomain: "the-ethnic-touch.firebaseapp.com",
+    projectId: "the-ethnic-touch",
+    storageBucket: "the-ethnic-touch.firebasestorage.app",
+    messagingSenderId: "***REMOVED***",
+    appId: "***REMOVED***",
+    measurementId: "***REMOVED***"
+};
+
+if (window.firebase && !firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const auth = window.firebase ? firebase.auth() : null;
 
 // --- DUMMY FALLBACK DATA ---
 const fallbackProducts = [
@@ -11,7 +26,7 @@ const fallbackProducts = [
 
 // --- COMPONENTS ---
 
-const Navbar = ({ cartCount }) => (
+const Navbar = ({ cartCount, authUser, authLoading }) => (
     <nav className="navbar">
         <div className="nav-container">
             <Link to="/" className="logo">The Ethnic Touch</Link>
@@ -19,6 +34,13 @@ const Navbar = ({ cartCount }) => (
                 <li><Link to="/">Home</Link></li>
                 <li><a href="/#collection">Collection</a></li>
                 <li><Link to="/cart" className="cart-btn">Cart ({cartCount})</Link></li>
+                {authLoading ? (
+                    <li><span className="nav-links-signin nav-links-disabled">Loading...</span></li>
+                ) : authUser ? (
+                    <li><Link to="/profile" className="nav-links-signin">Profile</Link></li>
+                ) : (
+                    <li><a href="./login.html" className="nav-links-signin">Sign In</a></li>
+                )}
             </ul>
         </div>
     </nav>
@@ -68,7 +90,7 @@ const Home = ({ products, loading }) => (
                                     <h3 className="product-name">{product.name}</h3>
                                     <p className="product-desc">{product.description}</p>
                                 </div>
-                                <div className="product-price">₹{product.price.toLocaleString('en-IN')}</div>
+                                <div className="product-price">Γé╣{product.price.toLocaleString('en-IN')}</div>
                             </div>
                         </Link>
                     ))
@@ -100,7 +122,7 @@ const ProductDetails = ({ products, addToCart }) => {
                 <div style={{flex: 1, minWidth: '300px'}}>
                     <h1 style={{fontSize: '3rem', marginBottom: '1rem'}}>{product.name}</h1>
                     <p style={{fontSize: '1.2rem', marginBottom: '2rem', lineHeight: '1.8'}}>{product.description}</p>
-                    <div style={{fontSize: '2rem', fontWeight: '500', marginBottom: '3rem'}}>₹{product.price.toLocaleString('en-IN')}</div>
+                    <div style={{fontSize: '2rem', fontWeight: '500', marginBottom: '3rem'}}>Γé╣{product.price.toLocaleString('en-IN')}</div>
                     <button className="btn btn-primary" onClick={() => addToCart(product)} style={{fontSize: '1.1rem', padding: '1rem 3rem'}}>
                         Add to Cart
                     </button>
@@ -135,7 +157,7 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
             else amt = (subtotal * coupon.value) / 100;
             
             onApplyCoupon({ code: coupon.code, amt });
-            setMsg(`Applied: ₹${amt} off!`);
+            setMsg(`Applied: Γé╣${amt} off!`);
         } catch (err) {
             setMsg('Validation failed');
         }
@@ -155,7 +177,7 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                                 <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500'}}>{item.name}</h3>
                                 <p style={{color:'var(--color-text-light)', fontSize:'0.9rem'}}>{item.description.substring(0, 50)}...</p>
                             </div>
-                            <div style={{fontWeight:'500'}}>₹{item.price.toLocaleString('en-IN')}</div>
+                            <div style={{fontWeight:'500'}}>Γé╣{item.price.toLocaleString('en-IN')}</div>
                         </div>
                     ))}
                     
@@ -175,9 +197,9 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                     </div>
 
                     <div style={{textAlign:'right', marginTop:'2rem'}}>
-                        <p>Subtotal: ₹{subtotal.toLocaleString('en-IN')}</p>
-                        {discount && <p style={{color: 'green'}}>Discount: -₹{discount.amt.toLocaleString('en-IN')}</p>}
-                        <h3 style={{margin:'1rem 0 2rem'}}>Total: ₹{finalTotal.toLocaleString('en-IN')}</h3>
+                        <p>Subtotal: Γé╣{subtotal.toLocaleString('en-IN')}</p>
+                        {discount && <p style={{color: 'green'}}>Discount: -Γé╣{discount.amt.toLocaleString('en-IN')}</p>}
+                        <h3 style={{margin:'1rem 0 2rem'}}>Total: Γé╣{finalTotal.toLocaleString('en-IN')}</h3>
                         <Link to="/checkout" className="btn btn-primary">Proceed to Checkout</Link>
                     </div>
                 </div>
@@ -251,13 +273,260 @@ const Checkout = ({ cart, discount, clearCart }) => {
             </div>
             <div style={{padding: '2rem', border: '1px solid #eee', borderRadius: '8px'}}>
                 <p>Items in order: {cart.length}</p>
-                <h3 style={{marginTop: '1rem'}}>Amount to Pay: ₹{finalTotal.toLocaleString('en-IN')}</h3>
+                <h3 style={{marginTop: '1rem'}}>Amount to Pay: Γé╣{finalTotal.toLocaleString('en-IN')}</h3>
             </div>
             <button className="btn btn-primary" onClick={placeOrder} style={{marginTop: '2rem', width: '100%'}}>Pay & Secure Order</button>
         </div>
     );
 };
 
+const ProfilePage = ({ authUser }) => {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [mode, setMode] = useState('create');
+    const [message, setMessage] = useState({ type: '', text: '' });
+    const [successVisible, setSuccessVisible] = useState(false);
+    const redirectTimer = useRef(null);
+    const [form, setForm] = useState({
+        fullName: '',
+        phone: '',
+        address: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        preferredSize: '',
+        styleNotes: ''
+    });
+
+    const validateProfileForm = (cleaned) => {
+        if (!cleaned.fullName || !cleaned.phone || !cleaned.address || !cleaned.city || !cleaned.state || !cleaned.zipCode) {
+            return 'Please complete the required fields.';
+        }
+        if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(cleaned.fullName)) {
+            return 'Please enter a valid full name.';
+        }
+        if (!/^\+?[0-9()\-\s]{8,15}$/.test(cleaned.phone)) {
+            return 'Please enter a valid phone number.';
+        }
+        if (cleaned.address.length < 5) {
+            return 'Please enter a complete address.';
+        }
+        if (cleaned.city.length < 2 || cleaned.state.length < 2) {
+            return 'Please enter a valid city and state.';
+        }
+        if (!/^[A-Za-z0-9\-\s]{3,12}$/.test(cleaned.zipCode)) {
+            return 'Please enter a valid ZIP or postal code.';
+        }
+        if (cleaned.styleNotes.length > 500) {
+            return 'Style notes must be 500 characters or fewer.';
+        }
+        return '';
+    };
+
+    useEffect(() => {
+        if (!authUser) return;
+
+        const loadProfile = async () => {
+            try {
+                const response = await fetch('/api/profile/me', {
+                    headers: { 'X-User-Id': authUser.uid }
+                });
+                if (response.status === 404) {
+                    setMode('create');
+                    setLoading(false);
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error('Unable to load profile');
+                }
+                const profile = await response.json();
+                setForm({
+                    fullName: profile.fullName || '',
+                    phone: profile.phone || '',
+                    address: profile.address || '',
+                    city: profile.city || '',
+                    state: profile.state || '',
+                    zipCode: profile.zipCode || '',
+                    preferredSize: profile.preferredSize || '',
+                    styleNotes: profile.styleNotes || ''
+                });
+                setMode('edit');
+            } catch (error) {
+                setMessage({ type: 'error', text: 'We could not load your profile right now.' });
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadProfile();
+    }, [authUser]);
+
+    useEffect(() => () => {
+        if (redirectTimer.current) {
+            window.clearTimeout(redirectTimer.current);
+        }
+    }, []);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!authUser || saving) {
+            return;
+        }
+
+        const cleaned = {
+            fullName: form.fullName.trim(),
+            phone: form.phone.trim(),
+            address: form.address.trim(),
+            city: form.city.trim(),
+            state: form.state.trim(),
+            zipCode: form.zipCode.trim(),
+            preferredSize: form.preferredSize.trim(),
+            styleNotes: form.styleNotes.trim()
+        };
+
+        const validationError = validateProfileForm(cleaned);
+        if (validationError) {
+            setMessage({ type: 'error', text: validationError });
+            setSuccessVisible(false);
+            return;
+        }
+
+        setSaving(true);
+        setSuccessVisible(false);
+        setMessage({ type: '', text: '' });
+
+        try {
+            const response = await fetch('/api/profile/me', {
+                method: mode === 'create' ? 'POST' : 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': authUser.uid
+                },
+                body: JSON.stringify(cleaned)
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'Unable to save profile');
+            }
+
+            const profile = await response.json();
+            setForm({
+                fullName: profile.fullName || '',
+                phone: profile.phone || '',
+                address: profile.address || '',
+                city: profile.city || '',
+                state: profile.state || '',
+                zipCode: profile.zipCode || '',
+                preferredSize: profile.preferredSize || '',
+                styleNotes: profile.styleNotes || ''
+            });
+            setMode('edit');
+            setSuccessVisible(true);
+            redirectTimer.current = window.setTimeout(() => {
+                navigate('/');
+            }, 2600);
+        } catch (error) {
+            setSuccessVisible(false);
+            setMessage({ type: 'error', text: error.message || 'Profile could not be saved.' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!authUser) {
+        return (
+            <div className="profile-shell">
+                <div className="profile-card">
+                    <p className="profile-eyebrow">Account</p>
+                    <h1>Please sign in to view your profile</h1>
+                    <p className="profile-help">Use the Sign In button in the header to continue.</p>
+                    <a href="./login.html" className="btn btn-primary">Go to Sign In</a>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="profile-shell">
+            <div className="profile-card">
+                <div className="profile-header">
+                    <div>
+                        <p className="profile-eyebrow">Your account</p>
+                        <h1>{mode === 'create' ? 'Complete your profile' : 'Your profile'}</h1>
+                        <p className="profile-help">These details help us personalize orders, styling suggestions, and delivery preferences.</p>
+                    </div>
+                </div>
+
+                {message.text ? <div className={`profile-message ${message.type}`}>{message.text}</div> : null}
+
+                {loading ? (
+                    <p className="profile-help">Loading your profile…</p>
+                ) : successVisible ? (
+                    <div className="profile-success-state" role="status" aria-live="polite">
+                        <div className="profile-success-card">
+                            <div className="profile-success-badge" aria-hidden="true">
+                                <span className="profile-success-check">✓</span>
+                            </div>
+                            <h2>Profile completed successfully!</h2>
+                            <p>You're all set. Let's start shopping.</p>
+                        </div>
+                    </div>
+                ) : (
+                    <form className="profile-form" onSubmit={handleSubmit} aria-busy={saving}>
+                        <div className="profile-grid">
+                            <label className="profile-field">
+                                <span>Full name *</span>
+                                <input className="profile-input" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required minLength="2" maxLength="80" autoComplete="name" />
+                            </label>
+                            <label className="profile-field">
+                                <span>Phone *</span>
+                                <input type="tel" className="profile-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required minLength="8" maxLength="15" autoComplete="tel" />
+                            </label>
+                            <label className="profile-field profile-span-2">
+                                <span>Address *</span>
+                                <input className="profile-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} required minLength="5" autoComplete="street-address" />
+                            </label>
+                            <label className="profile-field">
+                                <span>City *</span>
+                                <input className="profile-input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required minLength="2" autoComplete="address-level2" />
+                            </label>
+                            <label className="profile-field">
+                                <span>State *</span>
+                                <input className="profile-input" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} required minLength="2" autoComplete="address-level1" />
+                            </label>
+                            <label className="profile-field">
+                                <span>ZIP / Postal code *</span>
+                                <input className="profile-input" value={form.zipCode} onChange={(e) => setForm({ ...form, zipCode: e.target.value })} required minLength="3" maxLength="12" autoComplete="postal-code" />
+                            </label>
+                            <label className="profile-field">
+                                <span>Preferred size</span>
+                                <select className="profile-input" value={form.preferredSize} onChange={(e) => setForm({ ...form, preferredSize: e.target.value })}>
+                                    <option value="">Select</option>
+                                    <option value="XS">XS</option>
+                                    <option value="S">S</option>
+                                    <option value="M">M</option>
+                                    <option value="L">L</option>
+                                    <option value="XL">XL</option>
+                                </select>
+                            </label>
+                            <label className="profile-field profile-span-2">
+                                <span>Style notes</span>
+                                <textarea className="profile-input" rows="4" maxLength="500" value={form.styleNotes} onChange={(e) => setForm({ ...form, styleNotes: e.target.value })} />
+                            </label>
+                        </div>
+                        <div className="profile-actions">
+                            <button className="btn btn-primary" disabled={saving} type="submit">
+                                {saving ? 'Saving...' : mode === 'create' ? 'Save profile' : 'Update profile'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </div>
+        </div>
+    );
+};
 
 // --- MAIN APP ---
 
@@ -266,6 +535,8 @@ const App = () => {
     const [loading, setLoading] = useState(true);
     const [cart, setCart] = useState([]);
     const [discount, setDiscount] = useState(null);
+    const [authUser, setAuthUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
 
     useEffect(() => {
         fetch('/api/products')
@@ -281,6 +552,20 @@ const App = () => {
             });
     }, []);
 
+    useEffect(() => {
+        if (!auth) {
+            setAuthLoading(false);
+            return;
+        }
+
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            setAuthUser(user);
+            setAuthLoading(false);
+        });
+
+        return unsubscribe;
+    }, []);
+
     const addToCart = (product) => {
         setCart(prev => [...prev, product]);
     };
@@ -292,12 +577,13 @@ const App = () => {
 
     return (
         <HashRouter>
-            <Navbar cartCount={cart.length} />
+            <Navbar cartCount={cart.length} authUser={authUser} authLoading={authLoading} />
             <Routes>
                 <Route path="/" element={<Home products={products} loading={loading} />} />
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} />} />
                 <Route path="/cart" element={<Cart cart={cart} onApplyCoupon={setDiscount} discount={discount} />} />
                 <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} />} />
+                <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
             </Routes>
             <Footer />
         </HashRouter>

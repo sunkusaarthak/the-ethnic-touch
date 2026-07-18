@@ -1,3 +1,5 @@
 *.exe
 *.md
 !README.md
+**.tools
+*API KEYS
