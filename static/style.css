@@ -423,3 +423,272 @@ p {
         display: none; /* In a real app we'd add a hamburger menu */
     }
 }
+
+/* Premium Tiered Gift Progress styling */
+.gift-system-card {
+    margin: 3rem 0;
+    padding: 2.5rem;
+    background: linear-gradient(135deg, #FCFBFA 0%, #FFFdfc 100%);
+    border: 1px solid var(--color-peach);
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 10px 40px rgba(212, 163, 115, 0.08);
+    font-family: var(--font-body);
+    position: relative;
+    overflow: hidden;
+    transition: all var(--transition-slow);
+}
+
+.gift-system-card:hover {
+    box-shadow: 0 15px 45px rgba(212, 163, 115, 0.12);
+    border-color: var(--color-primary);
+}
+
+.gift-system-title {
+    font-family: var(--font-heading);
+    font-size: 1.6rem;
+    font-weight: 400;
+    color: var(--color-text);
+    margin-bottom: 1.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.gift-progress-wrapper {
+    position: relative;
+    margin: 2.5rem 0 5.5rem;
+    height: 48px;
+}
+
+.gift-progress-track-bg {
+    position: absolute;
+    top: 22px;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background-color: rgba(0, 0, 0, 0.04);
+    border-radius: 3px;
+    z-index: 1;
+}
+
+.gift-progress-track-fill {
+    position: absolute;
+    top: 22px;
+    left: 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--color-peach) 0%, var(--color-primary) 100%);
+    border-radius: 3px;
+    z-index: 2;
+    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 0 10px rgba(214, 163, 115, 0.3);
+}
+
+.gift-nodes-container {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+    z-index: 3;
+}
+
+.gift-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
+    transition: transform var(--transition-fast);
+}
+
+.gift-node:hover {
+    transform: translateY(-2px);
+}
+
+.gift-node-dot {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background-color: #FFF;
+    border: 2px solid rgba(0, 0, 0, 0.08);
+    color: var(--color-text-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    font-size: 1.1rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gift-node.unlocked .gift-node-dot {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #FFF;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(212, 163, 115, 0.4);
+}
+
+.gift-node-label {
+    margin-top: 1rem;
+    font-weight: 400;
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    text-align: center;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+
+.gift-node.unlocked .gift-node-label {
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+.gift-node-threshold {
+    font-size: 0.8rem;
+    color: #8C8883;
+    margin-top: 0.2rem;
+}
+
+/* Gift Cards Grid displaying full rewards */
+.gift-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.gift-reward-card {
+    background: #FFF;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: var(--border-radius-md);
+    padding: 1.5rem;
+    position: relative;
+    transition: all var(--transition-slow);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.gift-reward-card.locked {
+    opacity: 0.6;
+    background-color: #FAF9F8;
+}
+
+.gift-reward-card.unlocked {
+    border-color: var(--color-peach);
+    background-color: #FFFdfc;
+    box-shadow: 0 8px 24px rgba(212, 163, 115, 0.04);
+}
+
+.gift-reward-card.active-unlocked {
+    border-color: var(--color-primary);
+    background: linear-gradient(135deg, #FFFdfc 0%, #FFFaf5 100%);
+    box-shadow: 0 8px 30px rgba(212, 163, 115, 0.1);
+}
+
+.gift-reward-card.active-unlocked::before {
+    content: "ACTIVE REWARD";
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background-color: var(--color-primary);
+    color: #FFF;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 50px;
+    letter-spacing: 0.05em;
+    animation: pulseGlow 2s infinite;
+}
+
+.gift-reward-card.unlocked:not(.active-unlocked)::before {
+    content: "QUALIFIED";
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background-color: #C8E6C9;
+    color: #2E7D32;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 50px;
+    letter-spacing: 0.05em;
+}
+
+@keyframes pulseGlow {
+    0% {
+        box-shadow: 0 0 0 0 rgba(212, 163, 115, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(212, 163, 115, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(212, 163, 115, 0);
+    }
+}
+
+.gift-reward-card-label {
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #8C8883;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+}
+
+.gift-reward-card-title {
+    font-family: var(--font-heading);
+    font-size: 1.3rem;
+    color: var(--color-text);
+    margin-bottom: 0.5rem;
+}
+
+.gift-reward-card-desc {
+    font-size: 0.85rem;
+    color: var(--color-text-light);
+    line-height: 1.4;
+    margin-bottom: 1.2rem;
+}
+
+.gift-reward-card-requirement {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+/* Beautiful dynamic indicator text at top of gift area */
+.gift-milestone-banner {
+    padding: 1.2rem;
+    border-radius: var(--border-radius-md);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    animation: fadeInSlide 0.5s ease-out;
+}
+
+.gift-milestone-banner.progress {
+    background-color: rgba(212, 163, 115, 0.04);
+    border: 1px dashed rgba(212, 163, 115, 0.3);
+    color: var(--color-text);
+}
+
+.gift-milestone-banner.unlocked {
+    background-color: #E8F5E9;
+    border: 1px solid #C8E6C9;
+    color: #2E7D32;
+}
+
+@keyframes fadeInSlide {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

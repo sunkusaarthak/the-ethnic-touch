@@ -1,12 +1,25 @@
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("[SETTINGS DIAG] Page Loaded. Initializing tabs and listeners.");
     initTabs();
     loadDashboard();
     
     // Form Submissions
+    console.log("[SETTINGS DIAG] Hooking submit events...");
     document.getElementById('productForm').addEventListener('submit', handleAddProduct);
     document.getElementById('couponForm').addEventListener('submit', handleAddCoupon);
     
-    document.getElementById('logoutBtn').addEventListener('click', () => window.location.href = '/');
+    const tf = document.getElementById('tierForm');
+    if (tf) {
+        console.log("[SETTINGS DIAG] Found tierForm. Binding submit listener.");
+        tf.addEventListener('submit', handleSaveTier);
+    } else {
+        console.error("[SETTINGS DIAG] ERROR: Could not find tierForm by ID!");
+    }
+    
+    const logout = document.getElementById('logoutBtn');
+    if (logout) {
+        logout.addEventListener('click', () => window.location.href = '/');
+    }
 });
 
 // Helper to assemble Auth headers dynamically
@@ -63,6 +76,7 @@ async function loadTabData(tab) {
     if (tab === 'products') loadProducts();
     if (tab === 'orders') loadOrders();
     if (tab === 'coupons') loadCoupons();
+    if (tab === 'settings') loadSettings();
 }
 
 async function loadDashboard() {
@@ -239,3 +253,231 @@ async function handleAddCoupon(e) {
 function closeModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
 }
+
+let currentTiers = [];
+
+async function loadSettings() {
+    console.log("[SETTINGS DIAG] loadSettings function started execution.");
+    const body = document.querySelector('#tiersTable tbody');
+    if (!body) {
+        console.error("[SETTINGS DIAG] ERROR: Element '#tiersTable tbody' not found in DOM!");
+        alert("[JS Error] Element '#tiersTable tbody' not found in DOM!");
+        return;
+    }
+    
+    body.innerHTML = '<tr><td colspan="5">Loading tiers...</td></tr>';
+    
+    try {
+        console.log("[SETTINGS DIAG] Fetching /api/gift-tiers...");
+        const res = await fetch('/api/gift-tiers');
+        console.log("[SETTINGS DIAG] Fetch /api/gift-tiers completed. Status:", res.status);
+        if (!res.ok) throw new Error("Failed to load tiers (HTTP " + res.status + ")");
+        
+        const data = await res.json();
+        console.log("[SETTINGS DIAG] Received JSON data from server:", data);
+        currentTiers = Array.isArray(data) ? data : [];
+        
+        console.log("[SETTINGS DIAG] Rendering tiers table...");
+        renderTiersTable();
+    } catch (err) {
+        console.error("[SETTINGS DIAG] Catch block: Failed to load gift tiers:", err);
+        body.innerHTML = `<tr><td colspan="5" style="color:red">Failed to load gift tiers: ${err.message}</td></tr>`;
+    }
+}
+
+function renderTiersTable() {
+    const body = document.querySelector('#tiersTable tbody');
+    body.innerHTML = '';
+    
+    if (currentTiers.length === 0) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding: 2rem;">No gift tiers configured.</td></tr>';
+        return;
+    }
+    
+    // Sort tiers by threshold ascending
+    currentTiers.sort((a, b) => a.threshold - b.threshold);
+    
+    currentTiers.forEach((tier, idx) => {
+        const tr = document.createElement('tr');
+        
+        let detailsStr = '';
+        if (tier.rewardType === 'coupon') {
+            detailsStr = `<strong>${tier.discountType === 'percentage' ? tier.discountValue + '%' : '₹' + tier.discountValue} Off</strong> Coupon (Pattern: <code>${tier.couponFormat}</code>)`;
+        } else {
+            detailsStr = `Physical item: <strong>${tier.physicalName}</strong>`;
+        }
+        
+        tr.innerHTML = `
+            <td style="font-weight: 500;">${tier.name}</td>
+            <td>₹${parseFloat(tier.threshold).toLocaleString('en-IN')}</td>
+            <td style="text-transform: capitalize;">${tier.rewardType}</td>
+            <td>${detailsStr}</td>
+            <td style="text-align: right;">
+                <button class="btn-secondary" style="padding: 4px 12px; font-size: 0.8rem; margin-right: 0.5rem;" onclick="editTier(${idx})">Edit</button>
+                <button class="btn-secondary" style="padding: 4px 12px; font-size: 0.8rem; color: #ef4444; border-color: #ffeaea;" onclick="deleteTier(${idx})">Delete</button>
+            </td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+function toggleRewardTypeInputs() {
+    const type = document.getElementById('t_reward_type').value;
+    if (type === 'coupon') {
+        document.getElementById('couponRewardConfig').style.display = 'block';
+        document.getElementById('physicalRewardConfig').style.display = 'none';
+        document.getElementById('t_physical_name').removeAttribute('required');
+    } else {
+        document.getElementById('couponRewardConfig').style.display = 'none';
+        document.getElementById('physicalRewardConfig').style.display = 'block';
+        document.getElementById('t_physical_name').setAttribute('required', 'true');
+    }
+}
+
+function editTier(idx) {
+    const tier = currentTiers[idx];
+    document.getElementById('t_edit_idx').value = idx;
+    document.getElementById('t_name').value = tier.name;
+    document.getElementById('t_threshold').value = tier.threshold;
+    document.getElementById('t_reward_type').value = tier.rewardType;
+    
+    toggleRewardTypeInputs();
+    
+    if (tier.rewardType === 'coupon') {
+        document.getElementById('t_discount_type').value = tier.discountType;
+        document.getElementById('t_discount_value').value = tier.discountValue;
+        document.getElementById('t_coupon_format').value = tier.couponFormat;
+        document.getElementById('t_physical_name').value = '';
+    } else {
+        document.getElementById('t_physical_name').value = tier.physicalName;
+        document.getElementById('t_discount_value').value = '';
+        document.getElementById('t_coupon_format').value = '';
+    }
+    
+    document.getElementById('formTitle').innerText = "Edit Reward Tier";
+    document.getElementById('cancelBtn').style.display = 'inline-block';
+}
+
+function deleteTier(idx) {
+    if (confirm("Are you sure you want to delete this reward tier?")) {
+        currentTiers.splice(idx, 1);
+        saveTiersToServer();
+    }
+}
+
+function resetTierForm() {
+    document.getElementById('tierForm').reset();
+    document.getElementById('t_edit_idx').value = '';
+    document.getElementById('formTitle').innerText = "Add New Reward Tier";
+    document.getElementById('cancelBtn').style.display = 'none';
+    toggleRewardTypeInputs();
+}
+
+async function handleSaveTier(e) {
+    try {
+        console.log("[SETTINGS DIAG] handleSaveTier submit event intercepted!");
+        e.preventDefault();
+        
+        const editIdxStr = document.getElementById('t_edit_idx').value;
+        const tierName = document.getElementById('t_name').value;
+        const thresholdVal = document.getElementById('t_threshold').value;
+        const rewardType = document.getElementById('t_reward_type').value;
+        
+        console.log("[SETTINGS DIAG] Input Values:", { editIdxStr, tierName, thresholdVal, rewardType });
+        
+        const threshold = parseFloat(thresholdVal);
+        if (isNaN(threshold)) {
+            throw new Error("Threshold must be a valid number");
+        }
+        
+        let tier = {
+            name: tierName,
+            threshold: threshold,
+            rewardType: rewardType
+        };
+        
+        if (rewardType === 'coupon') {
+            const discType = document.getElementById('t_discount_type').value;
+            const discValStr = document.getElementById('t_discount_value').value;
+            const copFormat = document.getElementById('t_coupon_format').value;
+            
+            console.log("[SETTINGS DIAG] Coupon Input Values:", { discType, discValStr, copFormat });
+            
+            tier.discountType = discType;
+            tier.discountValue = parseFloat(discValStr || 0);
+            tier.couponFormat = copFormat || "GFT-[RAND]";
+            tier.physicalName = "";
+        } else {
+            const physName = document.getElementById('t_physical_name').value;
+            console.log("[SETTINGS DIAG] Physical Input Values:", { physName });
+            
+            tier.discountType = "";
+            tier.discountValue = 0;
+            tier.couponFormat = "";
+            tier.physicalName = physName;
+        }
+        
+        console.log("[SETTINGS DIAG] Final Tier Object Details:", tier);
+        
+        if (editIdxStr !== "") {
+            const idx = parseInt(editIdxStr);
+            console.log("[SETTINGS DIAG] Editing existing tier at index:", idx);
+            currentTiers[idx] = tier;
+        } else {
+            console.log("[SETTINGS DIAG] Appending new tier to configuration array.");
+            currentTiers.push(tier);
+        }
+        
+        console.log("[SETTINGS DIAG] currentTiers array updated. Invoking saveTiersToServer...");
+        await saveTiersToServer();
+        
+        console.log("[SETTINGS DIAG] Resetting form...");
+        resetTierForm();
+    } catch (err) {
+        console.error("[SETTINGS DIAG] JS Error caught in handleSaveTier:", err);
+        alert("[JS Error] " + err.message);
+    }
+}
+
+async function saveTiersToServer() {
+    console.log("[SETTINGS DIAG] saveTiersToServer started. Payload stringified:", JSON.stringify(currentTiers));
+    try {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...getAuthHeader()
+        };
+        console.log("[SETTINGS DIAG] Request Headers:", headers);
+        
+        const res = await fetch('/api/admin/gift-tiers', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(currentTiers)
+        });
+        
+        console.log("[SETTINGS DIAG] Request completed. Response status code:", res.status);
+        
+        if (res.ok) {
+            console.log("[SETTINGS DIAG] Save successful. Reloading settings list.");
+            await loadSettings();
+        } else {
+            const text = await res.text();
+            console.error("[SETTINGS DIAG] Save failed with response text:", text);
+            let errMsg = text;
+            try {
+                const json = JSON.parse(text);
+                errMsg = json.error || text;
+            } catch(e) {}
+            alert("Error saving settings: " + errMsg);
+        }
+    } catch(err) {
+        console.error("[SETTINGS DIAG] Fetch request connection failed:", err);
+        alert("Failed to connect to server: " + err.message);
+    }
+}
+
+// Bind to window context for raw inline onclick HTML elements
+window.toggleRewardTypeInputs = toggleRewardTypeInputs;
+window.editTier = editTier;
+window.deleteTier = deleteTier;
+window.resetTierForm = resetTierForm;
+window.handleSaveTier = handleSaveTier;

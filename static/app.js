@@ -113,9 +113,21 @@ const ProductDetails = ({ products, addToCart }) => {
 const Cart = ({ cart, onApplyCoupon, discount }) => {
     const [couponCode, setCouponCode] = useState('');
     const [msg, setMsg] = useState('');
+    const [tiers, setTiers] = useState([]);
     
     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
-    const finalTotal = subtotal - (discount?.value || 0); // Wait, discount uses value calculated by server or apply here
+    const finalTotal = subtotal - (discount?.value || 0);
+
+    useEffect(() => {
+        fetch('/api/gift-tiers')
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setTiers(data.sort((a, b) => a.threshold - b.threshold));
+                }
+            })
+            .catch(err => console.error("Error fetching tiers:", err));
+    }, []);
 
     const handleCoupon = async () => {
         try {
@@ -141,6 +153,12 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
         }
     };
 
+    // Calculate progression details
+    const unlockedTiers = tiers.filter(t => subtotal >= t.threshold);
+    const nextTier = tiers.find(t => subtotal < t.threshold);
+    const activeUnlocked = unlockedTiers.length > 0 ? unlockedTiers[unlockedTiers.length - 1] : null;
+    const remaining = nextTier ? nextTier.threshold - subtotal : 0;
+
     return (
         <div style={{padding: '8rem 5% 4rem', maxWidth: '800px', margin: '0 auto', minHeight: '80vh'}}>
             <h1 style={{marginBottom: '2rem'}}>Your Cart</h1>
@@ -158,7 +176,135 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                             <div style={{fontWeight:'500'}}>₹{item.price.toLocaleString('en-IN')}</div>
                         </div>
                     ))}
-                    
+                                 {/* Beautiful, Animated Premium Tiered Reward Panel */}
+                    {tiers.length > 0 && (
+                        <div className="gift-system-card">
+                            <h3 className="gift-system-title">
+                                <span>🎁</span> Premium Tiered Rewards
+                            </h3>
+
+                            {/* Milestone Information Banner */}
+                            {nextTier ? (
+                                <div className="gift-milestone-banner progress">
+                                    <span style={{fontSize: '1.4rem'}}>✨</span>
+                                    <div style={{flex: 1, fontSize: '0.95rem'}}>
+                                        Add <strong style={{color: 'var(--color-primary)'}}>₹{remaining.toLocaleString('en-IN')}</strong> more to unlock the next milestone: <strong>{nextTier.name}</strong>!
+                                    </div>
+                                    <div style={{fontSize: '1.05rem', fontWeight: '600', color: 'var(--color-primary)'}}>
+                                        ₹{remaining.toLocaleString('en-IN')} to go
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="gift-milestone-banner unlocked">
+                                    <span style={{fontSize: '1.4rem'}}>🎉</span>
+                                    <div style={{flex: 1, fontSize: '0.95rem'}}>
+                                        <strong>Congratulations!</strong> You have unlocked the highest reward tier: <strong>{activeUnlocked ? activeUnlocked.name : ""}</strong>!
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Horizontal Progress Timeline */}
+                            <div className="gift-progress-wrapper">
+                                <div className="gift-progress-track-bg"></div>
+                                {(() => {
+                                    if (tiers.length === 0) return null;
+                                    const maxThreshold = tiers[tiers.length - 1].threshold;
+                                    const fillPercent = Math.min(100, (subtotal / maxThreshold) * 100);
+                                    return (
+                                        <div 
+                                            className="gift-progress-track-fill" 
+                                            style={{ width: `${fillPercent}%` }}
+                                        ></div>
+                                    );
+                                })()}
+
+                                <div className="gift-nodes-container" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '100%' }}>
+                                    {/* Start Node Indicator at 0% */}
+                                    <div style={{
+                                        position: 'absolute',
+                                        left: '0%',
+                                        transform: 'translateX(-50%)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        zIndex: 3
+                                    }}>
+                                        <div style={{
+                                            width: '12px',
+                                            height: '12px',
+                                            borderRadius: '50%',
+                                            backgroundColor: 'var(--color-primary)',
+                                            marginTop: '18px',
+                                            boxShadow: '0 0 8px rgba(212,163,115,0.4)',
+                                            border: '2px solid white'
+                                        }}></div>
+                                        <div className="gift-node-label" style={{ marginTop: '0.8rem' }}>
+                                            <div>Start</div>
+                                            <div className="gift-node-threshold">₹0</div>
+                                        </div>
+                                    </div>
+
+                                    {tiers.map((t, idx) => {
+                                        const maxThreshold = tiers[tiers.length - 1].threshold;
+                                        const percent = (t.threshold / maxThreshold) * 100;
+                                        const isUnlocked = subtotal >= t.threshold;
+                                        return (
+                                            <div 
+                                                key={t.id} 
+                                                className={`gift-node ${isUnlocked ? 'unlocked' : ''}`}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: `${percent}%`,
+                                                    transform: 'translateX(-50%)',
+                                                    zIndex: 3
+                                                }}
+                                            >
+                                                <div className="gift-node-dot">
+                                                    {isUnlocked ? '✓' : idx + 1}
+                                                </div>
+                                                <div className="gift-node-label">
+                                                    <div>{t.name}</div>
+                                                    <div className="gift-node-threshold">₹{parseInt(t.threshold).toLocaleString('en-IN')}</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Rewards Detail Cards Grid */}
+                            <div className="gift-cards-grid">
+                                {tiers.map((t) => {
+                                    const isUnlocked = subtotal >= t.threshold;
+                                    const isActive = activeUnlocked && activeUnlocked.id === t.id;
+                                    
+                                    return (
+                                        <div 
+                                            key={t.id} 
+                                            className={`gift-reward-card ${isUnlocked ? 'unlocked' : 'locked'} ${isActive ? 'active-unlocked' : ''}`}
+                                        >
+                                            <div>
+                                                <div className="gift-reward-card-label">Tier {t.threshold >= 10000 ? 'Gold' : t.threshold >= 5000 ? 'Silver' : 'Bronze'}</div>
+                                                <h4 className="gift-reward-card-title">{t.name}</h4>
+                                                <p className="gift-reward-card-desc">
+                                                    {t.rewardType === 'coupon' 
+                                                        ? `Qualified for a custom digital coupon giving ${t.discountType === 'percentage' ? t.discountValue + '%' : '₹' + t.discountValue} discount off your next purchase.` 
+                                                        : `Includes a handcraft premium physical gift: ${t.physicalName} packed dynamically in your parcel.`
+                                                    }
+                                                </p>
+                                            </div>
+                                            
+                                            <div className="gift-reward-card-requirement" style={{ color: isUnlocked ? '#2E7D32' : 'var(--color-primary)' }}>
+                                                <span>{isUnlocked ? '🔓' : '🔒'}</span> 
+                                                <span>{isUnlocked ? 'Unlocked!' : `Spend ₹${parseInt(t.threshold).toLocaleString('en-IN')}`}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     <div style={{marginTop: '2rem', padding: '1.5rem', backgroundColor: '#f9f9f9', borderRadius: '8px'}}>
                         <h4 style={{marginBottom: '1rem'}}>Apply Coupon</h4>
                         <div style={{display: 'flex', gap: '1rem'}}>
@@ -223,10 +369,14 @@ const Checkout = ({ cart, discount, clearCart }) => {
 
             const data = await res.json();
 
-            if (data.checkoutUrl !== "razorpay") {
+             if (data.checkoutUrl !== "razorpay") {
                 clearCart();
-                // Redirect user to Mock checkout SPA route
-                navigate(data.checkoutUrl);
+                // Redirect user to Mock checkout SPA route (strip '/#' prefix if present)
+                let targetUrl = data.checkoutUrl;
+                if (targetUrl.startsWith('/#')) {
+                    targetUrl = targetUrl.substring(2);
+                }
+                navigate(targetUrl);
             } else {
                 // Open live Razorpay standard Checkout dialog modal
                 const options = {
@@ -256,6 +406,8 @@ const Checkout = ({ cart, discount, clearCart }) => {
                                 state: { 
                                     orderId: data.orderId, 
                                     gift: verifyData.giftCode, 
+                                    unlockedGift: verifyData.unlockedGift,
+                                    giftType: verifyData.giftType,
                                     tracking: verifyData.trackingNumber 
                                 } 
                             });
@@ -346,6 +498,8 @@ const MockPayment = ({ onPaymentSuccess }) => {
                     state: { 
                         orderId: orderId, 
                         gift: data.giftCode, 
+                        unlockedGift: data.unlockedGift,
+                        giftType: data.giftType,
                         tracking: data.trackingNumber 
                     } 
                 });
@@ -406,7 +560,7 @@ const MockPayment = ({ onPaymentSuccess }) => {
 // --- CHECKOUT SUCCESS PAGE ---
 const CheckoutSuccess = () => {
     const state = ReactRouterDOM.useLocation().state || {};
-    const { orderId, gift, tracking } = state;
+    const { orderId, gift, tracking, unlockedGift, giftType } = state;
 
     if (!orderId) {
         return (
@@ -416,6 +570,9 @@ const CheckoutSuccess = () => {
             </div>
         );
     }
+
+    const displayGift = unlockedGift || gift;
+    const isPhysical = giftType === 'physical';
 
     return (
         <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
@@ -443,10 +600,21 @@ const CheckoutSuccess = () => {
                         <strong style={{fontSize: '1.2rem', color: '#2e7d32'}}>{tracking}</strong>
                     </div>
                 )}
-                {gift && (
+                {displayGift && (
                     <div style={{marginTop: '2rem', padding: '1.5rem', border: '2px dashed var(--color-peach)', backgroundColor: '#fffdfb', borderRadius: '8px'}}>
-                        <h4 style={{color: 'var(--color-peach)', margin: '0 0 0.5rem'}}>Surprise Gift Coupon Distributed!</h4>
-                        <p style={{margin:0, fontSize:'0.9rem'}}>Use code <strong>{gift}</strong> for 15% off your next purchase.</p>
+                        {isPhysical ? (
+                            <div>
+                                <h4 style={{color: '#e65100', margin: '0 0 0.5rem'}}>🎁 Free Gift Earned!</h4>
+                                <p style={{margin:0, fontSize:'0.9rem', color: '#5d4037'}}>
+                                    Congratulations! You've unlocked a free <strong>{displayGift}</strong>. It will be packaged and shipped together with your items!
+                                </p>
+                            </div>
+                        ) : (
+                            <div>
+                                <h4 style={{color: 'var(--color-peach)', margin: '0 0 0.5rem'}}>🎟️ Surprise Gift Coupon Distributed!</h4>
+                                <p style={{margin:0, fontSize:'0.9rem'}}>Use code <strong>{displayGift}</strong> on your next purchase.</p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

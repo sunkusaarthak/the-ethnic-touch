@@ -20,6 +20,7 @@
                 <li data-tab="products">Manage Products</li>
                 <li data-tab="orders">View Orders</li>
                 <li data-tab="coupons">Marketing Coupons</li>
+                <li data-tab="settings">Gift Settings</li>
             </ul>
         </nav>
         <div class="sidebar-footer">
@@ -108,6 +109,97 @@
                     </thead>
                     <tbody></tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="tab-settings" class="tab-content">
+            <div style="background: #FFF; padding: 2.5rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.01); max-width: 900px;">
+                <p style="color: var(--color-text-light); margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.5;">
+                    Manage order value thresholds. Customers whose cart exceeds each specified limit will unlock either a customizable digital coupon or a physical promotional gift of your choice.
+                </p>
+
+                <!-- Current Tiers Table -->
+                <div class="table-container" style="margin-bottom: 3rem; box-shadow: none; border: 1px solid #f9f9f9;">
+                    <table id="tiersTable">
+                        <thead>
+                            <tr>
+                                <th>Name / Label</th>
+                                <th>Spend Threshold</th>
+                                <th>Reward Type</th>
+                                <th>Reward Details</th>
+                                <th style="text-align: right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Seeded dynamic tiers will generate here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Add / Edit Tier Form Panel -->
+                <div style="border-top: 1px solid #f5f5f5; padding-top: 2rem;">
+                    <h3 id="formTitle" style="font-family: var(--font-heading); margin-bottom: 1.5rem; font-size: 1.4rem;">Add New Reward Tier</h3>
+                    <form id="tierForm">
+                        <input type="hidden" id="t_edit_idx" value="">
+                        
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                            <div style="flex: 1;">
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Tier Label / Name</label>
+                                <input type="text" id="t_name" placeholder="e.g. Platinum Tier" required style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Spend Threshold (₹)</label>
+                                <input type="number" id="t_threshold" placeholder="e.g. 15000" required style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px;">
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Reward Type</label>
+                            <select id="t_reward_type" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px;" onchange="toggleRewardTypeInputs()">
+                                <option value="coupon">Digital Coupon Discount</option>
+                                <option value="physical">Physical Promotional Item</option>
+                            </select>
+                        </div>
+
+                        <!-- Coupon Configuration Set -->
+                        <div id="couponRewardConfig" style="background: #fafafa; padding: 1.5rem; border-radius: 8px; border: 1px solid #eee; margin-bottom: 1.5rem;">
+                            <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">Coupon Configurations</h4>
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                                <div style="flex: 1;">
+                                    <label style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Discount Type</label>
+                                    <select id="t_discount_type" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px; background: white;">
+                                        <option value="percentage">Percentage (%)</option>
+                                        <option value="fixed">Fixed Value (₹)</option>
+                                    </select>
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Discount Value</label>
+                                    <input type="number" id="t_discount_value" placeholder="e.g. 20" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px; background: white;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Coupon Code Format Pattern</label>
+                                <p style="font-size: 0.75rem; color: #888; margin-bottom: 0.5rem;">Use <code>[RAND]</code> anywhere in the pattern to replace it with a random 4-character string (e.g. <code>GFT-PLAT-[RAND]</code>).</p>
+                                <input type="text" id="t_coupon_format" placeholder="e.g. GFT-PLAT-[RAND]" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px; background: white;">
+                            </div>
+                        </div>
+
+                        <!-- Physical Item Configuration Set -->
+                        <div id="physicalRewardConfig" style="background: #fafafa; padding: 1.5rem; border-radius: 8px; border: 1px solid #eee; margin-bottom: 1.5rem; display: none;">
+                            <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">Physical Gift Configurations</h4>
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Physical Item Name / Description</label>
+                                <input type="text" id="t_physical_name" placeholder="e.g. Gold Plated Keychain Wallet" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px; background: white;">
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                            <button type="button" id="cancelBtn" class="btn-secondary" onclick="resetTierForm()" style="display: none; border-radius: 50px; padding: 0.8rem 2rem;">Cancel Edit</button>
+                            <button type="submit" class="btn-primary" style="padding: 0.8rem 2rem;">Save Reward Tier</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </main>

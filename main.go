@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -15,6 +16,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -67,6 +69,19 @@ type Order struct {
 	TrackingNumber    string      `json:"trackingNumber"`
 	ShippedAt         string      `json:"shippedAt"`
 	Items             []OrderItem `json:"items"`
+	UnlockedGift      string      `json:"unlockedGift"`
+}
+
+// GiftTier represents a configured reward tier
+type GiftTier struct {
+	ID              int     `json:"id"`
+	Name            string  `json:"name"`
+	Threshold       float64 `json:"threshold"`
+	RewardType      string  `json:"rewardType"`      // "coupon" or "physical"
+	DiscountType    string  `json:"discountType"`    // "percentage" or "fixed"
+	DiscountValue   float64 `json:"discountValue"`
+	CouponFormat    string  `json:"couponFormat"`    // e.g. "GFT-SLVR-[RAND]"
+	PhysicalName    string  `json:"physicalName"`    // e.g. "Premium Keychain"
 }
 
 // OrderCreateRequest represents storefront payload to initiate booking
@@ -165,6 +180,16 @@ func initDB() {
 			quantity INTEGER,
 			price_at_qty NUMERIC(10,2)
 		);`,
+		`CREATE TABLE IF NOT EXISTS gift_tiers (
+			id SERIAL PRIMARY KEY,
+			name TEXT,
+			threshold NUMERIC(10,2),
+			reward_type TEXT,
+			discount_type TEXT,
+			discount_value NUMERIC(10,2),
+			coupon_format TEXT,
+			physical_name TEXT
+		);`,
 	}
 
 	for _, q := range queries {
@@ -174,12 +199,20 @@ func initDB() {
 		}
 	}
 
-	// Hot migrations for Razorpay & Tracking Columns
+	// Hot migrations for Razorpay, Tracking, Unlocked Gift & Gift Tiers Columns
 	alterQueries := []string{
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_order_id TEXT;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_payment_id TEXT;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TEXT;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS unlocked_gift TEXT;`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS name TEXT;`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS threshold NUMERIC(10,2);`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS reward_type TEXT;`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS discount_type TEXT;`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS discount_value NUMERIC(10,2);`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS coupon_format TEXT;`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS physical_name TEXT;`,
 	}
 	for _, q := range alterQueries {
 		_, _ = db.Exec(q)
@@ -205,6 +238,24 @@ func initDB() {
 	if couponCount == 0 {
 		db.Exec("INSERT INTO coupons (id, code, type, value, min_order, usage_limit) VALUES ('c1', 'WELCOME10', 'percentage', 10, 1000, 100)")
 		log.Println("Sample coupon WELCOME10 seeded successfully.")
+	}
+
+	// Seed default gift tiers if empty
+	var tierCount int
+	db.QueryRow("SELECT COUNT(*) FROM gift_tiers").Scan(&tierCount)
+	if tierCount == 0 {
+		seedTiers := `
+		INSERT INTO gift_tiers (name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name) VALUES
+		('Bronze Gift', 3000.00, 'physical', '', 0, '', 'Premium Leather Keychain'),
+		('Silver Gift', 5000.00, 'coupon', 'percentage', 15.00, 'GFT-SLVR-[RAND]', ''),
+		('Gold Gift', 10000.00, 'coupon', 'fixed', 2000.00, 'GFT-GOLD-[RAND]', '');
+		`
+		_, err = db.Exec(seedTiers)
+		if err != nil {
+			log.Println("Error seeding default gift tiers:", err)
+		} else {
+			log.Println("Seeded default gift tiers successfully.")
+		}
 	}
 }
 
@@ -360,7 +411,7 @@ func ordersListHandler(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(`SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, 
 		COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
-		COALESCE(tracking_number, ''), COALESCE(shipped_at, '') FROM orders ORDER BY created_at DESC`)
+		COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, '') FROM orders ORDER BY created_at DESC`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -370,7 +421,7 @@ func ordersListHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var o Order
 		err := rows.Scan(&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
-			&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt)
+			&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -596,7 +647,7 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Mock Provider configuration
 		providerOrderID = "MOCK_RZP_" + orderID[4:]
-		checkoutURL = fmt.Sprintf("/#/mock-payment?orderId=%s", orderID)
+		checkoutURL = fmt.Sprintf("/mock-payment?orderId=%s", orderID)
 	}
 
 	createdAt := time.Now().Format(time.RFC3339)
@@ -807,15 +858,47 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send promotional gift coupon if amount > ₹5,000
+	// Send promotional gift coupon if qualified for a tier
 	var giftCode string
-	if totalAmount > 5000 {
-		giftCode = "GFT-" + req.OrderID[4:8]
-		log.Printf("[GIFT SYSTEM] Generated 15%% discount for %s: %s", customerEmail, giftCode)
-		_, err = db.Exec("INSERT INTO coupons (id, code, type, value, min_order, usage_limit) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-			"c_"+giftCode, giftCode, "percentage", 15, 1000, 1)
-		if err != nil {
-			log.Printf("Failed to seed generated coupon into DB: %v", err)
+	var rewardType string
+	var unlockedGift string
+
+	var discountType, couponFormat, physicalName string
+	var discountValueThreshold float64
+	var tierFound bool
+
+	// query database for highest matching tier
+	rowsTier, err := db.Query("SELECT reward_type, discount_type, discount_value, coupon_format, physical_name FROM gift_tiers WHERE $1 >= threshold ORDER BY threshold DESC LIMIT 1", totalAmount)
+	if err == nil {
+		if rowsTier.Next() {
+			err = rowsTier.Scan(&rewardType, &discountType, &discountValueThreshold, &couponFormat, &physicalName)
+			if err == nil {
+				tierFound = true
+			}
+		}
+		rowsTier.Close()
+	}
+
+	if tierFound {
+		if rewardType == "coupon" {
+			giftCode = generateCouponCode(couponFormat, req.OrderID)
+			unlockedGift = giftCode
+			log.Printf("[GIFT SYSTEM] Generated coupon for %s: %s (Format: %s, Value: %.2f)", customerEmail, giftCode, couponFormat, discountValueThreshold)
+			_, err = db.Exec("INSERT INTO coupons (id, code, type, value, min_order, usage_limit) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+				"c_"+giftCode, giftCode, discountType, discountValueThreshold, 0, 1)
+			if err != nil {
+				log.Printf("Failed to seed generated coupon into DB: %v", err)
+			}
+		} else if rewardType == "physical" {
+			unlockedGift = physicalName
+			log.Printf("[GIFT SYSTEM] Awarded physical item for %s: %s", customerEmail, physicalName)
+		}
+
+		if unlockedGift != "" {
+			_, err = db.Exec("UPDATE orders SET unlocked_gift = $1 WHERE id = $2", unlockedGift, req.OrderID)
+			if err != nil {
+				log.Printf("Failed to update order with unlocked gift: %v", err)
+			}
 		}
 	}
 
@@ -840,6 +923,8 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 		"status":         status,
 		"trackingNumber": trackingNumber,
 		"giftCode":       giftCode,
+		"unlockedGift":   unlockedGift,
+		"giftType":       rewardType,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
@@ -948,10 +1033,12 @@ func main() {
 	http.HandleFunc("/api/coupons/validate", couponValidateHandler)
 	http.HandleFunc("/api/orders", orderCreateHandler)
 	http.HandleFunc("/api/orders/verify", orderVerifyHandler)
+	http.HandleFunc("/api/gift-tiers", giftTiersGetHandler)
 
 	// Protected Admin routes
 	http.HandleFunc("/api/admin/coupons", adminAuthMiddleware(couponHandler))
 	http.HandleFunc("/api/admin/orders", adminAuthMiddleware(ordersListHandler))
+	http.HandleFunc("/api/admin/gift-tiers", adminAuthMiddleware(giftTiersUpdateHandler))
 
 	// Health endpoint
 	http.HandleFunc("/health", healthHandler)
@@ -966,4 +1053,107 @@ func main() {
 	}
 	log.Printf("Server executing on http://*:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func giftTiersGetHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	rows, err := db.Query("SELECT id, name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name FROM gift_tiers ORDER BY threshold ASC")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	tiers := []GiftTier{}
+	for rows.Next() {
+		var t GiftTier
+		err := rows.Scan(&t.ID, &t.Name, &t.Threshold, &t.RewardType, &t.DiscountType, &t.DiscountValue, &t.CouponFormat, &t.PhysicalName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		tiers = append(tiers, t)
+	}
+
+	json.NewEncoder(w).Encode(tiers)
+}
+
+func giftTiersUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte(`{"error":"Method not allowed"}`))
+		return
+	}
+
+	var reqTiers []GiftTier
+	if err := json.NewDecoder(r.Body).Decode(&reqTiers); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())))
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf("[GIFT ADMIN ERROR] Transaction start failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Transaction start failed"}`))
+		return
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM gift_tiers")
+	if err != nil {
+		log.Printf("[GIFT ADMIN ERROR] Clear old tiers failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf(`{"error":"Clear old tiers failed: %s"}`, err.Error())))
+		return
+	}
+
+	for _, t := range reqTiers {
+		_, err = tx.Exec(`INSERT INTO gift_tiers (name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			t.Name, t.Threshold, t.RewardType, t.DiscountType, t.DiscountValue, t.CouponFormat, t.PhysicalName)
+		if err != nil {
+			log.Printf("[GIFT ADMIN ERROR] Insert tier failed (Tier: %s): %v", t.Name, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf(`{"error":"Insert tier failed: %s"}`, err.Error())))
+			return
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("[GIFT ADMIN ERROR] Commit failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Commit failed"}`))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Gift tiers updated successfully"})
+}
+
+func generateRandomAlphanumeric(n int) string {
+	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	bytes := make([]byte, n)
+	_, _ = rand.Read(bytes)
+	for i, b := range bytes {
+		bytes[i] = letters[b%byte(len(letters))]
+	}
+	return string(bytes)
+}
+
+func generateCouponCode(format string, orderID string) string {
+	if format == "" {
+		return "GFT-" + orderID[4:8]
+	}
+	randomStr := generateRandomAlphanumeric(4)
+	return strings.Replace(format, "[RAND]", randomStr, -1)
 }
