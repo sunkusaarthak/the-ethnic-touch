@@ -1,5 +1,20 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const { HashRouter, Routes, Route, Link, useParams, useNavigate } = ReactRouterDOM;
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8",
+    authDomain: "the-ethnic-touch.firebaseapp.com",
+    projectId: "the-ethnic-touch",
+    storageBucket: "the-ethnic-touch.firebasestorage.app",
+    messagingSenderId: "565024605742",
+    appId: "1:565024605742:web:0452b9b88a65be9d67c1bf",
+    measurementId: "G-KP2NETS58F"
+};
+
+if (window.firebase && !firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const auth = window.firebase ? firebase.auth() : null;
 
 // --- DUMMY FALLBACK DATA ---
 const fallbackProducts = [
@@ -11,18 +26,41 @@ const fallbackProducts = [
 
 // --- COMPONENTS ---
 
-const Navbar = ({ cartCount }) => (
-    <nav className="navbar">
-        <div className="nav-container">
-            <Link to="/" className="logo">The Ethnic Touch</Link>
-            <ul className="nav-links">
-                <li><Link to="/">Home</Link></li>
-                <li><a href="/#collection">Collection</a></li>
-                <li><Link to="/cart" className="cart-btn">Cart ({cartCount})</Link></li>
-            </ul>
-        </div>
-    </nav>
-);
+const Navbar = ({ cartCount, authUser, authLoading }) => {
+    const [animate, setAnimate] = useState(false);
+    
+    useEffect(() => {
+        if (cartCount > 0) {
+            setAnimate(true);
+            const timer = setTimeout(() => setAnimate(false), 450);
+            return () => clearTimeout(timer);
+        }
+    }, [cartCount]);
+
+    return (
+        <nav className="navbar">
+            <div className="nav-container">
+                <Link to="/" className="logo">The Ethnic Touch</Link>
+                <ul className="nav-links">
+                    <li><Link to="/">Home</Link></li>
+                    <li><a href="/#collection">Collection</a></li>
+                    <li>
+                        <Link to="/cart" className="cart-btn" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                            Cart <span className={animate ? 'cart-animated' : ''} style={{ marginLeft: '4px' }}>({cartCount})</span>
+                        </Link>
+                    </li>
+                    {authLoading ? (
+                        <li><span className="nav-links-signin nav-links-disabled">Loading...</span></li>
+                    ) : authUser ? (
+                        <li><Link to="/profile" className="nav-links-signin">Profile</Link></li>
+                    ) : (
+                        <li><a href="./login.html" className="nav-links-signin">Sign In</a></li>
+                    )}
+                </ul>
+            </div>
+        </nav>
+    );
+};
 
 const Footer = () => (
     <footer className="footer">
@@ -180,13 +218,12 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                     {tiers.length > 0 && (
                         <div className="gift-system-card">
                             <h3 className="gift-system-title">
-                                <span>🎁</span> Premium Tiered Rewards
+                                Premium Tiered Rewards
                             </h3>
 
                             {/* Milestone Information Banner */}
                             {nextTier ? (
                                 <div className="gift-milestone-banner progress">
-                                    <span style={{fontSize: '1.4rem'}}>✨</span>
                                     <div style={{flex: 1, fontSize: '0.95rem'}}>
                                         Add <strong style={{color: 'var(--color-primary)'}}>₹{remaining.toLocaleString('en-IN')}</strong> more to unlock the next milestone: <strong>{nextTier.name}</strong>!
                                     </div>
@@ -196,7 +233,6 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                                 </div>
                             ) : (
                                 <div className="gift-milestone-banner unlocked">
-                                    <span style={{fontSize: '1.4rem'}}>🎉</span>
                                     <div style={{flex: 1, fontSize: '0.95rem'}}>
                                         <strong>Congratulations!</strong> You have unlocked the highest reward tier: <strong>{activeUnlocked ? activeUnlocked.name : ""}</strong>!
                                     </div>
@@ -295,8 +331,7 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                                             </div>
                                             
                                             <div className="gift-reward-card-requirement" style={{ color: isUnlocked ? '#2E7D32' : 'var(--color-primary)' }}>
-                                                <span>{isUnlocked ? '🔓' : '🔒'}</span> 
-                                                <span>{isUnlocked ? 'Unlocked!' : `Spend ₹${parseInt(t.threshold).toLocaleString('en-IN')}`}</span>
+                                                <span>{isUnlocked ? 'Unlocked' : `Spend ₹${parseInt(t.threshold).toLocaleString('en-IN')}`}</span>
                                             </div>
                                         </div>
                                     );
@@ -332,16 +367,110 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
     );
 };
 
-const Checkout = ({ cart, discount, clearCart }) => {
+const Checkout = ({ cart, discount, clearCart, authUser }) => {
     const [email, setEmail] = useState('');
+    const [addresses, setAddresses] = useState([]);
+    const [selectedAddressID, setSelectedAddressID] = useState(null);
+    const [shippingForm, setShippingForm] = useState({
+        fullName: '',
+        phone: '',
+        addressLine: '',
+        city: '',
+        state: '',
+        zipCode: ''
+    });
+    const [showNewAddressForm, setShowNewAddressForm] = useState(false);
+    const [addressMessage, setAddressMessage] = useState('');
     const [ordering, setOrdering] = useState(false);
     const navigate = useNavigate();
 
     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
     const finalTotal = subtotal - (discount?.amt || 0);
 
+    useEffect(() => {
+        if (authUser) {
+            setEmail(authUser.email || '');
+
+            fetch('/api/profile/me', {
+                headers: { 'X-User-Id': authUser.uid }
+            }).then(r => r.json()).then(data => {
+                if (data.email) setEmail(data.email);
+            }).catch(err => console.error(err));
+
+            loadAddresses();
+        }
+    }, [authUser]);
+
+    const loadAddresses = async () => {
+        if (!authUser) return;
+        try {
+            const response = await fetch('/api/profile/addresses', {
+                headers: { 'X-User-Id': authUser.uid }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setAddresses(data);
+                
+                const def = data.find(a => a.isDefault);
+                if (def) {
+                    setSelectedAddressID(def.id);
+                } else if (data.length > 0) {
+                    setSelectedAddressID(data[0].id);
+                }
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleAddAddress = async (e) => {
+        e.preventDefault();
+        setAddressMessage('');
+        if (!authUser) return;
+        try {
+            const response = await fetch('/api/profile/addresses', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': authUser.uid
+                },
+                body: JSON.stringify(shippingForm)
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'Failed to save address');
+            }
+            const saved = await response.json();
+            setShippingForm({ fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
+            setShowNewAddressForm(false);
+            
+            const loadRes = await fetch('/api/profile/addresses', {
+                headers: { 'X-User-Id': authUser.uid }
+            });
+            if (loadRes.ok) {
+                const data = await loadRes.json();
+                setAddresses(data);
+                if (data.length > 0) {
+                    setSelectedAddressID(data[0].id); 
+                }
+            }
+        } catch (err) {
+            setAddressMessage(err.message);
+        }
+    };
+
     const placeOrder = async () => {
         if (!email) return alert('Email required');
+        
+        let activeAddr = null;
+        if (authUser && addresses.length > 0) {
+            activeAddr = addresses.find(a => a.id === selectedAddressID);
+        }
+        
+        if (!activeAddr) {
+            return alert('Please select or add a shipping address before paying.');
+        }
+
         setOrdering(true);
 
         const order = {
@@ -350,7 +479,13 @@ const Checkout = ({ cart, discount, clearCart }) => {
             items: cart.map(item => ({
                 productId: item.id,
                 quantity: 1
-            }))
+            })),
+            shippingName: activeAddr.fullName,
+            shippingPhone: activeAddr.phone,
+            shippingAddress: activeAddr.addressLine,
+            shippingCity: activeAddr.city,
+            shippingState: activeAddr.state,
+            shippingZipCode: activeAddr.zipCode
         };
         
         try {
@@ -369,16 +504,14 @@ const Checkout = ({ cart, discount, clearCart }) => {
 
             const data = await res.json();
 
-             if (data.checkoutUrl !== "razorpay") {
+            if (data.checkoutUrl !== "razorpay") {
                 clearCart();
-                // Redirect user to Mock checkout SPA route (strip '/#' prefix if present)
                 let targetUrl = data.checkoutUrl;
                 if (targetUrl.startsWith('/#')) {
                     targetUrl = targetUrl.substring(2);
                 }
                 navigate(targetUrl);
             } else {
-                // Open live Razorpay standard Checkout dialog modal
                 const options = {
                     "key": data.razorpayKey,
                     "amount": data.amount * 100,
@@ -433,28 +566,131 @@ const Checkout = ({ cart, discount, clearCart }) => {
     };
 
     return (
-        <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh'}}>
-            <h1>Checkout</h1>
-            <div style={{margin: '2rem 0'}}>
-                <label style={{display: 'block', marginBottom: '0.5rem'}}>Email Address</label>
+        <div style={{padding: '8rem 5% 4rem', maxWidth: '680px', margin: '0 auto', minHeight: '80vh'}}>
+            <h1 style={{fontFamily: 'var(--font-title)', color: 'var(--color-peach)', marginBottom: '1.5rem'}}>Checkout</h1>
+            
+            <div style={{marginBottom: '2rem'}}>
+                <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#333'}}>Confirm Email *</label>
                 <input 
                     type="email" 
                     value={email} 
                     onChange={e => setEmail(e.target.value)} 
                     placeholder="you@example.com"
-                    style={{padding: '1rem', border: '1px solid #ddd', borderRadius: '8px', width: '100%'}}
+                    style={{padding: '1rem', border: '1px solid #ddd', borderRadius: '8px', width: '100%', fontSize: '0.95rem'}}
                     disabled={ordering}
+                    required
                 />
             </div>
-            <div style={{padding: '2rem', border: '1px solid #eee', borderRadius: '8px'}}>
-                <p>Items in order: {cart.length}</p>
-                <h3 style={{marginTop: '1rem'}}>Amount to Pay: ₹{finalTotal.toLocaleString('en-IN')}</h3>
+
+            <div style={{padding: '2rem', border: '1px solid #eee', borderRadius: '8px', background: '#fff', marginBottom: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.02)'}}>
+                <h3 style={{fontSize: '1rem', fontWeight: 600, marginBottom: '1rem'}}>Order Summary</h3>
+                <p style={{fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem'}}>Items in cart: {cart.length}</p>
+                <h4 style={{fontSize: '1.1rem', fontWeight: 700, color: '#333'}}>Total to Pay: ₹{finalTotal.toLocaleString('en-IN')}</h4>
             </div>
+
+            <div style={{marginBottom: '2rem'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
+                    <h3 style={{fontSize: '1.1rem', fontWeight: 600, color: '#333'}}>Select Shipping Address *</h3>
+                    {authUser && (
+                        <button className="btn btn-secondary" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem'}} onClick={() => {
+                            setShippingForm({ fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
+                            setShowNewAddressForm(prev => !prev);
+                            setAddressMessage('');
+                        }}>
+                            {showNewAddressForm ? 'Cancel' : '+ Add New Address'}
+                        </button>
+                    )}
+                </div>
+
+                {addressMessage && <div className="profile-message error" style={{marginBottom: '1rem'}}>{addressMessage}</div>}
+
+                {showNewAddressForm && (
+                    <form onSubmit={handleAddAddress} style={{background: '#fcfcfc', border: '1px solid #eee', padding: '1.5rem', borderRadius: '8px', marginBottom: '1.5rem'}}>
+                        <h4 style={{fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem'}}>New Shipping Address</h4>
+                        <div className="profile-grid">
+                            <label className="profile-field">
+                                <span>Contact Name *</span>
+                                <input className="profile-input" value={shippingForm.fullName} onChange={e => setShippingForm({...shippingForm, fullName: e.target.value})} required />
+                            </label>
+                            <label className="profile-field">
+                                <span>Phone Number *</span>
+                                <input className="profile-input" value={shippingForm.phone} onChange={e => setShippingForm({...shippingForm, phone: e.target.value})} required />
+                            </label>
+                            <label className="profile-field profile-span-2">
+                                <span>Address Line *</span>
+                                <input className="profile-input" value={shippingForm.addressLine} onChange={e => setShippingForm({...shippingForm, addressLine: e.target.value})} required />
+                            </label>
+                            <label className="profile-field">
+                                <span>City *</span>
+                                <input className="profile-input" value={shippingForm.city} onChange={e => setShippingForm({...shippingForm, city: e.target.value})} required />
+                            </label>
+                            <label className="profile-field">
+                                <span>State *</span>
+                                <input className="profile-input" value={shippingForm.state} onChange={e => setShippingForm({...shippingForm, state: e.target.value})} required />
+                            </label>
+                            <label className="profile-field">
+                                <span>ZIP / Postal Code *</span>
+                                <input className="profile-input" value={shippingForm.zipCode} onChange={e => setShippingForm({...shippingForm, zipCode: e.target.value})} required />
+                            </label>
+                        </div>
+                        <button className="btn btn-primary" type="submit" style={{marginTop: '1.2rem', padding: '0.6rem 1.2rem'}}>Save and Use Address</button>
+                    </form>
+                )}
+
+                {addresses.length === 0 ? (
+                    <div style={{background: '#fafafa', border: '1px dashed #ccc', padding: '2rem', borderRadius: '8px', textAlign: 'center'}}>
+                        <p style={{fontSize: '0.9rem', color: '#666', marginBottom: '1rem'}}>You don't have any saved shipping addresses.</p>
+                        {!showNewAddressForm && authUser && (
+                            <button className="btn btn-primary" onClick={() => setShowNewAddressForm(true)}>+ Add Shipping Address</button>
+                        )}
+                        {!authUser && (
+                            <p style={{fontSize: '0.85rem', color: '#999'}}>Please sign in to save and manage shipping addresses.</p>
+                        )}
+                    </div>
+                ) : (
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr', gap: '1rem'}}>
+                        {addresses.map(addr => {
+                            const isSelected = selectedAddressID === addr.id;
+                            return (
+                                <div 
+                                    key={addr.id} 
+                                    onClick={() => setSelectedAddressID(addr.id)}
+                                    style={{
+                                        border: isSelected ? '2px solid #e4b39b' : '1px solid #ddd', 
+                                        borderRadius: '8px', 
+                                        padding: '1.2rem', 
+                                        background: isSelected ? '#fffcf9' : '#fff', 
+                                        cursor: 'pointer',
+                                        position: 'relative',
+                                        transition: 'all 0.2s ease',
+                                        boxShadow: isSelected ? '0 2px 8px rgba(228,179,155,0.1)' : 'none'
+                                    }}
+                                >
+                                    <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.4rem'}}>
+                                        <input 
+                                            type="radio" 
+                                            checked={isSelected} 
+                                            onChange={() => setSelectedAddressID(addr.id)} 
+                                            style={{cursor: 'pointer', accentColor: '#e4b39b'}} 
+                                        />
+                                        <h4 style={{fontSize: '0.95rem', fontWeight: 600, margin: 0}}>{addr.fullName}</h4>
+                                        {addr.isDefault && <span style={{background: '#ffe5d9', color: '#b97a66', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '20px', fontWeight: 'bold'}}>Default</span>}
+                                    </div>
+                                    <p style={{fontSize: '0.85rem', color: '#666', margin: '0.2rem 0 0.2rem 24px', lineHeight: '1.4'}}>{addr.addressLine}</p>
+                                    <p style={{fontSize: '0.85rem', color: '#666', margin: '0 0 0.2rem 24px', lineHeight: '1.4'}}>{addr.city}, {addr.state} - {addr.zipCode}</p>
+                                    <p style={{fontSize: '0.85rem', color: '#666', margin: '0 0 0 24px'}}>Phone: {addr.phone}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
             <button 
                 className="btn btn-primary" 
                 onClick={placeOrder} 
-                style={{marginTop: '2rem', width: '100%'}}
-                disabled={ordering}
+                style={{marginTop: '1.5rem', width: '100%', padding: '1rem'}}
+                disabled={ordering || (addresses.length === 0)}
             >
                 {ordering ? "Verifying Stock & Routing..." : "Pay & Secure Order"}
             </button>
@@ -525,7 +761,7 @@ const MockPayment = ({ onPaymentSuccess }) => {
                 textAlign: 'center'
             }}>
                 <h2 style={{fontFamily: 'var(--font-title)', color: 'var(--color-peach)', marginBottom: '1rem'}}>
-                    💳 Razorpay Simulator
+                    Razorpay Simulator
                 </h2>
                 <p style={{color: 'gray', marginBottom: '2rem'}}>Confirming details for order ref: <strong>{orderId}</strong></p>
                 
@@ -585,7 +821,7 @@ const CheckoutSuccess = () => {
             <div style={{padding: '3rem', backgroundColor: '#f4fbf7', border: '1px solid #c8e6c9', borderRadius: 'var(--border-radius-lg)', margin: '2rem 0'}}>
                 <h2 style={{color: '#2e7d32'}}>Order #{orderId} Confirmed</h2>
                 <p style={{marginTop:'1.5rem', fontSize:'1.05rem', color:'#4caf50', fontWeight:'500'}}>
-                    🚀 Order has been approved and automatically shipped!
+                    Order has been approved and automatically shipped.
                 </p>
                 {tracking && (
                     <div style={{
@@ -604,14 +840,14 @@ const CheckoutSuccess = () => {
                     <div style={{marginTop: '2rem', padding: '1.5rem', border: '2px dashed var(--color-peach)', backgroundColor: '#fffdfb', borderRadius: '8px'}}>
                         {isPhysical ? (
                             <div>
-                                <h4 style={{color: '#e65100', margin: '0 0 0.5rem'}}>🎁 Free Gift Earned!</h4>
+                                <h4 style={{color: '#e65100', margin: '0 0 0.5rem'}}>Free Gift Earned!</h4>
                                 <p style={{margin:0, fontSize:'0.9rem', color: '#5d4037'}}>
                                     Congratulations! You've unlocked a free <strong>{displayGift}</strong>. It will be packaged and shipped together with your items!
                                 </p>
                             </div>
                         ) : (
                             <div>
-                                <h4 style={{color: 'var(--color-peach)', margin: '0 0 0.5rem'}}>🎟️ Surprise Gift Coupon Distributed!</h4>
+                                <h4 style={{color: 'var(--color-peach)', margin: '0 0 0.5rem'}}>Surprise Gift Coupon Distributed!</h4>
                                 <p style={{margin:0, fontSize:'0.9rem'}}>Use code <strong>{displayGift}</strong> on your next purchase.</p>
                             </div>
                         )}
@@ -623,13 +859,924 @@ const CheckoutSuccess = () => {
     );
 };
 
+const ProfilePage = ({ authUser }) => {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [mode, setMode] = useState('create');
+    const [message, setMessage] = useState({ type: '', text: '' });
+    const [successVisible, setSuccessVisible] = useState(false);
+    const redirectTimer = useRef(null);
+    const [form, setForm] = useState({
+        fullName: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        preferredSize: '',
+        styleNotes: ''
+    });
+
+    const [addresses, setAddresses] = useState([]);
+    const [addressForm, setAddressForm] = useState({ id: 0, fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
+    const [showAddressForm, setShowAddressForm] = useState(false);
+    const [addressMessage, setAddressMessage] = useState('');
+    
+    // New states for client tabbed dashboard
+    const [orders, setOrders] = useState([]);
+    const [coupons, setCoupons] = useState([]);
+    const [activeTab, setActiveTab] = useState('profile');
+    const [isEditing, setIsEditing] = useState(false);
+
+    const validateProfileForm = (cleaned) => {
+        if (!cleaned.fullName || !cleaned.phone || !cleaned.address || !cleaned.city || !cleaned.state || !cleaned.zipCode) {
+            return 'Please complete the required fields.';
+        }
+        if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(cleaned.fullName)) {
+            return 'Please enter a valid full name.';
+        }
+        if (!/^\+?[0-9()\-\s]{8,15}$/.test(cleaned.phone)) {
+            return 'Please enter a valid phone number.';
+        }
+        if (cleaned.address.length < 5) {
+            return 'Please enter a complete address.';
+        }
+        if (cleaned.city.length < 2 || cleaned.state.length < 2) {
+            return 'Please enter a valid city and state.';
+        }
+        if (!/^[A-Za-z0-9\-\s]{3,12}$/.test(cleaned.zipCode)) {
+            return 'Please enter a valid ZIP or postal code.';
+        }
+        if (cleaned.styleNotes.length > 500) {
+            return 'Style notes must be 500 characters or fewer.';
+        }
+        return '';
+    };
+
+    const loadAddresses = async () => {
+        if (!authUser) return;
+        try {
+            const response = await fetch('/api/profile/addresses', {
+                headers: { 'X-User-Id': authUser.uid }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setAddresses(data);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const loadOrdersAndCoupons = async () => {
+        if (!authUser) return;
+        try {
+            const ordResponse = await fetch('/api/profile/orders', {
+                headers: { 'X-User-Id': authUser.uid }
+            });
+            if (ordResponse.ok) {
+                const data = await ordResponse.json();
+                setOrders(data);
+            }
+            
+            const copResponse = await fetch('/api/profile/coupons', {
+                headers: { 'X-User-Id': authUser.uid }
+            });
+            if (copResponse.ok) {
+                const data = await copResponse.json();
+                setCoupons(data);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleAddressSubmit = async (e) => {
+        e.preventDefault();
+        setAddressMessage('');
+        try {
+            const response = await fetch('/api/profile/addresses', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': authUser.uid
+                },
+                body: JSON.stringify(addressForm)
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'Failed to save address');
+            }
+            setAddressForm({ id: 0, fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
+            setShowAddressForm(false);
+            loadAddresses();
+        } catch (err) {
+            setAddressMessage(err.message);
+        }
+    };
+
+    const handleDeleteAddress = async (id) => {
+        if (!confirm('Are you sure you want to delete this address?')) return;
+        try {
+            const response = await fetch(`/api/profile/addresses?id=${id}`, {
+                method: 'DELETE',
+                headers: { 'X-User-Id': authUser.uid }
+            });
+            if (response.ok) {
+                loadAddresses();
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleSetDefaultAddress = async (id) => {
+        try {
+            const response = await fetch(`/api/profile/addresses?id=${id}`, {
+                method: 'PATCH',
+                headers: { 'X-User-Id': authUser.uid }
+            });
+            if (response.ok) {
+                loadAddresses();
+                // Also reload profile details since primary profile address is bidirectionally synced
+                const profileRes = await fetch('/api/profile/me', {
+                    headers: { 'X-User-Id': authUser.uid }
+                });
+                if (profileRes.ok) {
+                    const profile = await profileRes.json();
+                    setForm({
+                        fullName: profile.fullName || '',
+                        email: profile.email || authUser.email || '',
+                        phone: profile.phone || '',
+                        address: profile.address || '',
+                        city: profile.city || '',
+                        state: profile.state || '',
+                        zipCode: profile.zipCode || '',
+                        preferredSize: profile.preferredSize || '',
+                        styleNotes: profile.styleNotes || ''
+                    });
+                }
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        if (!authUser) return;
+
+        const loadProfile = async () => {
+            try {
+                const response = await fetch('/api/profile/me', {
+                    headers: { 'X-User-Id': authUser.uid }
+                });
+                if (response.status === 404) {
+                    setMode('create');
+                    setForm(f => ({ ...f, email: authUser.email || '' }));
+                    setIsEditing(true);
+                    setLoading(false);
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error('Unable to load profile');
+                }
+                const profile = await response.json();
+                setForm({
+                    fullName: profile.fullName || '',
+                    email: profile.email || authUser.email || '',
+                    phone: profile.phone || '',
+                    address: profile.address || '',
+                    city: profile.city || '',
+                    state: profile.state || '',
+                    zipCode: profile.zipCode || '',
+                    preferredSize: profile.preferredSize || '',
+                    styleNotes: profile.styleNotes || ''
+                });
+                setMode('edit');
+                setIsEditing(false);
+            } catch (error) {
+                setMessage({ type: 'error', text: 'We could not load your profile right now.' });
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadProfile();
+        loadAddresses();
+        loadOrdersAndCoupons();
+    }, [authUser]);
+
+    useEffect(() => () => {
+        if (redirectTimer.current) {
+            window.clearTimeout(redirectTimer.current);
+        }
+    }, []);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!authUser || saving) {
+            return;
+        }
+
+        const cleaned = {
+            fullName: form.fullName.trim(),
+            email: form.email || authUser.email || '',
+            phone: form.phone.trim(),
+            address: form.address.trim(),
+            city: form.city.trim(),
+            state: form.state.trim(),
+            zipCode: form.zipCode.trim(),
+            preferredSize: form.preferredSize.trim(),
+            styleNotes: form.styleNotes.trim()
+        };
+
+        const validationError = validateProfileForm(cleaned);
+        if (validationError) {
+            setMessage({ type: 'error', text: validationError });
+            setSuccessVisible(false);
+            return;
+        }
+
+        setSaving(true);
+        setSuccessVisible(false);
+        setMessage({ type: '', text: '' });
+
+        try {
+            const response = await fetch('/api/profile/me', {
+                method: mode === 'create' ? 'POST' : 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': authUser.uid
+                },
+                body: JSON.stringify(cleaned)
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'Unable to save profile');
+            }
+
+            const profile = await response.json();
+            setForm({
+                fullName: profile.fullName || '',
+                email: profile.email || authUser.email || '',
+                phone: profile.phone || '',
+                address: profile.address || '',
+                city: profile.city || '',
+                state: profile.state || '',
+                zipCode: profile.zipCode || '',
+                preferredSize: profile.preferredSize || '',
+                styleNotes: profile.styleNotes || ''
+            });
+            setMode('edit');
+            setIsEditing(false);
+            setSuccessVisible(true);
+            loadAddresses();
+            redirectTimer.current = window.setTimeout(() => {
+                setSuccessVisible(false);
+            }, 3000);
+        } catch (error) {
+            setSuccessVisible(false);
+            setMessage({ type: 'error', text: error.message || 'Profile could not be saved.' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!authUser) {
+        return (
+            <div className="profile-shell">
+                <div className="profile-card">
+                    <p className="profile-eyebrow">Account</p>
+                    <h1>Please sign in to view your profile</h1>
+                    <p className="profile-help">Use the Sign In button in the header to continue.</p>
+                    <a href="./login.html" className="btn btn-primary" style={{display:'inline-block', marginTop:'1.5rem'}}>Go to Sign In</a>
+                </div>
+            </div>
+        );
+    }
+
+    if (loading) {
+        return (
+            <div style={{ padding: '10rem 5%', textAlign:'center', minHeight:'50vh', color: '#666' }}>
+                <p>Loading your profile dashboard...</p>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{
+            maxWidth: '1200px',
+            margin: '8rem auto 4rem',
+            padding: '0 1.5rem',
+            minHeight: '80vh',
+            fontFamily: 'var(--font-body)'
+        }}>
+            {/* Header Section */}
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1.5rem',
+                marginBottom: '2rem',
+                background: '#fff',
+                padding: '2rem',
+                borderRadius: '12px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
+            }}>
+                <div style={{
+                    width: '70px',
+                    height: '70px',
+                    borderRadius: '50px',
+                    background: 'linear-gradient(135deg, #e4b39b, #b97a66)',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.8rem',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 10px rgba(185, 122, 102, 0.3)'
+                }}>
+                    {form.fullName ? form.fullName.trim().charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div>
+                    <h1 style={{
+                        fontSize: '1.8rem',
+                        fontFamily: 'var(--font-title)',
+                        margin: 0,
+                        color: '#333'
+                    }}>
+                        {form.fullName || 'Welcome to The Ethnic Touch'}
+                    </h1>
+                    <p style={{ margin: '0.2rem 0 0', color: '#666', fontSize: '0.95rem' }}>{authUser.email}</p>
+                </div>
+            </div>
+
+            {/* Main Content Layout */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: '260px 1fr',
+                gap: '2rem'
+            }} className="profile-dashboard-grid">
+                
+                {/* Sidemenu Panel */}
+                <div style={{
+                    background: '#fff',
+                    padding: '1.5rem',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                    height: 'fit-content'
+                }}>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        <li 
+                            onClick={() => { setActiveTab('profile'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
+                            style={{
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: activeTab === 'profile' ? '600' : 'normal',
+                                backgroundColor: activeTab === 'profile' ? '#fff0e9' : 'transparent',
+                                color: activeTab === 'profile' ? '#b97a66' : '#555',
+                                transition: 'all 0.2s',
+                                marginBottom: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.8rem'
+                            }}
+                        >
+                            My Profile
+                        </li>
+                        <li 
+                            onClick={() => { setActiveTab('addresses'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
+                            style={{
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: activeTab === 'addresses' ? '600' : 'normal',
+                                backgroundColor: activeTab === 'addresses' ? '#fff0e9' : 'transparent',
+                                color: activeTab === 'addresses' ? '#b97a66' : '#555',
+                                transition: 'all 0.2s',
+                                marginBottom: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.8rem'
+                            }}
+                        >
+                            Shipping Addresses
+                        </li>
+                        <li 
+                            onClick={() => { setActiveTab('orders'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
+                            style={{
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: activeTab === 'orders' ? '600' : 'normal',
+                                backgroundColor: activeTab === 'orders' ? '#fff0e9' : 'transparent',
+                                color: activeTab === 'orders' ? '#b97a66' : '#555',
+                                transition: 'all 0.2s',
+                                marginBottom: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.8rem'
+                            }}
+                        >
+                            Order History
+                        </li>
+                        <li 
+                            onClick={() => { setActiveTab('coupons'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
+                            style={{
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: activeTab === 'coupons' ? '600' : 'normal',
+                                backgroundColor: activeTab === 'coupons' ? '#fff0e9' : 'transparent',
+                                color: activeTab === 'coupons' ? '#b97a66' : '#555',
+                                transition: 'all 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.8rem'
+                            }}
+                        >
+                            My Coupons
+                        </li>
+                    </ul>
+                </div>
+
+                {/* Content Panel */}
+                <div style={{
+                    background: '#fff',
+                    padding: '2.5rem',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                    minHeight: '400px'
+                }}>
+                    
+                    {/* TAB: PROFILE */}
+                    {activeTab === 'profile' && (
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
+                                <h2 style={{ fontFamily: 'var(--font-title)', margin: 0, fontSize: '1.4rem', color: '#333' }}>Account Profile</h2>
+                                {mode === 'edit' && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => setIsEditing(!isEditing)}
+                                        className="btn"
+                                        style={{
+                                            border: '1px solid #b97a66',
+                                            color: '#b97a66',
+                                            backgroundColor: isEditing ? '#fff0e9' : 'transparent',
+                                            padding: '0.5rem 1.2rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.9rem',
+                                            fontWeight: '500',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {isEditing ? 'Cancel Edit' : 'Edit Profile'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {message.text && (
+                                <div style={{
+                                    padding: '1rem',
+                                    borderRadius: '6px',
+                                    backgroundColor: message.type === 'error' ? '#fde8e8' : '#eafaf1',
+                                    color: message.type === 'error' ? '#9b1c1c' : '#0e6245',
+                                    marginBottom: '1.5rem',
+                                    fontSize: '0.9rem'
+                                }}>
+                                    {message.text}
+                                </div>
+                            )}
+
+                            {successVisible && (
+                                <div style={{
+                                    textAlign: 'center',
+                                    padding: '2rem 1rem',
+                                    background: '#f4fbf7',
+                                    border: '1px solid #c8e6c9',
+                                    borderRadius: '8px',
+                                    marginBottom: '1.5rem'
+                                }}>
+                                    <span style={{ fontSize: '3rem', color: '#2e7d32' }}>✓</span>
+                                    <h4 style={{ margin: '0.5rem 0 0.2rem', color: '#2e7d32' }}>Profile Updated Successfully!</h4>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#666' }}>Your profile has been saved.</p>
+                                </div>
+                            )}
+
+                            {(!isEditing && mode === 'edit') ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Full Name</label>
+                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.fullName || '-'}</p>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Email Address</label>
+                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.email || '-'}</p>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Phone Number</label>
+                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.phone || '-'}</p>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>ZIP / Postal Code</label>
+                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.zipCode || '-'}</p>
+                                    </div>
+                                    <div style={{ gridColumn: 'span 2' }}>
+                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Primary Shipping Address</label>
+                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>
+                                            {form.address ? `${form.address}, ${form.city}, ${form.state} - ${form.zipCode}` : '-'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Preferred Size</label>
+                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.preferredSize || 'Not set'}</p>
+                                    </div>
+                                    <div style={{ gridColumn: 'span 2' }}>
+                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Style Preferences & Notes</label>
+                                        <p style={{ fontSize: '1.05rem', color: '#333', margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>{form.styleNotes || 'None added'}</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                    <div style={{ gridColumn: 'span 2' }}>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Email Address (Required)</label>
+                                        <input 
+                                            type="email" 
+                                            value={form.email} 
+                                            readOnly 
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', backgroundColor: '#f9f9f9', color: '#777', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Full Name *</label>
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            placeholder="Enter your full name"
+                                            value={form.fullName}
+                                            onChange={e => setForm({ ...form, fullName: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Phone Number *</label>
+                                        <input 
+                                            type="tel" 
+                                            required 
+                                            placeholder="10-digit number"
+                                            value={form.phone}
+                                            onChange={e => setForm({ ...form, phone: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div style={{ gridColumn: 'span 2' }}>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Shipping Address Line *</label>
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            placeholder="Apartment, Street Address"
+                                            value={form.address}
+                                            onChange={e => setForm({ ...form, address: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>City *</label>
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            placeholder="City Name"
+                                            value={form.city}
+                                            onChange={e => setForm({ ...form, city: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>State *</label>
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            placeholder="State Name"
+                                            value={form.state}
+                                            onChange={e => setForm({ ...form, state: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>ZIP / Postal Code *</label>
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            placeholder="6-digit PIN code"
+                                            value={form.zipCode}
+                                            onChange={e => setForm({ ...form, zipCode: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Preferred Sizing (Optional)</label>
+                                        <select 
+                                            value={form.preferredSize} 
+                                            onChange={e => setForm({ ...form, preferredSize: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none', backgroundColor: '#fff' }}
+                                        >
+                                            <option value="">Choose Sizing</option>
+                                            <option value="XS">XS</option>
+                                            <option value="S">S</option>
+                                            <option value="M">M</option>
+                                            <option value="L">L</option>
+                                            <option value="XL">XL</option>
+                                        </select>
+                                    </div>
+                                    <div style={{ gridColumn: 'span 2' }}>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Style Preferences & Special Instructions</label>
+                                        <textarea 
+                                            rows="3" 
+                                            placeholder="Tell us what fit, patterns or fabrics you love"
+                                            value={form.styleNotes}
+                                            onChange={e => setForm({ ...form, styleNotes: e.target.value })}
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none', resize: 'none' }}
+                                        />
+                                    </div>
+                                    <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
+                                        <button 
+                                            type="submit" 
+                                            className="btn btn-primary"
+                                            disabled={saving}
+                                            style={{ padding: '0.8rem 2.5rem', width: '100%' }}
+                                        >
+                                            {saving ? 'Saving...' : (mode === 'create' ? 'Create Profile' : 'Save Details')}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB: ADDRESSES */}
+                    {activeTab === 'addresses' && (
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
+                                <h2 style={{ fontFamily: 'var(--font-title)', margin: 0, fontSize: '1.4rem', color: '#333' }}>Saved Addresses Book</h2>
+                                <button 
+                                    type="button" 
+                                    onClick={() => {
+                                        setAddressForm({ id: 0, fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
+                                        setAddressMessage('');
+                                        setShowAddressForm(!showAddressForm);
+                                    }}
+                                    className="btn btn-primary" 
+                                    style={{ padding: '0.5rem 1.2rem', borderRadius: '6px', fontSize: '0.9rem' }}
+                                >
+                                    {showAddressForm ? 'Close Form' : '+ Add Address'}
+                                </button>
+                            </div>
+
+                            {showAddressForm && (
+                                <form onSubmit={handleAddressSubmit} style={{ 
+                                    background: '#fafafa', 
+                                    padding: '1.5rem', 
+                                    borderRadius: '8px', 
+                                    border: '1px solid #eee',
+                                    marginBottom: '2rem',
+                                    display: 'grid', 
+                                    gridTemplateColumns: '1fr 1fr', 
+                                    gap: '1rem' 
+                                }}>
+                                    <h4 style={{ gridColumn: 'span 2', margin: '0 0 0.5rem', fontFamily: 'var(--font-title)', fontSize: '1.1rem' }}>
+                                        {addressForm.id > 0 ? 'Edit Shipping Address' : 'New Shipping Address'}
+                                    </h4>
+                                    
+                                    {addressMessage && <p style={{ gridColumn: 'span 2', color: 'red', margin: 0, fontSize: '0.85rem' }}>{addressMessage}</p>}
+
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>Full Name *</label>
+                                        <input type="text" required value={addressForm.fullName} onChange={e => setAddressForm({...addressForm, fullName: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>Contact Phone *</label>
+                                        <input type="text" required value={addressForm.phone} onChange={e => setAddressForm({...addressForm, phone: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                    </div>
+                                    <div style={{ gridColumn: 'span 2' }}>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>Address Line *</label>
+                                        <input type="text" required value={addressForm.addressLine} onChange={e => setAddressForm({...addressForm, addressLine: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>City *</label>
+                                        <input type="text" required value={addressForm.city} onChange={e => setAddressForm({...addressForm, city: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>State *</label>
+                                        <input type="text" required value={addressForm.state} onChange={e => setAddressForm({...addressForm, state: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>ZIP Code *</label>
+                                        <input type="text" required value={addressForm.zipCode} onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                    </div>
+                                    <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                        <button type="button" onClick={() => setShowAddressForm(false)} className="btn-secondary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem' }}>Cancel</button>
+                                        <button type="submit" className="btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem' }}>Save Address</button>
+                                    </div>
+                                </form>
+                            )}
+
+                            {addresses.length === 0 ? (
+                                <p style={{ color: '#888', textAlign: 'center', marginTop: '2rem' }}>No shipping addresses added yet.</p>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                                    {addresses.map(addr => (
+                                        <div key={addr.id} style={{
+                                            border: '1px solid #eee',
+                                            padding: '1.5rem',
+                                            borderRadius: '8px',
+                                            position: 'relative',
+                                            backgroundColor: addr.isDefault ? '#fffcf9' : '#fff',
+                                            borderColor: addr.isDefault ? '#e4b39b' : '#eee'
+                                        }}>
+                                            {addr.isDefault && (
+                                                <span style={{
+                                                    position: 'absolute', top: '12px', right: '12px',
+                                                    fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.5px',
+                                                    background: '#e4b39b', color: '#fff', padding: '2px 8px', borderRadius: '10px',
+                                                    fontWeight: '600'
+                                                }}>Default</span>
+                                            )}
+                                            <h4 style={{ margin: '0 0 0.5rem', fontSize: '1rem', fontFamily: 'var(--font-title)' }}>{addr.fullName}</h4>
+                                            <p style={{ margin: '0 0 0.2rem', fontSize: '0.85rem', color: '#666', lineHeight: '1.4' }}>{addr.addressLine}</p>
+                                            <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: '#666' }}>{addr.city}, {addr.state} - {addr.zipCode}</p>
+                                            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#555', fontWeight: '500' }}>Phone: {addr.phone}</p>
+                                            
+                                            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', borderTop: '1px solid #f5f5f5', paddingTop: '0.8rem' }}>
+                                                {!addr.isDefault && (
+                                                    <button type="button" onClick={() => handleSetDefaultAddress(addr.id)} style={{ background: 'none', border: 'none', color: '#b97a66', fontWeight: '500', cursor: 'pointer', padding: 0 }}>Set Default</button>
+                                                )}
+                                                <button type="button" onClick={() => {
+                                                    setAddressForm({
+                                                        id: addr.id,
+                                                        fullName: addr.fullName,
+                                                        phone: addr.phone,
+                                                        addressLine: addr.addressLine,
+                                                        city: addr.city,
+                                                        state: addr.state,
+                                                        zipCode: addr.zipCode
+                                                    });
+                                                    setAddressMessage('');
+                                                    setShowAddressForm(true);
+                                                }} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0 }}>Edit</button>
+                                                <button type="button" onClick={() => handleDeleteAddress(addr.id)} style={{ background: 'none', border: 'none', color: '#d32f2f', cursor: 'pointer', padding: 0 }}>Delete</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB: ORDERS */}
+                    {activeTab === 'orders' && (
+                        <div>
+                            <h2 style={{ fontFamily: 'var(--font-title)', marginBottom: '1.5rem', fontSize: '1.4rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>Order History</h2>
+                            {orders.length === 0 ? (
+                                <p style={{ color: '#888', textAlign: 'center', marginTop: '2rem' }}>You have not placed any orders yet.</p>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                    {orders.map(order => (
+                                        <div key={order.id} style={{ border: '1px solid #eee', borderRadius: '8px', padding: '1.5rem', backgroundColor: '#fafafa' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem', marginBottom: '1rem' }}>
+                                                <div>
+                                                    <span style={{ fontSize: '0.8rem', color: '#888' }}>Order ID:</span>
+                                                    <span style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: '0.95rem', marginLeft: '0.4rem' }}>{order.id}</span>
+                                                </div>
+                                                <div>
+                                                    <span style={{ fontSize: '0.85rem', color: '#b97a66', fontWeight: '500', textTransform: 'uppercase' }}>{order.status}</span>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+                                                <div>
+                                                    <h5 style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: '#888', textTransform: 'uppercase' }}>Items</h5>
+                                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                                        {order.items && order.items.map(it => (
+                                                            <li key={it.productId} style={{ fontSize: '0.9rem', color: '#333', padding: '0.4rem 0', display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span>{it.productName} <strong>x {it.quantity}</strong></span>
+                                                                <span>₹{it.priceAtQty.toLocaleString('en-IN')}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                                <div style={{ borderLeft: '1px solid #eee', paddingLeft: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                                    <div style={{ marginBottom: '0.5rem' }}>
+                                                        <span style={{ fontSize: '0.8rem', color: '#888' }}>Date:</span>
+                                                        <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500' }}>{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span style={{ fontSize: '0.8rem', color: '#888' }}>Total Amount Paid:</span>
+                                                        <span style={{ display: 'block', fontSize: '1.15rem', color: '#b97a66', fontWeight: '600' }}>₹{order.totalAmount.toLocaleString('en-IN')}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {order.trackingNumber && (
+                                                <div style={{ marginTop: '1rem', background: '#eaf3fc', padding: '0.75rem 1rem', borderRadius: '6px' }}>
+                                                    <span style={{ fontSize: '0.85rem', color: '#1a5695' }}>
+                                                        Shipping Carrier Tracking Number: <strong style={{ fontFamily: 'monospace' }}>{order.trackingNumber}</strong>
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {order.unlockedGift && (
+                                                <div style={{ marginTop: '0.8rem', background: '#fff9e6', padding: '0.75rem 1rem', border: '1px dashed #fcd34d', borderRadius: '6px' }}>
+                                                    <span style={{ fontSize: '0.85rem', color: '#854d0e' }}>
+                                                        Reward Unlocked: <strong>{order.unlockedGift}</strong>
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB: COUPONS */}
+                    {activeTab === 'coupons' && (
+                        <div>
+                            <h2 style={{ fontFamily: 'var(--font-title)', marginBottom: '1.5rem', fontSize: '1.4rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>My Loyalty Coupons</h2>
+                            {coupons.length === 0 ? (
+                                <p style={{ color: '#888', textAlign: 'center', marginTop: '2rem' }}>No dynamic coupons issued to your email yet.</p>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1.5rem' }}>
+                                    {coupons.map(c => (
+                                        <div key={c.id} style={{
+                                            border: '2px dashed #e4b39b',
+                                            padding: '1.5rem',
+                                            borderRadius: '10px',
+                                            backgroundColor: '#fffcf9',
+                                            textAlign: 'center',
+                                            position: 'relative',
+                                            overflow: 'hidden'
+                                        }}>
+                                            <div style={{
+                                                position: 'absolute', top: 0, left: 0, right: 0, height: '4px',
+                                                background: 'linear-gradient(90deg, #e4b39b, #b97a66)'
+                                            }} />
+                                            <strong style={{
+                                                display: 'block', fontSize: '1.2rem', fontFamily: 'monospace',
+                                                color: '#b97a66', letterSpacing: '1px', border: '1px dashed #e4b39b',
+                                                padding: '0.5rem', borderRadius: '4px', backgroundColor: '#fff',
+                                                margin: '0.5rem 0'
+                                            }}>{c.code}</strong>
+                                            
+                                            <h4 style={{ margin: '0.8rem 0 0.2rem', fontSize: '1.2rem', fontFamily: 'var(--font-title)' }}>
+                                                {c.type === 'percentage' ? `${c.value}% OFF` : `₹${c.value} OFF`}
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.75rem', color: '#888' }}>
+                                                Min order of ₹{c.minOrder}
+                                            </p>
+                                            <div style={{
+                                                marginTop: '1rem', fontSize: '0.8rem', color: '#555',
+                                                borderTop: '1px dashed #eee', paddingTop: '0.8rem'
+                                            }}>
+                                                Status: <strong style={{ color: c.isActive ? '#15803d' : '#b91c1c' }}>{c.isActive ? 'Active' : 'Redeemed'}</strong>
+                                                <div style={{ fontSize: '0.75rem', color: '#777', marginTop: '0.2rem' }}>
+                                                    Used: {c.usedCount} / {c.usageLimit} times
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- MAIN APP ---
+
+const ScrollToTop = () => {
+    const { pathname } = ReactRouterDOM.useLocation();
+    useEffect(() => {
+        window.scrollTo(0, 0);
+    }, [pathname]);
+    return null;
+};
 
 const App = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [cart, setCart] = useState([]);
     const [discount, setDiscount] = useState(null);
+    const [authUser, setAuthUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [toast, setToast] = useState({ visible: false, message: '' });
+    const toastTimerRef = useRef(null);
 
     useEffect(() => {
         fetch('/api/products')
@@ -645,8 +1792,31 @@ const App = () => {
             });
     }, []);
 
+    useEffect(() => {
+        if (!auth) {
+            setAuthLoading(false);
+            return;
+        }
+
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            setAuthUser(user);
+            setAuthLoading(false);
+        });
+
+        return unsubscribe;
+    }, []);
+
     const addToCart = (product) => {
         setCart(prev => [...prev, product]);
+        
+        // Premium toast alert
+        if (toastTimerRef.current) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+        setToast({ visible: true, message: `Added "${product.name}" to your cart.` });
+        toastTimerRef.current = window.setTimeout(() => {
+            setToast({ visible: false, message: '' });
+        }, 3000);
     };
 
     const clearCart = () => {
@@ -656,16 +1826,52 @@ const App = () => {
 
     return (
         <HashRouter>
-            <Navbar cartCount={cart.length} />
+            <ScrollToTop />
+            <Navbar cartCount={cart.length} authUser={authUser} authLoading={authLoading} />
             <Routes>
                 <Route path="/" element={<Home products={products} loading={loading} />} />
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} />} />
                 <Route path="/cart" element={<Cart cart={cart} onApplyCoupon={setDiscount} discount={discount} />} />
-                <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} />} />
-                <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={() => {}} />} />
+                <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} />} />
+                <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={clearCart} />} />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
+                <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
             </Routes>
             <Footer />
+
+            {/* Premium Toast Notification */}
+            {toast.visible && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '30px',
+                    right: '30px',
+                    backgroundColor: '#fff',
+                    border: '1px solid #e4b39b',
+                    borderRadius: '6px',
+                    padding: '0.9rem 1.4rem',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
+                    zIndex: 100000,
+                    animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                }}>
+                    <span style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: '#e4b39b'
+                    }}></span>
+                    <span style={{ 
+                        color: 'var(--color-text)', 
+                        fontSize: '0.9rem',
+                        fontWeight: '500',
+                        fontFamily: 'var(--font-body)'
+                    }}>
+                        {toast.message}
+                    </span>
+                </div>
+            )}
         </HashRouter>
     );
 };

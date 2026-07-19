@@ -1,0 +1,875 @@
+diff --git a/static/app.js b/static/app.js
+index 586fdc4..db6a102 100644
+--- a/static/app.js
++++ b/static/app.js
+@@ -1,6 +1,21 @@
+-const { useState, useEffect } = React;
++const { useState, useEffect, useRef } = React;
+ const { HashRouter, Routes, Route, Link, useParams, useNavigate } = ReactRouterDOM;
+ 
++const firebaseConfig = {
++    apiKey: "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8",
++    authDomain: "the-ethnic-touch.firebaseapp.com",
++    projectId: "the-ethnic-touch",
++    storageBucket: "the-ethnic-touch.firebasestorage.app",
++    messagingSenderId: "565024605742",
++    appId: "1:565024605742:web:0452b9b88a65be9d67c1bf",
++    measurementId: "G-KP2NETS58F"
++};
++
++if (window.firebase && !firebase.apps.length) {
++    firebase.initializeApp(firebaseConfig);
++}
++const auth = window.firebase ? firebase.auth() : null;
++
+ // --- DUMMY FALLBACK DATA ---
+ const fallbackProducts = [
+     { id: "1", name: "Pastel Peach Anarkali", description: "A delicate premium silk Kurthi in soft peach, featuring intricate silver zari work.", price: 10999, imageUrl: "./images/kurthi_peach.png" },
+@@ -11,7 +26,7 @@ const fallbackProducts = [
+ 
+ // --- COMPONENTS ---
+ 
+-const Navbar = ({ cartCount }) => (
++const Navbar = ({ cartCount, authUser, authLoading }) => (
+     <nav className="navbar">
+         <div className="nav-container">
+             <Link to="/" className="logo">The Ethnic Touch</Link>
+@@ -19,6 +34,13 @@ const Navbar = ({ cartCount }) => (
+                 <li><Link to="/">Home</Link></li>
+                 <li><a href="/#collection">Collection</a></li>
+                 <li><Link to="/cart" className="cart-btn">Cart ({cartCount})</Link></li>
++                {authLoading ? (
++                    <li><span className="nav-links-signin nav-links-disabled">Loading...</span></li>
++                ) : authUser ? (
++                    <li><Link to="/profile" className="nav-links-signin">Profile</Link></li>
++                ) : (
++                    <li><a href="./login.html" className="nav-links-signin">Sign In</a></li>
++                )}
+             </ul>
+         </div>
+     </nav>
+@@ -68,7 +90,7 @@ const Home = ({ products, loading }) => (
+                                     <h3 className="product-name">{product.name}</h3>
+                                     <p className="product-desc">{product.description}</p>
+                                 </div>
+-                                <div className="product-price">₹{product.price.toLocaleString('en-IN')}</div>
++                                <div className="product-price">Γé╣{product.price.toLocaleString('en-IN')}</div>
+                             </div>
+                         </Link>
+                     ))
+@@ -100,7 +122,7 @@ const ProductDetails = ({ products, addToCart }) => {
+                 <div style={{flex: 1, minWidth: '300px'}}>
+                     <h1 style={{fontSize: '3rem', marginBottom: '1rem'}}>{product.name}</h1>
+                     <p style={{fontSize: '1.2rem', marginBottom: '2rem', lineHeight: '1.8'}}>{product.description}</p>
+-                    <div style={{fontSize: '2rem', fontWeight: '500', marginBottom: '3rem'}}>₹{product.price.toLocaleString('en-IN')}</div>
++                    <div style={{fontSize: '2rem', fontWeight: '500', marginBottom: '3rem'}}>Γé╣{product.price.toLocaleString('en-IN')}</div>
+                     <button className="btn btn-primary" onClick={() => addToCart(product)} style={{fontSize: '1.1rem', padding: '1rem 3rem'}}>
+                         Add to Cart
+                     </button>
+@@ -113,21 +135,9 @@ const ProductDetails = ({ products, addToCart }) => {
+ const Cart = ({ cart, onApplyCoupon, discount }) => {
+     const [couponCode, setCouponCode] = useState('');
+     const [msg, setMsg] = useState('');
+-    const [tiers, setTiers] = useState([]);
+     
+     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+-    const finalTotal = subtotal - (discount?.value || 0);
+-
+-    useEffect(() => {
+-        fetch('/api/gift-tiers')
+-            .then(res => res.json())
+-            .then(data => {
+-                if (Array.isArray(data)) {
+-                    setTiers(data.sort((a, b) => a.threshold - b.threshold));
+-                }
+-            })
+-            .catch(err => console.error("Error fetching tiers:", err));
+-    }, []);
++    const finalTotal = subtotal - (discount?.amt || 0);
+ 
+     const handleCoupon = async () => {
+         try {
+@@ -137,8 +147,8 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
+                 body: JSON.stringify({ code: couponCode, total: subtotal })
+             });
+             if (!res.ok) {
+-                const err = await res.json();
+-                setMsg(err.error || 'Invalid code');
++                const err = await res.text();
++                setMsg(err);
+                 return;
+             }
+             const coupon = await res.json();
+@@ -147,18 +157,12 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
+             else amt = (subtotal * coupon.value) / 100;
+             
+             onApplyCoupon({ code: coupon.code, amt });
+-            setMsg(`Applied: ₹${amt} off!`);
++            setMsg(`Applied: Γé╣${amt} off!`);
+         } catch (err) {
+             setMsg('Validation failed');
+         }
+     };
+ 
+-    // Calculate progression details
+-    const unlockedTiers = tiers.filter(t => subtotal >= t.threshold);
+-    const nextTier = tiers.find(t => subtotal < t.threshold);
+-    const activeUnlocked = unlockedTiers.length > 0 ? unlockedTiers[unlockedTiers.length - 1] : null;
+-    const remaining = nextTier ? nextTier.threshold - subtotal : 0;
+-
+     return (
+         <div style={{padding: '8rem 5% 4rem', maxWidth: '800px', margin: '0 auto', minHeight: '80vh'}}>
+             <h1 style={{marginBottom: '2rem'}}>Your Cart</h1>
+@@ -173,138 +177,10 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
+                                 <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500'}}>{item.name}</h3>
+                                 <p style={{color:'var(--color-text-light)', fontSize:'0.9rem'}}>{item.description.substring(0, 50)}...</p>
+                             </div>
+-                            <div style={{fontWeight:'500'}}>₹{item.price.toLocaleString('en-IN')}</div>
++                            <div style={{fontWeight:'500'}}>Γé╣{item.price.toLocaleString('en-IN')}</div>
+                         </div>
+                     ))}
+-                                 {/* Beautiful, Animated Premium Tiered Reward Panel */}
+-                    {tiers.length > 0 && (
+-                        <div className="gift-system-card">
+-                            <h3 className="gift-system-title">
+-                                <span>🎁</span> Premium Tiered Rewards
+-                            </h3>
+-
+-                            {/* Milestone Information Banner */}
+-                            {nextTier ? (
+-                                <div className="gift-milestone-banner progress">
+-                                    <span style={{fontSize: '1.4rem'}}>✨</span>
+-                                    <div style={{flex: 1, fontSize: '0.95rem'}}>
+-                                        Add <strong style={{color: 'var(--color-primary)'}}>₹{remaining.toLocaleString('en-IN')}</strong> more to unlock the next milestone: <strong>{nextTier.name}</strong>!
+-                                    </div>
+-                                    <div style={{fontSize: '1.05rem', fontWeight: '600', color: 'var(--color-primary)'}}>
+-                                        ₹{remaining.toLocaleString('en-IN')} to go
+-                                    </div>
+-                                </div>
+-                            ) : (
+-                                <div className="gift-milestone-banner unlocked">
+-                                    <span style={{fontSize: '1.4rem'}}>🎉</span>
+-                                    <div style={{flex: 1, fontSize: '0.95rem'}}>
+-                                        <strong>Congratulations!</strong> You have unlocked the highest reward tier: <strong>{activeUnlocked ? activeUnlocked.name : ""}</strong>!
+-                                    </div>
+-                                </div>
+-                            )}
+-
+-                            {/* Horizontal Progress Timeline */}
+-                            <div className="gift-progress-wrapper">
+-                                <div className="gift-progress-track-bg"></div>
+-                                {(() => {
+-                                    if (tiers.length === 0) return null;
+-                                    const maxThreshold = tiers[tiers.length - 1].threshold;
+-                                    const fillPercent = Math.min(100, (subtotal / maxThreshold) * 100);
+-                                    return (
+-                                        <div 
+-                                            className="gift-progress-track-fill" 
+-                                            style={{ width: `${fillPercent}%` }}
+-                                        ></div>
+-                                    );
+-                                })()}
+-
+-                                <div className="gift-nodes-container" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '100%' }}>
+-                                    {/* Start Node Indicator at 0% */}
+-                                    <div style={{
+-                                        position: 'absolute',
+-                                        left: '0%',
+-                                        transform: 'translateX(-50%)',
+-                                        display: 'flex',
+-                                        flexDirection: 'column',
+-                                        alignItems: 'center',
+-                                        zIndex: 3
+-                                    }}>
+-                                        <div style={{
+-                                            width: '12px',
+-                                            height: '12px',
+-                                            borderRadius: '50%',
+-                                            backgroundColor: 'var(--color-primary)',
+-                                            marginTop: '18px',
+-                                            boxShadow: '0 0 8px rgba(212,163,115,0.4)',
+-                                            border: '2px solid white'
+-                                        }}></div>
+-                                        <div className="gift-node-label" style={{ marginTop: '0.8rem' }}>
+-                                            <div>Start</div>
+-                                            <div className="gift-node-threshold">₹0</div>
+-                                        </div>
+-                                    </div>
+-
+-                                    {tiers.map((t, idx) => {
+-                                        const maxThreshold = tiers[tiers.length - 1].threshold;
+-                                        const percent = (t.threshold / maxThreshold) * 100;
+-                                        const isUnlocked = subtotal >= t.threshold;
+-                                        return (
+-                                            <div 
+-                                                key={t.id} 
+-                                                className={`gift-node ${isUnlocked ? 'unlocked' : ''}`}
+-                                                style={{
+-                                                    position: 'absolute',
+-                                                    left: `${percent}%`,
+-                                                    transform: 'translateX(-50%)',
+-                                                    zIndex: 3
+-                                                }}
+-                                            >
+-                                                <div className="gift-node-dot">
+-                                                    {isUnlocked ? '✓' : idx + 1}
+-                                                </div>
+-                                                <div className="gift-node-label">
+-                                                    <div>{t.name}</div>
+-                                                    <div className="gift-node-threshold">₹{parseInt(t.threshold).toLocaleString('en-IN')}</div>
+-                                                </div>
+-                                            </div>
+-                                        );
+-                                    })}
+-                                </div>
+-                            </div>
+-
+-                            {/* Rewards Detail Cards Grid */}
+-                            <div className="gift-cards-grid">
+-                                {tiers.map((t) => {
+-                                    const isUnlocked = subtotal >= t.threshold;
+-                                    const isActive = activeUnlocked && activeUnlocked.id === t.id;
+-                                    
+-                                    return (
+-                                        <div 
+-                                            key={t.id} 
+-                                            className={`gift-reward-card ${isUnlocked ? 'unlocked' : 'locked'} ${isActive ? 'active-unlocked' : ''}`}
+-                                        >
+-                                            <div>
+-                                                <div className="gift-reward-card-label">Tier {t.threshold >= 10000 ? 'Gold' : t.threshold >= 5000 ? 'Silver' : 'Bronze'}</div>
+-                                                <h4 className="gift-reward-card-title">{t.name}</h4>
+-                                                <p className="gift-reward-card-desc">
+-                                                    {t.rewardType === 'coupon' 
+-                                                        ? `Qualified for a custom digital coupon giving ${t.discountType === 'percentage' ? t.discountValue + '%' : '₹' + t.discountValue} discount off your next purchase.` 
+-                                                        : `Includes a handcraft premium physical gift: ${t.physicalName} packed dynamically in your parcel.`
+-                                                    }
+-                                                </p>
+-                                            </div>
+-                                            
+-                                            <div className="gift-reward-card-requirement" style={{ color: isUnlocked ? '#2E7D32' : 'var(--color-primary)' }}>
+-                                                <span>{isUnlocked ? '🔓' : '🔒'}</span> 
+-                                                <span>{isUnlocked ? 'Unlocked!' : `Spend ₹${parseInt(t.threshold).toLocaleString('en-IN')}`}</span>
+-                                            </div>
+-                                        </div>
+-                                    );
+-                                })}
+-                            </div>
+-                        </div>
+-                    )}
+-
++                    
+                     <div style={{marginTop: '2rem', padding: '1.5rem', backgroundColor: '#f9f9f9', borderRadius: '8px'}}>
+                         <h4 style={{marginBottom: '1rem'}}>Apply Coupon</h4>
+                         <div style={{display: 'flex', gap: '1rem'}}>
+@@ -321,9 +197,9 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
+                     </div>
+ 
+                     <div style={{textAlign:'right', marginTop:'2rem'}}>
+-                        <p>Subtotal: ₹{subtotal.toLocaleString('en-IN')}</p>
+-                        {discount && <p style={{color: 'green'}}>Discount: -₹{discount.amt.toLocaleString('en-IN')}</p>}
+-                        <h3 style={{margin:'1rem 0 2rem'}}>Total: ₹{finalTotal.toLocaleString('en-IN')}</h3>
++                        <p>Subtotal: Γé╣{subtotal.toLocaleString('en-IN')}</p>
++                        {discount && <p style={{color: 'green'}}>Discount: -Γé╣{discount.amt.toLocaleString('en-IN')}</p>}
++                        <h3 style={{margin:'1rem 0 2rem'}}>Total: Γé╣{finalTotal.toLocaleString('en-IN')}</h3>
+                         <Link to="/checkout" className="btn btn-primary">Proceed to Checkout</Link>
+                     </div>
+                 </div>
+@@ -334,104 +210,54 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
+ 
+ const Checkout = ({ cart, discount, clearCart }) => {
+     const [email, setEmail] = useState('');
+-    const [ordering, setOrdering] = useState(false);
+-    const navigate = useNavigate();
++    const [done, setDone] = useState(false);
++    const [orderId, setOrderId] = useState('');
++    const [gift, setGift] = useState('');
+ 
+     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+     const finalTotal = subtotal - (discount?.amt || 0);
+ 
+     const placeOrder = async () => {
+         if (!email) return alert('Email required');
+-        setOrdering(true);
+-
+         const order = {
+             customerEmail: email,
+-            couponCode: discount?.code || '',
+-            items: cart.map(item => ({
+-                productId: item.id,
+-                quantity: 1
+-            }))
++            totalAmount: finalTotal,
++            discountAmt: discount?.amt || 0,
++            couponCode: discount?.code || ''
+         };
+         
+-        try {
+-            const res = await fetch('/api/orders', {
+-                method: 'POST',
+-                headers: { 'Content-Type': 'application/json' },
+-                body: JSON.stringify(order)
+-            });
+-            
+-            if (!res.ok) {
+-                const errData = await res.json();
+-                alert(errData.error || 'Failed to create order');
+-                setOrdering(false);
+-                return;
+-            }
+-
++        const res = await fetch('/api/orders', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify(order)
++        });
++        
++        if (res.ok) {
+             const data = await res.json();
+-
+-             if (data.checkoutUrl !== "razorpay") {
+-                clearCart();
+-                // Redirect user to Mock checkout SPA route (strip '/#' prefix if present)
+-                let targetUrl = data.checkoutUrl;
+-                if (targetUrl.startsWith('/#')) {
+-                    targetUrl = targetUrl.substring(2);
+-                }
+-                navigate(targetUrl);
+-            } else {
+-                // Open live Razorpay standard Checkout dialog modal
+-                const options = {
+-                    "key": data.razorpayKey,
+-                    "amount": data.amount * 100,
+-                    "currency": "INR",
+-                    "name": "The Ethnic Touch",
+-                    "description": "Premium Kurthi E-Commerce Checkout",
+-                    "order_id": data.razorpayOrderId,
+-                    "handler": async function (response) {
+-                        const verifyRes = await fetch('/api/orders/verify', {
+-                            method: 'POST',
+-                            headers: { 'Content-Type': 'application/json' },
+-                            body: JSON.stringify({
+-                                orderId: data.orderId,
+-                                razorpayOrderId: response.razorpay_order_id,
+-                                razorpayPaymentId: response.razorpay_payment_id,
+-                                razorpaySignature: response.razorpay_signature,
+-                                mock: false
+-                            })
+-                        });
+-
+-                        if (verifyRes.ok) {
+-                            const verifyData = await verifyRes.json();
+-                            clearCart();
+-                            navigate('/checkout-success', { 
+-                                state: { 
+-                                    orderId: data.orderId, 
+-                                    gift: verifyData.giftCode, 
+-                                    unlockedGift: verifyData.unlockedGift,
+-                                    giftType: verifyData.giftType,
+-                                    tracking: verifyData.trackingNumber 
+-                                } 
+-                            });
+-                        } else {
+-                            alert("Payment verification check failed. Please verify with Support.");
+-                        }
+-                    },
+-                    "prefill": {
+-                        "email": email
+-                    },
+-                    "theme": {
+-                        "color": "#FFE5D9"
+-                    }
+-                };
+-                const rzp = new window.Razorpay(options);
+-                rzp.open();
+-                setOrdering(false);
+-            }
+-        } catch (err) {
+-            alert("Error placing order.");
+-            setOrdering(false);
++            setOrderId(data.id);
++            if (finalTotal > 5000) setGift(`GFT-${data.id.slice(-4)}`);
++            setDone(true);
++            clearCart();
+         }
+     };
+ 
++    if (done) return (
++        <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
++            <h1>Success!</h1>
++            <div style={{padding: '3rem', backgroundColor: 'var(--color-mint)', borderRadius: 'var(--border-radius-lg)', margin: '2rem 0'}}>
++                <h2>Order #{orderId} Placed</h2>
++                <p style={{marginTop:'1rem'}}>We've sent a confirmation to {email}.</p>
++                {gift && (
++                    <div style={{marginTop: '2rem', padding: '1rem', border: '2px dashed var(--color-peach)', borderRadius: '8px'}}>
++                        <h4 style={{color: 'var(--color-peach)'}}>Surprise Gift Coupon!</h4>
++                        <p>Use code <strong>{gift}</strong> for 15% off your next order.</p>
++                    </div>
++                )}
++            </div>
++            <Link to="/" className="btn btn-primary">Return to Store</Link>
++        </div>
++    );
++
+     return (
+         <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh'}}>
+             <h1>Checkout</h1>
+@@ -443,182 +269,261 @@ const Checkout = ({ cart, discount, clearCart }) => {
+                     onChange={e => setEmail(e.target.value)} 
+                     placeholder="you@example.com"
+                     style={{padding: '1rem', border: '1px solid #ddd', borderRadius: '8px', width: '100%'}}
+-                    disabled={ordering}
+                 />
+             </div>
+             <div style={{padding: '2rem', border: '1px solid #eee', borderRadius: '8px'}}>
+                 <p>Items in order: {cart.length}</p>
+-                <h3 style={{marginTop: '1rem'}}>Amount to Pay: ₹{finalTotal.toLocaleString('en-IN')}</h3>
++                <h3 style={{marginTop: '1rem'}}>Amount to Pay: Γé╣{finalTotal.toLocaleString('en-IN')}</h3>
+             </div>
+-            <button 
+-                className="btn btn-primary" 
+-                onClick={placeOrder} 
+-                style={{marginTop: '2rem', width: '100%'}}
+-                disabled={ordering}
+-            >
+-                {ordering ? "Verifying Stock & Routing..." : "Pay & Secure Order"}
+-            </button>
++            <button className="btn btn-primary" onClick={placeOrder} style={{marginTop: '2rem', width: '100%'}}>Pay & Secure Order</button>
+         </div>
+     );
+ };
+ 
+-// --- MOCK PAYMENT GATEWAY SIMULATOR ---
+-const MockPayment = ({ onPaymentSuccess }) => {
+-    const [searchParams] = useState(() => {
+-        const hash = window.location.hash;
+-        const qIndex = hash.indexOf('?');
+-        const qStr = qIndex !== -1 ? hash.slice(qIndex) : '';
+-        return new URLSearchParams(qStr);
+-    });
+-    const orderId = searchParams.get('orderId');
+-    const [paying, setPaying] = useState(false);
++const ProfilePage = ({ authUser }) => {
+     const navigate = useNavigate();
++    const [loading, setLoading] = useState(true);
++    const [saving, setSaving] = useState(false);
++    const [mode, setMode] = useState('create');
++    const [message, setMessage] = useState({ type: '', text: '' });
++    const [successVisible, setSuccessVisible] = useState(false);
++    const redirectTimer = useRef(null);
++    const [form, setForm] = useState({
++        fullName: '',
++        phone: '',
++        address: '',
++        city: '',
++        state: '',
++        zipCode: '',
++        preferredSize: '',
++        styleNotes: ''
++    });
+ 
+-    useEffect(() => {
+-        if (!orderId) {
+-            navigate('/');
++    const validateProfileForm = (cleaned) => {
++        if (!cleaned.fullName || !cleaned.phone || !cleaned.address || !cleaned.city || !cleaned.state || !cleaned.zipCode) {
++            return 'Please complete the required fields.';
+         }
+-    }, [orderId]);
++        if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(cleaned.fullName)) {
++            return 'Please enter a valid full name.';
++        }
++        if (!/^\+?[0-9()\-\s]{8,15}$/.test(cleaned.phone)) {
++            return 'Please enter a valid phone number.';
++        }
++        if (cleaned.address.length < 5) {
++            return 'Please enter a complete address.';
++        }
++        if (cleaned.city.length < 2 || cleaned.state.length < 2) {
++            return 'Please enter a valid city and state.';
++        }
++        if (!/^[A-Za-z0-9\-\s]{3,12}$/.test(cleaned.zipCode)) {
++            return 'Please enter a valid ZIP or postal code.';
++        }
++        if (cleaned.styleNotes.length > 500) {
++            return 'Style notes must be 500 characters or fewer.';
++        }
++        return '';
++    };
+ 
+-    const handlePay = async () => {
+-        setPaying(true);
+-        try {
+-            const res = await fetch('/api/orders/verify', {
+-                method: 'POST',
+-                headers: { 'Content-Type': 'application/json' },
+-                body: JSON.stringify({
+-                    orderId: orderId,
+-                    mock: true
+-                })
+-            });
+-            if (res.ok) {
+-                const data = await res.json();
+-                onPaymentSuccess(data);
+-                navigate('/checkout-success', { 
+-                    state: { 
+-                        orderId: orderId, 
+-                        gift: data.giftCode, 
+-                        unlockedGift: data.unlockedGift,
+-                        giftType: data.giftType,
+-                        tracking: data.trackingNumber 
+-                    } 
++    useEffect(() => {
++        if (!authUser) return;
++
++        const loadProfile = async () => {
++            try {
++                const response = await fetch('/api/profile/me', {
++                    headers: { 'X-User-Id': authUser.uid }
++                });
++                if (response.status === 404) {
++                    setMode('create');
++                    setLoading(false);
++                    return;
++                }
++                if (!response.ok) {
++                    throw new Error('Unable to load profile');
++                }
++                const profile = await response.json();
++                setForm({
++                    fullName: profile.fullName || '',
++                    phone: profile.phone || '',
++                    address: profile.address || '',
++                    city: profile.city || '',
++                    state: profile.state || '',
++                    zipCode: profile.zipCode || '',
++                    preferredSize: profile.preferredSize || '',
++                    styleNotes: profile.styleNotes || ''
+                 });
+-            } else {
+-                const errData = await res.json();
+-                alert("Simulated transaction failed: " + (errData.error || 'Server error'));
+-                setPaying(false);
++                setMode('edit');
++            } catch (error) {
++                setMessage({ type: 'error', text: 'We could not load your profile right now.' });
++            } finally {
++                setLoading(false);
+             }
+-        } catch (err) {
+-            alert("Server connection failed.");
+-            setPaying(false);
++        };
++
++        loadProfile();
++    }, [authUser]);
++
++    useEffect(() => () => {
++        if (redirectTimer.current) {
++            window.clearTimeout(redirectTimer.current);
+         }
+-    };
++    }, []);
+ 
+-    return (
+-        <div style={{padding: '8rem 5% 4rem', maxWidth: '500px', margin: '0 auto', minHeight: '80vh'}}>
+-            <div style={{
+-                padding: '3rem 2rem',
+-                backgroundColor: 'white',
+-                borderRadius: 'var(--border-radius-lg)',
+-                boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
+-                border: '1px solid #f0f0f0',
+-                textAlign: 'center'
+-            }}>
+-                <h2 style={{fontFamily: 'var(--font-title)', color: 'var(--color-peach)', marginBottom: '1rem'}}>
+-                    💳 Razorpay Simulator
+-                </h2>
+-                <p style={{color: 'gray', marginBottom: '2rem'}}>Confirming details for order ref: <strong>{orderId}</strong></p>
+-                
+-                <div style={{
+-                    backgroundColor: '#fffcf9',
+-                    padding: '1.5rem',
+-                    borderRadius: '8px',
+-                    marginBottom: '2rem',
+-                    border: '1px dashed var(--color-peach)'
+-                }}>
+-                    <p style={{fontSize: '0.9rem', color: '#886050', margin: 0}}>
+-                        <strong>Dev Sandbox Environment</strong>
+-                    </p>
+-                    <p style={{fontSize: '0.85rem', color: '#906858', margin: '0.5rem 0 0', lineHeight: '1.5'}}>
+-                        This screen simulates RazorPay's secure transaction screen. Clicking below fires the signature webhook checking.
+-                    </p>
+-                </div>
++    const handleSubmit = async (e) => {
++        e.preventDefault();
++        if (!authUser || saving) {
++            return;
++        }
+ 
+-                <button 
+-                    className="btn btn-primary" 
+-                    onClick={handlePay} 
+-                    disabled={paying}
+-                    style={{width: '100%', padding: '1.2rem', fontSize: '1.1rem'}}
+-                >
+-                    {paying ? "Verifying signature credentials..." : "Simulate Payment Success"}
+-                </button>
+-            </div>
+-        </div>
+-    );
+-};
++        const cleaned = {
++            fullName: form.fullName.trim(),
++            phone: form.phone.trim(),
++            address: form.address.trim(),
++            city: form.city.trim(),
++            state: form.state.trim(),
++            zipCode: form.zipCode.trim(),
++            preferredSize: form.preferredSize.trim(),
++            styleNotes: form.styleNotes.trim()
++        };
++
++        const validationError = validateProfileForm(cleaned);
++        if (validationError) {
++            setMessage({ type: 'error', text: validationError });
++            setSuccessVisible(false);
++            return;
++        }
++
++        setSaving(true);
++        setSuccessVisible(false);
++        setMessage({ type: '', text: '' });
+ 
+-// --- CHECKOUT SUCCESS PAGE ---
+-const CheckoutSuccess = () => {
+-    const state = ReactRouterDOM.useLocation().state || {};
+-    const { orderId, gift, tracking, unlockedGift, giftType } = state;
++        try {
++            const response = await fetch('/api/profile/me', {
++                method: mode === 'create' ? 'POST' : 'PATCH',
++                headers: {
++                    'Content-Type': 'application/json',
++                    'X-User-Id': authUser.uid
++                },
++                body: JSON.stringify(cleaned)
++            });
++
++            if (!response.ok) {
++                const text = await response.text();
++                throw new Error(text || 'Unable to save profile');
++            }
++
++            const profile = await response.json();
++            setForm({
++                fullName: profile.fullName || '',
++                phone: profile.phone || '',
++                address: profile.address || '',
++                city: profile.city || '',
++                state: profile.state || '',
++                zipCode: profile.zipCode || '',
++                preferredSize: profile.preferredSize || '',
++                styleNotes: profile.styleNotes || ''
++            });
++            setMode('edit');
++            setSuccessVisible(true);
++            redirectTimer.current = window.setTimeout(() => {
++                navigate('/');
++            }, 2600);
++        } catch (error) {
++            setSuccessVisible(false);
++            setMessage({ type: 'error', text: error.message || 'Profile could not be saved.' });
++        } finally {
++            setSaving(false);
++        }
++    };
+ 
+-    if (!orderId) {
++    if (!authUser) {
+         return (
+-            <div style={{padding: '10rem 5%', textAlign:'center', minHeight:'80vh'}}>
+-                <h2>No Order Context Found</h2>
+-                <Link to="/" className="btn btn-primary" style={{marginTop:'1.5rem', display:'inline-block'}}>Back to Catalog</Link>
++            <div className="profile-shell">
++                <div className="profile-card">
++                    <p className="profile-eyebrow">Account</p>
++                    <h1>Please sign in to view your profile</h1>
++                    <p className="profile-help">Use the Sign In button in the header to continue.</p>
++                    <a href="./login.html" className="btn btn-primary">Go to Sign In</a>
++                </div>
+             </div>
+         );
+     }
+ 
+-    const displayGift = unlockedGift || gift;
+-    const isPhysical = giftType === 'physical';
+-
+     return (
+-        <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
+-            <div style={{
+-                fontSize: '5rem',
+-                color: '#2e7d32',
+-                marginBottom: '1rem'
+-            }}>✓</div>
+-            <h1 style={{fontFamily:'var(--font-title)', marginBottom: '1rem'}}>Payment Success!</h1>
+-            <div style={{padding: '3rem', backgroundColor: '#f4fbf7', border: '1px solid #c8e6c9', borderRadius: 'var(--border-radius-lg)', margin: '2rem 0'}}>
+-                <h2 style={{color: '#2e7d32'}}>Order #{orderId} Confirmed</h2>
+-                <p style={{marginTop:'1.5rem', fontSize:'1.05rem', color:'#4caf50', fontWeight:'500'}}>
+-                    🚀 Order has been approved and automatically shipped!
+-                </p>
+-                {tracking && (
+-                    <div style={{
+-                        marginTop: '1.5rem',
+-                        padding: '1rem',
+-                        background: 'white',
+-                        border: '1px solid #a5d6a7',
+-                        borderRadius: '6px',
+-                        display: 'inline-block'
+-                    }}>
+-                        <p style={{margin: 0, fontSize: '0.9rem', color: '#555'}}>Carrier Tracking Number:</p>
+-                        <strong style={{fontSize: '1.2rem', color: '#2e7d32'}}>{tracking}</strong>
++        <div className="profile-shell">
++            <div className="profile-card">
++                <div className="profile-header">
++                    <div>
++                        <p className="profile-eyebrow">Your account</p>
++                        <h1>{mode === 'create' ? 'Complete your profile' : 'Your profile'}</h1>
++                        <p className="profile-help">These details help us personalize orders, styling suggestions, and delivery preferences.</p>
+                     </div>
+-                )}
+-                {displayGift && (
+-                    <div style={{marginTop: '2rem', padding: '1.5rem', border: '2px dashed var(--color-peach)', backgroundColor: '#fffdfb', borderRadius: '8px'}}>
+-                        {isPhysical ? (
+-                            <div>
+-                                <h4 style={{color: '#e65100', margin: '0 0 0.5rem'}}>🎁 Free Gift Earned!</h4>
+-                                <p style={{margin:0, fontSize:'0.9rem', color: '#5d4037'}}>
+-                                    Congratulations! You've unlocked a free <strong>{displayGift}</strong>. It will be packaged and shipped together with your items!
+-                                </p>
+-                            </div>
+-                        ) : (
+-                            <div>
+-                                <h4 style={{color: 'var(--color-peach)', margin: '0 0 0.5rem'}}>🎟️ Surprise Gift Coupon Distributed!</h4>
+-                                <p style={{margin:0, fontSize:'0.9rem'}}>Use code <strong>{displayGift}</strong> on your next purchase.</p>
++                </div>
++
++                {message.text ? <div className={`profile-message ${message.type}`}>{message.text}</div> : null}
++
++                {loading ? (
++                    <p className="profile-help">Loading your profile…</p>
++                ) : successVisible ? (
++                    <div className="profile-success-state" role="status" aria-live="polite">
++                        <div className="profile-success-card">
++                            <div className="profile-success-badge" aria-hidden="true">
++                                <span className="profile-success-check">✓</span>
+                             </div>
+-                        )}
++                            <h2>Profile completed successfully!</h2>
++                            <p>You're all set. Let's start shopping.</p>
++                        </div>
+                     </div>
++                ) : (
++                    <form className="profile-form" onSubmit={handleSubmit} aria-busy={saving}>
++                        <div className="profile-grid">
++                            <label className="profile-field">
++                                <span>Full name *</span>
++                                <input className="profile-input" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required minLength="2" maxLength="80" autoComplete="name" />
++                            </label>
++                            <label className="profile-field">
++                                <span>Phone *</span>
++                                <input type="tel" className="profile-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required minLength="8" maxLength="15" autoComplete="tel" />
++                            </label>
++                            <label className="profile-field profile-span-2">
++                                <span>Address *</span>
++                                <input className="profile-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} required minLength="5" autoComplete="street-address" />
++                            </label>
++                            <label className="profile-field">
++                                <span>City *</span>
++                                <input className="profile-input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required minLength="2" autoComplete="address-level2" />
++                            </label>
++                            <label className="profile-field">
++                                <span>State *</span>
++                                <input className="profile-input" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} required minLength="2" autoComplete="address-level1" />
++                            </label>
++                            <label className="profile-field">
++                                <span>ZIP / Postal code *</span>
++                                <input className="profile-input" value={form.zipCode} onChange={(e) => setForm({ ...form, zipCode: e.target.value })} required minLength="3" maxLength="12" autoComplete="postal-code" />
++                            </label>
++                            <label className="profile-field">
++                                <span>Preferred size</span>
++                                <select className="profile-input" value={form.preferredSize} onChange={(e) => setForm({ ...form, preferredSize: e.target.value })}>
++                                    <option value="">Select</option>
++                                    <option value="XS">XS</option>
++                                    <option value="S">S</option>
++                                    <option value="M">M</option>
++                                    <option value="L">L</option>
++                                    <option value="XL">XL</option>
++                                </select>
++                            </label>
++                            <label className="profile-field profile-span-2">
++                                <span>Style notes</span>
++                                <textarea className="profile-input" rows="4" maxLength="500" value={form.styleNotes} onChange={(e) => setForm({ ...form, styleNotes: e.target.value })} />
++                            </label>
++                        </div>
++                        <div className="profile-actions">
++                            <button className="btn btn-primary" disabled={saving} type="submit">
++                                {saving ? 'Saving...' : mode === 'create' ? 'Save profile' : 'Update profile'}
++                            </button>
++                        </div>
++                    </form>
+                 )}
+             </div>
+-            <Link to="/" className="btn btn-primary" style={{padding: '1rem 3rem'}}>Return to Store</Link>
+         </div>
+     );
+ };
+@@ -630,6 +535,8 @@ const App = () => {
+     const [loading, setLoading] = useState(true);
+     const [cart, setCart] = useState([]);
+     const [discount, setDiscount] = useState(null);
++    const [authUser, setAuthUser] = useState(null);
++    const [authLoading, setAuthLoading] = useState(true);
+ 
+     useEffect(() => {
+         fetch('/api/products')
+@@ -645,6 +552,20 @@ const App = () => {
+             });
+     }, []);
+ 
++    useEffect(() => {
++        if (!auth) {
++            setAuthLoading(false);
++            return;
++        }
++
++        const unsubscribe = auth.onAuthStateChanged((user) => {
++            setAuthUser(user);
++            setAuthLoading(false);
++        });
++
++        return unsubscribe;
++    }, []);
++
+     const addToCart = (product) => {
+         setCart(prev => [...prev, product]);
+     };
+@@ -656,19 +577,19 @@ const App = () => {
+ 
+     return (
+         <HashRouter>
+-            <Navbar cartCount={cart.length} />
++            <Navbar cartCount={cart.length} authUser={authUser} authLoading={authLoading} />
+             <Routes>
+                 <Route path="/" element={<Home products={products} loading={loading} />} />
+                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} />} />
+                 <Route path="/cart" element={<Cart cart={cart} onApplyCoupon={setDiscount} discount={discount} />} />
+                 <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} />} />
+-                <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={() => {}} />} />
+-                <Route path="/checkout-success" element={<CheckoutSuccess />} />
++                <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
+             </Routes>
+             <Footer />
+         </HashRouter>
+     );
+ };
+ 
++
+ const root = ReactDOM.createRoot(document.getElementById('root'));
+ root.render(<App />);

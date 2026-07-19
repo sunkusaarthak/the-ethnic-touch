@@ -77,6 +77,7 @@ async function loadTabData(tab) {
     if (tab === 'orders') loadOrders();
     if (tab === 'coupons') loadCoupons();
     if (tab === 'settings') loadSettings();
+    if (tab === 'profiles') loadProfiles();
 }
 
 async function loadDashboard() {
@@ -475,9 +476,230 @@ async function saveTiersToServer() {
     }
 }
 
+async function loadProfiles() {
+    const body = document.querySelector('#profilesTable tbody');
+    body.innerHTML = '<tr><td colspan="6">Loading profiles...</td></tr>';
+    
+    try {
+        const res = await fetch('/api/admin/profiles', { headers: getAuthHeader() });
+        if (!res.ok) throw new Error("HTTP Status " + res.status);
+        const data = await res.json();
+        body.innerHTML = '';
+        
+        if (data.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">No user profiles completed yet.</td></tr>';
+            return;
+        }
+        
+        data.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="font-weight: 500">${p.fullName || 'No Name'}</td>
+                <td>${p.email || 'No Email'}</td>
+                <td>${p.phone || 'No Phone'}</td>
+                <td>${p.zipCode || 'No ZIP'}</td>
+                <td>${p.preferredSize || 'N/A'}</td>
+                <td>
+                    <button class="btn-primary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 4px;" onclick="viewProfileDetails('${p.userId}')">View Details</button>
+                </td>
+            `;
+            body.appendChild(tr);
+        });
+    } catch (err) {
+        body.innerHTML = `<tr><td colspan="6" style="color:red">Failed to load profiles: ${err.message}</td></tr>`;
+    }
+}
+
+async function viewProfileDetails(userId) {
+    const modal = document.getElementById('profileModal');
+    const content = document.getElementById('profileModalContent');
+    content.innerHTML = '<p>Loading details...</p>';
+    modal.style.display = 'flex';
+    
+    try {
+        const res = await fetch(`/api/admin/profiles/details?userId=${userId}`, { headers: getAuthHeader() });
+        if (!res.ok) throw new Error("HTTP Status " + res.status);
+        const data = await res.json();
+        
+        const p = data.profile;
+        const addrs = data.addresses || [];
+        const orders = data.orders || [];
+        const coupons = data.coupons || [];
+        
+        let ordersHtml = '';
+        if (orders.length === 0) {
+            ordersHtml = '<p style="color: #999; font-size: 0.9rem;">No orders placed.</p>';
+        } else {
+            ordersHtml = `
+                <table style="width:100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid #eee; text-align: left;">
+                            <th style="padding: 0.5rem 0;">Order ID</th>
+                            <th style="padding: 0.5rem 0;">Amount</th>
+                            <th style="padding: 0.5rem 0;">Coupon</th>
+                            <th style="padding: 0.5rem 0;">Gift</th>
+                            <th style="padding: 0.5rem 0;">Status</th>
+                            <th style="padding: 0.5rem 0;">Tracking</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${orders.map(o => `
+                            <tr style="border-bottom: 1px dashed #f5f5f5;">
+                                <td style="padding: 0.5rem 0; font-weight: 500;">${o.id}</td>
+                                <td style="padding: 0.5rem 0;">₹${o.totalAmount.toLocaleString('en-IN')}</td>
+                                <td style="padding: 0.5rem 0; font-family: monospace;">${o.couponCode || '-'}</td>
+                                <td style="padding: 0.5rem 0; color: #b97a66;">${o.unlockedGift || '-'}</td>
+                                <td style="padding: 0.5rem 0;"><span style="font-weight:500;">${o.status}</span></td>
+                                <td style="padding: 0.5rem 0; font-size:0.8rem; font-family: monospace;">${o.trackingNumber || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        let couponsHtml = '';
+        if (coupons.length === 0) {
+            couponsHtml = '<p style="color: #999; font-size: 0.9rem;">No coupons issued yet.</p>';
+        } else {
+            couponsHtml = `
+                <div style="display:flex; flex-wrap:wrap; gap: 0.8rem; margin-top: 0.5rem;">
+                    ${coupons.map(c => `
+                        <div style="border: 1px dashed #b97a66; padding: 0.6rem 1rem; border-radius: 6px; background:#fffcfc;">
+                            <strong style="color: #b97a66; font-family: monospace; font-size: 1rem;">${c.code}</strong>
+                            <div style="font-size:0.85rem; color:#666; margin-top:0.25rem;">
+                                ${c.type === 'percentage' ? c.value + '%' : '₹' + c.value} off &bull; Uses: ${c.usedCount}/${c.usageLimit}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        let addrsHtml = '';
+        if (addrs.length === 0) {
+            addrsHtml = '<p style="color: #999; font-size: 0.9rem;">No saved shipping addresses.</p>';
+        } else {
+            addrsHtml = `
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-top:0.5rem;">
+                    ${addrs.map(a => `
+                        <div style="border: 1px solid #eee; padding: 1rem; border-radius: 6px; background: ${a.isDefault ? '#fffcf9' : '#fff'}; border-color: ${a.isDefault ? '#e4b39b' : '#eee'}; position:relative;">
+                            ${a.isDefault ? '<span style="position:absolute; top:8px; right:8px; background:#e4b39b; color:#fff; font-size:0.65rem; padding: 1px 6px; border-radius:10px; font-weight:bold;">Default</span>' : ''}
+                            <h4 style="margin:0 0 0.4rem; font-size:0.9rem;">${a.fullName}</h4>
+                            <p style="font-size:0.8rem; color:#666; margin:0 0 0.2rem; line-height:1.3;">${a.addressLine}</p>
+                            <p style="font-size:0.8rem; color:#666; margin:0 0 0.2rem; line-height:1.3;">${a.city}, ${a.state} - ${a.zipCode}</p>
+                            <p style="font-size:0.8rem; color:#666; margin:0;">Phone: ${a.phone}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        content.innerHTML = `
+            <form id="adminProfileEditForm" onsubmit="saveProfileFromAdmin(event, '${userId}')">
+                <h3 style="margin-bottom:1rem; font-size: 1.1rem; border-bottom: 2px solid #ddd; padding-bottom: 0.4rem;">Customer Profile</h3>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Full Name *</label>
+                        <input type="text" id="ap_name" value="${p.fullName || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Phone Number *</label>
+                        <input type="text" id="ap_phone" value="${p.phone || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                    </div>
+                    <div style="grid-column: span 2;">
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Primary Address *</label>
+                        <input type="text" id="ap_address" value="${p.address || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">City *</label>
+                        <input type="text" id="ap_city" value="${p.city || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">State *</label>
+                        <input type="text" id="ap_state" value="${p.state || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">ZIP / Postal Code *</label>
+                        <input type="text" id="ap_zip" value="${p.zipCode || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Preferred Size</label>
+                        <select id="ap_size" style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                            <option value="" ${!p.preferredSize ? 'selected' : ''}>N/A</option>
+                            <option value="XS" ${p.preferredSize === 'XS' ? 'selected' : ''}>XS</option>
+                            <option value="S" ${p.preferredSize === 'S' ? 'selected' : ''}>S</option>
+                            <option value="M" ${p.preferredSize === 'M' ? 'selected' : ''}>M</option>
+                            <option value="L" ${p.preferredSize === 'L' ? 'selected' : ''}>L</option>
+                            <option value="XL" ${p.preferredSize === 'XL' ? 'selected' : ''}>XL</option>
+                        </select>
+                    </div>
+                    <div style="grid-column: span 2;">
+                        <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Style Notes</label>
+                        <textarea id="ap_notes" rows="2" style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">${p.styleNotes || ''}</textarea>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="margin-top:1rem; padding: 0.6rem 1.5rem; float:right; border-radius:4px;">Update Profile Details</button>
+                <div style="clear:both; height:1.5rem;"></div>
+            </form>
+            
+            <h3 style="margin: 2rem 0 1rem; font-size: 1.1rem; border-bottom: 2px solid #ddd; padding-bottom: 0.4rem;">Shipping Addresses Book</h3>
+            ${addrsHtml}
+
+            <h3 style="margin: 2rem 0 1rem; font-size: 1.1rem; border-bottom: 2px solid #ddd; padding-bottom: 0.4rem;">Order History</h3>
+            ${ordersHtml}
+
+            <h3 style="margin: 2rem 0 1rem; font-size: 1.1rem; border-bottom: 2px solid #ddd; padding-bottom: 0.4rem;">Issued Loyalty Coupons</h3>
+            ${couponsHtml}
+        `;
+    } catch (err) {
+        content.innerHTML = `<p style="color:red">Failed to load details: ${err.message}</p>`;
+    }
+}
+
+async function saveProfileFromAdmin(e, userId) {
+    e.preventDefault();
+    const data = {
+        userId: userId,
+        fullName: document.getElementById('ap_name').value,
+        phone: document.getElementById('ap_phone').value,
+        address: document.getElementById('ap_address').value,
+        city: document.getElementById('ap_city').value,
+        state: document.getElementById('ap_state').value,
+        zipCode: document.getElementById('ap_zip').value,
+        preferredSize: document.getElementById('ap_size').value,
+        styleNotes: document.getElementById('ap_notes').value
+    };
+    
+    try {
+        const res = await fetch('/api/admin/profiles/edit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (res.ok) {
+            alert('Profile updated successfully!');
+            viewProfileDetails(userId);
+            loadProfiles();
+        } else {
+            const errData = await res.json();
+            alert(errData.error || 'Failed to update profile');
+        }
+    } catch (err) {
+        alert('Failed to connect to server: ' + err.message);
+    }
+}
+
 // Bind to window context for raw inline onclick HTML elements
 window.toggleRewardTypeInputs = toggleRewardTypeInputs;
 window.editTier = editTier;
 window.deleteTier = deleteTier;
 window.resetTierForm = resetTierForm;
 window.handleSaveTier = handleSaveTier;
+window.viewProfileDetails = viewProfileDetails;
+window.saveProfileFromAdmin = saveProfileFromAdmin;
+window.loadProfiles = loadProfiles;

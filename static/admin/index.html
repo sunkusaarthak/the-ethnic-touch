@@ -19,6 +19,7 @@
                 <li class="active" data-tab="dashboard">Dashboard</li>
                 <li data-tab="products">Manage Products</li>
                 <li data-tab="orders">View Orders</li>
+                <li data-tab="profiles">Manage Users</li>
                 <li data-tab="coupons">Marketing Coupons</li>
                 <li data-tab="settings">Gift Settings</li>
             </ul>
@@ -86,6 +87,25 @@
                             <th>Status</th>
                             <th>Tracking Information</th>
                             <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Profiles Tab -->
+        <div id="tab-profiles" class="tab-content">
+            <div class="table-container">
+                <table id="profilesTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>ZIP Code</th>
+                            <th>Preferred Size</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -283,6 +303,19 @@
                     <button type="submit" class="btn-primary">Create</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- User Details Modal -->
+    <div id="profileModal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; border-radius: 8px;">
+            <h2>User Details & History</h2>
+            <div id="profileModalContent" style="margin-top: 1.5rem;">
+                <!-- Dynamically loaded profile details, address cards, order history, coupons -->
+            </div>
+            <div class="form-actions" style="margin-top: 2rem;">
+                <button type="button" class="btn-secondary" onclick="closeModals()">Close</button>
+            </div>
         </div>
     </div>
 
