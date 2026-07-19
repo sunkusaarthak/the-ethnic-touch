@@ -692,3 +692,242 @@ p {
         transform: translateY(0);
     }
 }
+
+.nav-links-signin {
+    padding: 0.5rem 1.2rem;
+    border: 1.5px solid var(--color-primary);
+    border-radius: 50px;
+    color: var(--color-primary) !important;
+    font-weight: 500 !important;
+    transition: all 0.25s ease;
+}
+
+.nav-links-signin:hover {
+    background-color: var(--color-primary);
+    color: var(--color-bg) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(212, 163, 115, 0.3);
+}
+
+.nav-links-disabled {
+    opacity: 0.75;
+    cursor: default;
+}
+
+.profile-shell {
+    min-height: 100vh;
+    padding: 8rem 5% 4rem;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.profile-card {
+    width: min(100%, 860px);
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    box-shadow: 0 20px 45px rgba(0,0,0,0.06);
+}
+
+.profile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.profile-eyebrow {
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-primary);
+    margin-bottom: 0.5rem;
+}
+
+.profile-help {
+    color: var(--color-text-light);
+    margin-top: 0.35rem;
+}
+
+.profile-message {
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    border-radius: var(--border-radius-md);
+    font-size: 0.95rem;
+}
+
+.profile-message.success {
+    background: rgba(79, 157, 105, 0.12);
+    color: #2f6b3e;
+}
+
+.profile-message.error {
+    background: rgba(217, 79, 79, 0.12);
+    color: #a63a3a;
+}
+
+.profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    color: var(--color-text);
+}
+
+.profile-span-2 {
+    grid-column: 1 / -1;
+}
+
+.profile-input {
+    padding: 0.9rem 1rem;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: var(--border-radius-md);
+    font: inherit;
+    background: #fcfcfc;
+}
+
+.profile-input:focus {
+    outline: 2px solid rgba(212, 163, 115, 0.25);
+    border-color: var(--color-primary);
+}
+
+.profile-actions {
+    margin-top: 1.5rem;
+}
+
+.profile-success-state {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem 0;
+    animation: profileSuccessFade 0.35s ease;
+}
+
+.profile-success-card {
+    text-align: center;
+    width: min(100%, 460px);
+    padding: 2.5rem 2rem;
+    border-radius: var(--border-radius-lg);
+    background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(252,248,245,0.96));
+    border: 1px solid rgba(212, 163, 115, 0.28);
+    box-shadow: 0 18px 40px rgba(45, 42, 38, 0.08);
+}
+
+.profile-success-card h2 {
+    margin-bottom: 0.5rem;
+    font-size: clamp(1.8rem, 3vw, 2.4rem);
+}
+
+.profile-success-card p {
+    margin: 0 auto;
+}
+
+.profile-success-badge {
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 1.25rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at top, rgba(212, 163, 115, 0.2), rgba(212, 163, 115, 0.05));
+    border: 2px solid rgba(212, 163, 115, 0.35);
+    animation: profileSuccessPulse 0.9s ease both;
+}
+
+.profile-success-check {
+    font-size: 2.3rem;
+    color: var(--color-primary);
+    font-weight: 700;
+    animation: profileSuccessCheck 0.5s ease 0.15s both;
+}
+
+@keyframes profileSuccessFade {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes profileSuccessPulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+    70% {
+        transform: scale(1.06);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes profileSuccessCheck {
+    from {
+        transform: scale(0.3) rotate(-18deg);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .profile-success-state,
+    .profile-success-badge,
+    .profile-success-check {
+        animation: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .profile-grid {
+        grid-template-columns: 1fr;
+    }
+    .profile-dashboard-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Premium Toast Slide In & Cart Pulse Animations */
+@keyframes slideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes cartPulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.cart-animated {
+    display: inline-block;
+    animation: cartPulse 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
