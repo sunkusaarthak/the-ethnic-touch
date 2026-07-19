@@ -931,3 +931,65 @@ p {
     display: inline-block;
     animation: cartPulse 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+
+/* Premium Product Details Enhancements */
+.gallery-thumbnail {
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0.7;
+}
+.gallery-thumbnail:hover {
+    opacity: 1;
+    transform: translateY(-2px);
+}
+.gallery-thumbnail.active {
+    opacity: 1;
+    border-color: var(--color-primary) !important;
+}
+
+.gallery-main-img {
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+}
+.gallery-main-container:hover .gallery-main-img {
+    transform: scale(1.04);
+}
+
+.size-pill {
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.size-pill:hover:not(:disabled) {
+    border-color: var(--color-primary) !important;
+    background-color: #fffcf9 !important;
+    color: var(--color-primary) !important;
+    transform: translateY(-1px);
+}
+.size-pill.active {
+    border-color: var(--color-primary) !important;
+    background-color: #fffcf9 !important;
+    color: var(--color-primary) !important;
+    box-shadow: 0 4px 12px rgba(212,163,115,0.12);
+}
+
+.interactive-star {
+    transition: transform 0.15s ease, color 0.15s ease;
+    display: inline-block;
+}
+.interactive-star:hover {
+    transform: scale(1.25);
+    color: #e5b822 !important;
+}
+
+.review-card {
+    animation: reviewFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes reviewFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+

@@ -27,13 +27,15 @@ import (
 
 // Product represents a item in our store
 type Product struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Price       float64 `json:"price"`
-	ImageURL    string  `json:"imageUrl"`
-	Stock       int     `json:"stock"`
-	Category    string  `json:"category"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	Price         float64  `json:"price"`
+	ImageURL      string   `json:"imageUrl"`
+	GalleryImages []string `json:"galleryImages"`
+	Sizes         []string `json:"sizes"`
+	Stock         int      `json:"stock"`
+	Category      string   `json:"category"`
 }
 
 // Coupon represents a discount code
@@ -55,6 +57,18 @@ type OrderItem struct {
 	Quantity    int     `json:"quantity"`
 	PriceAtQty  float64 `json:"priceAtQty"`
 	ProductName string  `json:"productName,omitempty"`
+	Size        string  `json:"size,omitempty"`
+}
+
+// ProductReview represents a customer rating and comment
+type ProductReview struct {
+	ID        int    `json:"id"`
+	ProductID string `json:"productId"`
+	UserName  string `json:"userName"`
+	UserEmail string `json:"userEmail"`
+	Rating    int    `json:"rating"`
+	Comment   string `json:"comment"`
+	CreatedAt string `json:"createdAt"`
 }
 
 // Order represents a customer purchase
@@ -82,14 +96,14 @@ type Order struct {
 
 // GiftTier represents a configured reward tier
 type GiftTier struct {
-	ID              int     `json:"id"`
-	Name            string  `json:"name"`
-	Threshold       float64 `json:"threshold"`
-	RewardType      string  `json:"rewardType"`      // "coupon" or "physical"
-	DiscountType    string  `json:"discountType"`    // "percentage" or "fixed"
-	DiscountValue   float64 `json:"discountValue"`
-	CouponFormat    string  `json:"couponFormat"`    // e.g. "GFT-SLVR-[RAND]"
-	PhysicalName    string  `json:"physicalName"`    // e.g. "Premium Keychain"
+	ID            int     `json:"id"`
+	Name          string  `json:"name"`
+	Threshold     float64 `json:"threshold"`
+	RewardType    string  `json:"rewardType"`   // "coupon" or "physical"
+	DiscountType  string  `json:"discountType"` // "percentage" or "fixed"
+	DiscountValue float64 `json:"discountValue"`
+	CouponFormat  string  `json:"couponFormat"` // e.g. "GFT-SLVR-[RAND]"
+	PhysicalName  string  `json:"physicalName"` // e.g. "Premium Keychain"
 }
 
 type Profile struct {
@@ -134,6 +148,7 @@ type OrderCreateRequest struct {
 	Items           []struct {
 		ProductID string `json:"productId"`
 		Quantity  int    `json:"quantity"`
+		Size      string `json:"size"`
 	} `json:"items"`
 }
 
@@ -167,11 +182,21 @@ func initDB() {
 	dbname := os.Getenv("DB_NAME")
 	sslmode := os.Getenv("DB_SSLMODE")
 
-	if host == "" { host = "localhost" }
-	if port == "" { port = "5432" }
-	if user == "" { user = "postgres" }
-	if dbname == "" { dbname = "ethnictouch" }
-	if sslmode == "" { sslmode = "disable" }
+	if host == "" {
+		host = "localhost"
+	}
+	if port == "" {
+		port = "5432"
+	}
+	if user == "" {
+		user = "postgres"
+	}
+	if dbname == "" {
+		dbname = "ethnictouch"
+	}
+	if sslmode == "" {
+		sslmode = "disable"
+	}
 
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, user, password, dbname, sslmode)
@@ -266,6 +291,20 @@ func initDB() {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS product_images (
+			id SERIAL PRIMARY KEY,
+			product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			image_url TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS product_reviews (
+			id SERIAL PRIMARY KEY,
+			product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			user_name TEXT NOT NULL,
+			user_email TEXT NOT NULL,
+			rating INT NOT NULL CHECK(rating >= 1 AND rating <= 5),
+			comment TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		);`,
 	}
 
 	for _, q := range queries {
@@ -277,6 +316,8 @@ func initDB() {
 
 	// Hot migrations for Razorpay, Tracking, Unlocked Gift, Gift Tiers, Profiles, Coupons & Address Columns
 	alterQueries := []string{
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes TEXT DEFAULT 'S,M,L,XL';`,
+		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size TEXT DEFAULT '';`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_order_id TEXT;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_payment_id TEXT;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;`,
@@ -341,6 +382,30 @@ func initDB() {
 			log.Println("Seeded default gift tiers successfully.")
 		}
 	}
+
+	// Seed product gallery images if empty
+	var imgCount int
+	db.QueryRow("SELECT COUNT(*) FROM product_images").Scan(&imgCount)
+	if imgCount == 0 {
+		seedImgQuery := `
+		INSERT INTO product_images (product_id, image_url) VALUES
+		('1', './images/kurthi_peach.png'),
+		('1', './images/kurthi_blue.png'),
+		('1', './images/kurthi_lavender.png'),
+		('2', './images/kurthi_mint.png'),
+		('2', './images/kurthi_blue.png'),
+		('2', './images/kurthi_peach.png'),
+		('3', './images/kurthi_lavender.png'),
+		('3', './images/kurthi_peach.png'),
+		('3', './images/kurthi_mint.png');
+		`
+		_, err = db.Exec(seedImgQuery)
+		if err != nil {
+			log.Println("Error seeding default product images:", err)
+		} else {
+			log.Println("Seeded gallery images successfully.")
+		}
+	}
 }
 
 // Security Authentication Middleware for /api/admin/*
@@ -389,7 +454,7 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		rows, err := db.Query("SELECT id, name, description, price, image_url, stock, category FROM products")
+		rows, err := db.Query("SELECT id, name, description, price, image_url, stock, category, COALESCE(sizes, '') FROM products")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -399,10 +464,34 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 		var products []Product
 		for rows.Next() {
 			var p Product
-			if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.ImageURL, &p.Stock, &p.Category); err != nil {
+			var sizesStr string
+			if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.ImageURL, &p.Stock, &p.Category, &sizesStr); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			if sizesStr != "" {
+				p.Sizes = strings.Split(sizesStr, ",")
+			} else {
+				p.Sizes = []string{}
+			}
+
+			// Add primary image to gallery if valid
+			if p.ImageURL != "" {
+				p.GalleryImages = append(p.GalleryImages, p.ImageURL)
+			}
+
+			// Fetch extra gallery images
+			imgRows, err := db.Query("SELECT image_url FROM product_images WHERE product_id = $1", p.ID)
+			if err == nil {
+				for imgRows.Next() {
+					var url string
+					if err := imgRows.Scan(&url); err == nil {
+						p.GalleryImages = append(p.GalleryImages, url)
+					}
+				}
+				imgRows.Close()
+			}
+
 			products = append(products, p)
 		}
 
@@ -440,8 +529,9 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		p.ID = prefix + "_" + uniqueSuffix
 
-		_, err := db.Exec("INSERT INTO products (id, name, description, price, image_url, stock, category) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-			p.ID, p.Name, p.Description, p.Price, p.ImageURL, p.Stock, p.Category)
+		sizesStr := strings.Join(p.Sizes, ",")
+		_, err := db.Exec("INSERT INTO products (id, name, description, price, image_url, sizes, stock, category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+			p.ID, p.Name, p.Description, p.Price, p.ImageURL, sizesStr, p.Stock, p.Category)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -449,6 +539,67 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(p)
+	}
+}
+
+func productReviewsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 4 || parts[1] != "products" || parts[3] != "reviews" {
+		http.Error(w, "Invalid path for product reviews", http.StatusBadRequest)
+		return
+	}
+	productID := parts[2]
+
+	if r.Method == "GET" {
+		rows, err := db.Query("SELECT id, user_name, user_email, rating, comment, created_at FROM product_reviews WHERE product_id = $1 ORDER BY created_at DESC", productID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var reviews []ProductReview
+		for rows.Next() {
+			var rev ProductReview
+			if err := rows.Scan(&rev.ID, &rev.UserName, &rev.UserEmail, &rev.Rating, &rev.Comment, &rev.CreatedAt); err == nil {
+				rev.ProductID = productID
+				reviews = append(reviews, rev)
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(reviews)
+	} else if r.Method == "POST" {
+		var rev ProductReview
+		if err := json.NewDecoder(r.Body).Decode(&rev); err != nil || rev.Rating < 1 || rev.Rating > 5 {
+			http.Error(w, "Invalid review payload or rating", http.StatusBadRequest)
+			return
+		}
+
+		createdAt := time.Now().Format(time.RFC3339)
+		err := db.QueryRow("INSERT INTO product_reviews (product_id, user_name, user_email, rating, comment, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+			productID, rev.UserName, rev.UserEmail, rev.Rating, rev.Comment, createdAt).Scan(&rev.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		rev.ProductID = productID
+		rev.CreatedAt = createdAt
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(rev)
+	} else {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -663,6 +814,7 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 			ProductID:  it.ProductID,
 			Quantity:   it.Quantity,
 			PriceAtQty: p.Price,
+			Size:       it.Size,
 		})
 	}
 
@@ -752,8 +904,8 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, item := range orderItems {
-		_, err = tx.Exec("INSERT INTO order_items (order_id, product_id, quantity, price_at_qty) VALUES ($1, $2, $3, $4)",
-			orderID, item.ProductID, item.Quantity, item.PriceAtQty)
+		_, err = tx.Exec("INSERT INTO order_items (order_id, product_id, quantity, price_at_qty, size) VALUES ($1, $2, $3, $4, $5)",
+			orderID, item.ProductID, item.Quantity, item.PriceAtQty, item.Size)
 		if err != nil {
 			log.Printf("OrderItem SQL insert failed: %v", err)
 			w.Header().Set("Content-Type", "application/json")
@@ -1856,6 +2008,7 @@ func main() {
 
 	// Storefront routes
 	http.HandleFunc("/api/products", productsHandler)
+	http.HandleFunc("/api/products/", productReviewsHandler)
 	http.HandleFunc("/api/coupons/validate", couponValidateHandler)
 	http.HandleFunc("/api/orders", orderCreateHandler)
 	http.HandleFunc("/api/orders/verify", orderVerifyHandler)
