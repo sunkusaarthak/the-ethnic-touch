@@ -116,34 +116,273 @@ const Home = ({ products, loading }) => (
     </div>
 );
 
-const ProductDetails = ({ products, addToCart }) => {
+const ProductDetails = ({ products, addToCart, authUser }) => {
     const { id } = useParams();
     const navigate = useNavigate();
     const product = products.find(p => p.id === id);
 
+    const [activeImage, setActiveImage] = useState(0);
+    const [selectedSize, setSelectedSize] = useState('');
+    const [reviews, setReviews] = useState([]);
+    
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState('');
+    const [reviewFormError, setReviewFormError] = useState('');
+    const [reviewLoading, setReviewLoading] = useState(false);
+
+    useEffect(() => {
+        if (product && product.sizes && product.sizes.length > 0) {
+            setSelectedSize(product.sizes[0]);
+        }
+    }, [product]);
+
+    useEffect(() => {
+        if (product) {
+            fetch(`/api/products/${product.id}/reviews`)
+                .then(res => res.json())
+                .then(data => {
+                    if(Array.isArray(data)) setReviews(data);
+                })
+                .catch(err => console.error("Error fetching reviews:", err));
+        }
+    }, [product]);
+
     if (!product) return <div style={{padding: '10rem 5%', textAlign:'center'}}><h2>Product Not Found</h2></div>;
+
+    const galleryImages = (product.galleryImages && product.galleryImages.length > 0) 
+        ? product.galleryImages 
+        : [product.imageUrl];
 
     const handleBack = (e) => {
         e.preventDefault();
         navigate('/');
     };
 
+    const handleAddToCart = () => {
+        addToCart({ ...product, size: selectedSize });
+    };
+
+    const submitReview = async (e) => {
+        e.preventDefault();
+        setReviewFormError('');
+        if (!comment.trim()) {
+            setReviewFormError('Please write a comment.');
+            return;
+        }
+
+        setReviewLoading(true);
+        const name = authUser?.displayName || authUser?.email?.split('@')[0] || "Guest Reviewer";
+        const email = authUser?.email || "guest@ethnictouch.com";
+
+        try {
+            const res = await fetch(`/api/products/${product.id}/reviews`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userName: name, userEmail: email, rating: parseInt(rating), comment })
+            });
+
+            if (!res.ok) throw new Error("Failed to post review");
+
+            const newReview = await res.json();
+            setReviews([newReview, ...reviews]);
+            setComment('');
+            setRating(5);
+        } catch (err) {
+            setReviewFormError('Could not post your review. Please try again.');
+        } finally {
+            setReviewLoading(false);
+        }
+    };
+
+    const avgRating = reviews.length > 0 
+        ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) 
+        : 0;
+
     return (
         <div style={{padding: '8rem 5% 4rem', maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
             <a href="#" onClick={handleBack} style={{display:'inline-block', marginBottom:'2rem', color:'var(--color-text-light)', textDecoration:'none'}}>&larr; Back to Collection</a>
-            <div style={{display: 'flex', flexWrap: 'wrap', gap: '4rem', alignItems: 'center'}}>
-                <div style={{flex: 1, minWidth: '300px', borderRadius: 'var(--border-radius-lg)', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.05)'}}>
-                    <img src={product.imageUrl} alt={product.name} style={{width: '100%', display: 'block'}} />
-                </div>
+            <div style={{display: 'flex', flexWrap: 'wrap', gap: '4rem', alignItems: 'flex-start'}}>
+                
+                {/* Image Slider Gallery */}
                 <div style={{flex: 1, minWidth: '300px'}}>
-                    <h1 style={{fontSize: '3rem', marginBottom: '1rem'}}>{product.name}</h1>
-                    <p style={{fontSize: '1.2rem', marginBottom: '2rem', lineHeight: '1.8'}}>{product.description}</p>
-                    <div style={{fontSize: '2rem', fontWeight: '500', marginBottom: '3rem'}}>₹{product.price.toLocaleString('en-IN')}</div>
-                    <button className="btn btn-primary" onClick={() => addToCart(product)} style={{fontSize: '1.1rem', padding: '1rem 3rem'}}>
-                        Add to Cart
+                    <div className="gallery-main-container" style={{
+                        borderRadius: 'var(--border-radius-lg)', 
+                        overflow: 'hidden', 
+                        boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
+                        marginBottom: '1rem',
+                        aspectRatio: '3/4',
+                        backgroundColor: '#fafafa'
+                    }}>
+                        <img className="gallery-main-img" src={galleryImages[activeImage]} alt={product.name} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
+                    </div>
+                    {galleryImages.length > 1 && (
+                        <div style={{display: 'flex', gap: '0.8rem', overflowX: 'auto', padding: '0.5rem 0'}}>
+                            {galleryImages.map((imgUrl, idx) => (
+                                <div 
+                                    key={idx} 
+                                    onClick={() => setActiveImage(idx)}
+                                    className={`gallery-thumbnail ${activeImage === idx ? 'active' : ''}`}
+                                    style={{
+                                        width: '70px', 
+                                        height: '90px', 
+                                        borderRadius: '6px', 
+                                        overflow: 'hidden', 
+                                        cursor: 'pointer',
+                                        border: '2px solid transparent',
+                                        flexShrink: 0
+                                    }}
+                                >
+                                    <img src={imgUrl} alt={`Thumbnail ${idx+1}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Product Summary & Actions */}
+                <div style={{flex: 1, minWidth: '300px'}}>
+                    <h1 style={{fontSize: '2.8rem', marginBottom: '0.5rem', fontFamily: 'var(--font-title)'}}>{product.name}</h1>
+                    
+                    {reviews.length > 0 && (
+                        <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem'}}>
+                            <div style={{color: '#d4af37', fontSize: '1.2rem', letterSpacing: '2px'}}>
+                                {'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}
+                            </div>
+                            <span style={{color: 'var(--color-text-light)', fontSize: '0.9rem'}}>{avgRating} ({reviews.length} reviews)</span>
+                        </div>
+                    )}
+
+                    <div style={{fontSize: '2rem', fontWeight: '500', marginBottom: '2rem', color: 'var(--color-text)'}}>
+                        ₹{product.price.toLocaleString('en-IN')}
+                    </div>
+                    
+                    <p style={{fontSize: '1.1rem', marginBottom: '2rem', lineHeight: '1.8', color: '#555'}}>{product.description}</p>
+                    
+                    {/* Size Selector */}
+                    {product.sizes && product.sizes.length > 0 && (
+                        <div style={{marginBottom: '2.5rem'}}>
+                            <h4 style={{marginBottom: '1rem', fontSize: '1rem', color: '#333'}}>Select Size</h4>
+                            <div style={{display: 'flex', gap: '0.8rem', flexWrap: 'wrap'}}>
+                                {product.sizes.map((size) => (
+                                    <button 
+                                        key={size}
+                                        onClick={() => setSelectedSize(size)}
+                                        className={`size-pill ${selectedSize === size ? 'active' : ''}`}
+                                        style={{
+                                            padding: '0.8rem 1.5rem',
+                                            borderRadius: '6px',
+                                            border: '1px solid #ddd',
+                                            backgroundColor: '#fff',
+                                            color: '#555',
+                                            fontWeight: '600',
+                                            cursor: 'pointer',
+                                            fontSize: '1rem'
+                                        }}
+                                    >
+                                        {size}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={handleAddToCart} 
+                        style={{fontSize: '1.1rem', padding: '1.2rem 3rem', width: '100%', marginBottom: '3rem'}}
+                    >
+                        Add to Cart {selectedSize && `- Size ${selectedSize}`}
                     </button>
                 </div>
             </div>
+
+            {/* Customer Reviews Section */}
+            <div style={{marginTop: '5rem', borderTop: '1px solid #eee', paddingTop: '4rem'}}>
+                <div style={{display: 'flex', flexWrap: 'wrap', gap: '4rem', alignItems: 'flex-start'}}>
+                    
+                    <div style={{flex: 1, minWidth: '300px'}}>
+                        <h2 style={{fontFamily: 'var(--font-title)', fontSize: '2rem', marginBottom: '1.5rem'}}>Customer Reviews</h2>
+                        {reviews.length === 0 ? (
+                            <p style={{color: '#888'}}>Be the first to review this product!</p>
+                        ) : (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
+                                {reviews.map((rev) => (
+                                    <div key={rev.id} className="review-card" style={{padding: '1.5rem', backgroundColor: '#fafafa', borderRadius: '8px', border: '1px solid #f0f0f0'}}>
+                                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem'}}>
+                                            <strong style={{fontSize: '1.05rem'}}>{rev.userName}</strong>
+                                            <span style={{color: '#999', fontSize: '0.85rem'}}>{new Date(rev.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                        <div style={{color: '#d4af37', marginBottom: '0.8rem', letterSpacing: '1px'}}>
+                                            {'★'.repeat(rev.rating)}{'☆'.repeat(5 - rev.rating)}
+                                        </div>
+                                        <p style={{margin: 0, color: '#555', lineHeight: '1.6'}}>{rev.comment}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{flex: 1, minWidth: '300px', backgroundColor: '#fffcf9', padding: '2.5rem', borderRadius: '12px', border: '1px solid #faeedd'}}>
+                        <h3 style={{fontFamily: 'var(--font-title)', marginBottom: '1.5rem', color: '#b97a66'}}>Write a Review</h3>
+                        <form onSubmit={submitReview}>
+                            {reviewFormError && (
+                                <div style={{backgroundColor: '#ffebee', color: '#c62828', padding: '1rem', borderRadius: '6px', marginBottom: '1.5rem', fontSize:'0.9rem'}}>
+                                    {reviewFormError}
+                                </div>
+                            )}
+                            
+                            <div style={{marginBottom: '1.5rem'}}>
+                                <label style={{display: 'block', marginBottom: '0.5rem', fontSize: '0.95rem', color: '#555'}}>Rating</label>
+                                <div style={{display: 'flex', gap: '5px'}}>
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                        <span 
+                                            key={star} 
+                                            onClick={() => setRating(star)}
+                                            className="interactive-star"
+                                            style={{
+                                                cursor: 'pointer', 
+                                                fontSize: '1.5rem',
+                                                color: star <= rating ? '#d4af37' : '#ddd',
+                                                transition: 'color 0.2s'
+                                            }}
+                                        >
+                                            ★
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div style={{marginBottom: '1.5rem'}}>
+                                <label style={{display: 'block', marginBottom: '0.5rem', fontSize: '0.95rem', color: '#555'}}>Your Review</label>
+                                <textarea 
+                                    rows="4" 
+                                    style={{width: '100%', padding: '1rem', borderRadius: '6px', border: '1px solid #e0e0e0', resize: 'vertical', fontFamily: 'inherit'}}
+                                    placeholder="What did you like about this product?"
+                                    value={comment}
+                                    onChange={(e) => setComment(e.target.value)}
+                                    required
+                                ></textarea>
+                            </div>
+
+                            <button 
+                                type="submit" 
+                                className="btn btn-primary" 
+                                style={{width: '100%', padding: '1rem'}}
+                                disabled={reviewLoading}
+                            >
+                                {reviewLoading ? 'Submitting...' : 'Submit Review'}
+                            </button>
+                            {!authUser && (
+                                <p style={{fontSize: '0.8rem', color: '#888', marginTop: '1rem', textAlign: 'center'}}>
+                                    You will review as a guest. <Link to="/login.html" style={{color: 'var(--color-peach)'}}>Sign in</Link> to link this to your profile.
+                                </p>
+                            )}
+                        </form>
+                    </div>
+
+                </div>
+            </div>
+
         </div>
     );
 };
@@ -209,7 +448,8 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
                             <img src={item.imageUrl} alt={item.name} style={{width:'80px', height:'80px', borderRadius:'8px', objectFit:'cover'}} />
                             <div style={{flex: 1}}>
                                 <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500'}}>{item.name}</h3>
-                                <p style={{color:'var(--color-text-light)', fontSize:'0.9rem'}}>{item.description.substring(0, 50)}...</p>
+                                {item.size && <span style={{display: 'inline-block', backgroundColor: '#fff0e9', color: '#b97a66', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem', marginTop: '0.3rem', fontWeight: '500'}}>Size: {item.size}</span>}
+                                <p style={{color:'var(--color-text-light)', fontSize:'0.9rem', marginTop: '0.4rem'}}>{item.description.substring(0, 50)}...</p>
                             </div>
                             <div style={{fontWeight:'500'}}>₹{item.price.toLocaleString('en-IN')}</div>
                         </div>
@@ -478,7 +718,8 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
             couponCode: discount?.code || '',
             items: cart.map(item => ({
                 productId: item.id,
-                quantity: 1
+                quantity: 1,
+                size: item.size || ''
             })),
             shippingName: activeAddr.fullName,
             shippingPhone: activeAddr.phone,
@@ -1830,7 +2071,7 @@ const App = () => {
             <Navbar cartCount={cart.length} authUser={authUser} authLoading={authLoading} />
             <Routes>
                 <Route path="/" element={<Home products={products} loading={loading} />} />
-                <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} />} />
+                <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} authUser={authUser} />} />
                 <Route path="/cart" element={<Cart cart={cart} onApplyCoupon={setDiscount} discount={discount} />} />
                 <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} />} />
                 <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={clearCart} />} />
