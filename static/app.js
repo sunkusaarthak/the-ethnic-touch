@@ -1918,6 +1918,12 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     const [ordering, setOrdering] = useState(false);
     const navigate = useNavigate();
 
+    useEffect(() => {
+        if (!cart || cart.length === 0) {
+            navigate('/cart');
+        }
+    }, [cart, navigate]);
+
     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
     const finalTotal = subtotal - (discount?.amt || 0);
 
@@ -2677,8 +2683,14 @@ const MockPayment = ({ onPaymentSuccess }) => {
 const CheckoutSuccess = () => {
     const state = ReactRouterDOM.useLocation().state || {};
     const { orderId, gift, tracking, unlockedGift, giftType, giftExpiryDate, checkoutType, paymentMethod, amount } = state;
+    const navigate = useNavigate();
 
     useEffect(() => {
+        if (!orderId) {
+            navigate('/');
+            return;
+        }
+
         if (typeof confetti === 'function') {
             confetti({
                 particleCount: 150,
@@ -2702,15 +2714,10 @@ const CheckoutSuccess = () => {
                 });
             }, 400);
         }
-    }, [orderId]);
+    }, [orderId, navigate]);
 
     if (!orderId) {
-        return (
-            <div style={{padding: '10rem 5%', textAlign:'center', minHeight:'80vh'}}>
-                <h2>No Order Context Found</h2>
-                <Link to="/" className="btn btn-primary" style={{marginTop:'1.5rem', display:'inline-block'}}>Back to Catalog</Link>
-            </div>
-        );
+        return null;
     }
 
     const displayGift = unlockedGift || gift;
