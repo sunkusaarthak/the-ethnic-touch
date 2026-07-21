@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
-	"os"
 
 	"ethnictouch/internal/config"
 	"ethnictouch/internal/handlers"
