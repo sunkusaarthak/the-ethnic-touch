@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha1"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -14,6 +15,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"regexp"
@@ -27,15 +29,32 @@ import (
 
 // Product represents a item in our store
 type Product struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	Price         float64  `json:"price"`
-	ImageURL      string   `json:"imageUrl"`
-	GalleryImages []string `json:"galleryImages"`
-	Sizes         []string `json:"sizes"`
-	Stock         int      `json:"stock"`
-	Category      string   `json:"category"`
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	Price         float64           `json:"price"`
+	ImageURL      string            `json:"imageUrl"`
+	GalleryImages []string          `json:"galleryImages"`
+	Sizes         []string          `json:"sizes"`
+	SizesStock    map[string]int    `json:"sizesStock"` // Maps size string (e.g. "S") to stock count
+	Stock         int               `json:"stock"`
+	Category      string            `json:"category"`
+	Collection    string            `json:"collection"`
+	Fabric        string            `json:"fabric"`
+	Color         string            `json:"color"`
+	SleeveType    string            `json:"sleeveType"`
+	NeckType      string            `json:"neckType"`
+	Pattern       string            `json:"pattern"`
+	Occasion      string            `json:"occasion"`
+	SKU           string            `json:"sku"`
+	Tags          string            `json:"tags"`
+	OriginalPrice float64           `json:"originalPrice"`
+	IsNewArrival  bool              `json:"isNewArrival"`
+	IsBestSeller  bool              `json:"isBestSeller"`
+	IsFeatured    bool              `json:"isFeatured"`
+	CreatedAt     string            `json:"createdAt"`
+	AvgRating     float64           `json:"avgRating"`
+	ReviewCount   int               `json:"reviewCount"`
 }
 
 // Coupon represents a discount code
@@ -92,18 +111,21 @@ type Order struct {
 	ShippingCity      string      `json:"shippingCity"`
 	ShippingState     string      `json:"shippingState"`
 	ShippingZIPCode   string      `json:"shippingZipCode"`
+	CheckoutType      string      `json:"checkoutType"`
+	PaymentMethod     string      `json:"paymentMethod"`
 }
 
 // GiftTier represents a configured reward tier
 type GiftTier struct {
-	ID            int     `json:"id"`
-	Name          string  `json:"name"`
-	Threshold     float64 `json:"threshold"`
-	RewardType    string  `json:"rewardType"`   // "coupon" or "physical"
-	DiscountType  string  `json:"discountType"` // "percentage" or "fixed"
-	DiscountValue float64 `json:"discountValue"`
-	CouponFormat  string  `json:"couponFormat"` // e.g. "GFT-SLVR-[RAND]"
-	PhysicalName  string  `json:"physicalName"` // e.g. "Premium Keychain"
+	ID               int     `json:"id"`
+	Name             string  `json:"name"`
+	Threshold        float64 `json:"threshold"`
+	RewardType       string  `json:"rewardType"`   // "coupon" or "physical"
+	DiscountType     string  `json:"discountType"` // "percentage" or "fixed"
+	DiscountValue    float64 `json:"discountValue"`
+	CouponFormat     string  `json:"couponFormat"` // e.g. "GFT-SLVR-[RAND]"
+	PhysicalName     string  `json:"physicalName"` // e.g. "Premium Keychain"
+	CouponExpiryDays int     `json:"couponExpiryDays"`
 }
 
 type Profile struct {
@@ -145,6 +167,8 @@ type OrderCreateRequest struct {
 	ShippingCity    string `json:"shippingCity"`
 	ShippingState   string `json:"shippingState"`
 	ShippingZIPCode string `json:"shippingZipCode"`
+	CheckoutType    string `json:"checkoutType"`
+	PaymentMethod   string `json:"paymentMethod"`
 	Items           []struct {
 		ProductID string `json:"productId"`
 		Quantity  int    `json:"quantity"`
@@ -262,7 +286,8 @@ func initDB() {
 			discount_type TEXT,
 			discount_value NUMERIC(10,2),
 			coupon_format TEXT,
-			physical_name TEXT
+			physical_name TEXT,
+			coupon_expiry_days INT DEFAULT 30
 		);`,
 		`CREATE TABLE IF NOT EXISTS profiles (
 			user_id TEXT PRIMARY KEY,
@@ -305,6 +330,13 @@ func initDB() {
 			comment TEXT NOT NULL,
 			created_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS wishlist (
+			id SERIAL PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			created_at TEXT NOT NULL,
+			UNIQUE(user_id, product_id)
+		);`,
 	}
 
 	for _, q := range queries {
@@ -317,6 +349,7 @@ func initDB() {
 	// Hot migrations for Razorpay, Tracking, Unlocked Gift, Gift Tiers, Profiles, Coupons & Address Columns
 	alterQueries := []string{
 		`ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes TEXT DEFAULT 'S,M,L,XL';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes_stock TEXT DEFAULT '{}';`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size TEXT DEFAULT '';`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_order_id TEXT;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_payment_id TEXT;`,
@@ -338,6 +371,34 @@ func initDB() {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_city TEXT DEFAULT '';`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_state TEXT DEFAULT '';`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_zip_code TEXT DEFAULT '';`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkout_type TEXT DEFAULT 'delivery';`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'online';`,
+		`ALTER TABLE gift_tiers ADD COLUMN IF NOT EXISTS coupon_expiry_days INT DEFAULT 30;`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS collection TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS fabric TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS sleeve_type TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS neck_type TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS pattern TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS occasion TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS sku TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS tags TEXT DEFAULT '';`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2) DEFAULT 0;`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_new_arrival BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_best_seller BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TEXT DEFAULT '';`,
+		`CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_fabric ON products(fabric);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_color ON products(color);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_is_new_arrival ON products(is_new_arrival);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_is_best_seller ON products(is_best_seller);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured);`,
+		`CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist(user_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_product_reviews_pid_rating ON product_reviews(product_id, rating);`,
 	}
 	for _, q := range alterQueries {
 		_, _ = db.Exec(q)
@@ -355,6 +416,34 @@ func initDB() {
 		`
 		db.Exec(seedQuery)
 		log.Println("Seeded base products successfully.")
+	}
+
+	// Always sync advanced attributes for the seeded products to support filters
+	_, err = db.Exec(`
+		UPDATE products SET 
+			collection = 'Festive Glow', fabric = 'Silk', color = 'Peach', 
+			sleeve_type = 'Three Quarter', neck_type = 'Round', pattern = 'Embroidered', 
+			occasion = 'Festival', sku = 'TET-ANK-001', tags = 'anarkali,silk,festive,peach,zari,wedding', 
+			original_price = 14999.00, is_new_arrival = TRUE, is_best_seller = TRUE, is_featured = TRUE, 
+			created_at = '2026-07-01T00:00:00Z' 
+		WHERE id = '1';
+		UPDATE products SET 
+			collection = 'Summer Breeze', fabric = 'Cotton', color = 'Mint Green', 
+			sleeve_type = 'Half Sleeve', neck_type = 'V Neck', pattern = 'Solid', 
+			occasion = 'Daily Wear', sku = 'TET-STR-002', tags = 'straight,cotton,casual,mint,daily', 
+			original_price = 6999.00, is_new_arrival = TRUE, is_best_seller = FALSE, is_featured = FALSE, 
+			created_at = '2026-07-15T00:00:00Z' 
+		WHERE id = '2';
+		UPDATE products SET 
+			collection = 'Lavender Dream', fabric = 'Georgette', color = 'Lavender', 
+			sleeve_type = 'Sleeveless', neck_type = 'Round', pattern = 'Floral', 
+			occasion = 'Party', sku = 'TET-TUN-003', tags = 'tunic,georgette,party,print,lavender', 
+			original_price = 9999.00, is_new_arrival = FALSE, is_best_seller = TRUE, is_featured = TRUE, 
+			created_at = '2026-07-10T00:00:00Z' 
+		WHERE id = '3';
+	`)
+	if err != nil {
+		log.Println("Error updating seeded products advanced features:", err)
 	}
 
 	// Seed a sample coupon if none exist
@@ -454,18 +543,295 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		rows, err := db.Query("SELECT id, name, description, price, image_url, stock, category, COALESCE(sizes, '') FROM products")
+		q := r.URL.Query().Get("q")
+		categoryParam := r.URL.Query().Get("category")
+		sizesParam := r.URL.Query().Get("sizes")
+		colorsParam := r.URL.Query().Get("colors")
+		fabricsParam := r.URL.Query().Get("fabrics")
+		sleeveTypesParam := r.URL.Query().Get("sleeveTypes")
+		neckTypesParam := r.URL.Query().Get("neckTypes")
+		patternsParam := r.URL.Query().Get("patterns")
+		occasionsParam := r.URL.Query().Get("occasions")
+		collectionParam := r.URL.Query().Get("collection")
+		
+		minPriceStr := r.URL.Query().Get("minPrice")
+		maxPriceStr := r.URL.Query().Get("maxPrice")
+		minRatingStr := r.URL.Query().Get("minRating")
+		inStockOnlyStr := r.URL.Query().Get("inStockOnly")
+		minDiscountStr := r.URL.Query().Get("minDiscount")
+		
+		newArrivalStr := r.URL.Query().Get("newArrival")
+		bestSellerStr := r.URL.Query().Get("bestSeller")
+		featuredStr := r.URL.Query().Get("featured")
+		sortBy := r.URL.Query().Get("sortBy")
+		
+		paginated := r.URL.Query().Get("paginated") == "true"
+		pageStr := r.URL.Query().Get("page")
+		limitStr := r.URL.Query().Get("limit")
+
+		var conditions []string
+		var args []interface{}
+		argIndex := 1
+
+		if q != "" {
+			tokens := strings.Fields(strings.ToLower(q))
+			var tokenConds []string
+			for _, token := range tokens {
+				tokenConds = append(tokenConds, fmt.Sprintf("(LOWER(p.name) LIKE $%d OR LOWER(p.category) LIKE $%d OR LOWER(p.collection) LIKE $%d OR LOWER(p.fabric) LIKE $%d OR LOWER(p.color) LIKE $%d OR LOWER(p.sleeve_type) LIKE $%d OR LOWER(p.neck_type) LIKE $%d OR LOWER(p.pattern) LIKE $%d OR LOWER(p.occasion) LIKE $%d OR LOWER(p.sku) LIKE $%d OR LOWER(p.description) LIKE $%d OR LOWER(p.tags) LIKE $%d)", argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex))
+				args = append(args, "%"+token+"%")
+				argIndex++
+			}
+			if len(tokenConds) > 0 {
+				conditions = append(conditions, "("+strings.Join(tokenConds, " AND ")+")")
+			}
+		}
+
+		if categoryParam != "" {
+			categories := strings.Split(categoryParam, ",")
+			var catConditions []string
+			for _, cat := range categories {
+				catConditions = append(catConditions, fmt.Sprintf("LOWER(p.category) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(cat))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(catConditions, " OR ")+")")
+		}
+
+		if sizesParam != "" {
+			sizes := strings.Split(sizesParam, ",")
+			var sizeConditions []string
+			for _, sz := range sizes {
+				sizeConditions = append(sizeConditions, fmt.Sprintf("(',' || p.sizes || ',') LIKE $%d", argIndex))
+				args = append(args, "%,"+strings.TrimSpace(sz)+",%")
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(sizeConditions, " OR ")+")")
+		}
+
+		if colorsParam != "" {
+			colors := strings.Split(colorsParam, ",")
+			var colConditions []string
+			for _, col := range colors {
+				colConditions = append(colConditions, fmt.Sprintf("LOWER(p.color) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(col))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(colConditions, " OR ")+")")
+		}
+
+		if fabricsParam != "" {
+			fabrics := strings.Split(fabricsParam, ",")
+			var fabConditions []string
+			for _, fab := range fabrics {
+				fabConditions = append(fabConditions, fmt.Sprintf("LOWER(p.fabric) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(fab))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(fabConditions, " OR ")+")")
+		}
+
+		if collectionParam != "" {
+			collections := strings.Split(collectionParam, ",")
+			var colConditions []string
+			for _, col := range collections {
+				colConditions = append(colConditions, fmt.Sprintf("LOWER(p.collection) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(col))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(colConditions, " OR ")+")")
+		}
+
+		if sleeveTypesParam != "" {
+			sleeveTypes := strings.Split(sleeveTypesParam, ",")
+			var slConditions []string
+			for _, sl := range sleeveTypes {
+				slConditions = append(slConditions, fmt.Sprintf("LOWER(p.sleeve_type) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(sl))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(slConditions, " OR ")+")")
+		}
+
+		if neckTypesParam != "" {
+			neckTypes := strings.Split(neckTypesParam, ",")
+			var nkConditions []string
+			for _, nk := range neckTypes {
+				nkConditions = append(nkConditions, fmt.Sprintf("LOWER(p.neck_type) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(nk))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(nkConditions, " OR ")+")")
+		}
+
+		if patternsParam != "" {
+			patterns := strings.Split(patternsParam, ",")
+			var patConditions []string
+			for _, pat := range patterns {
+				patConditions = append(patConditions, fmt.Sprintf("LOWER(p.pattern) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(pat))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(patConditions, " OR ")+")")
+		}
+
+		if occasionsParam != "" {
+			occasions := strings.Split(occasionsParam, ",")
+			var occConditions []string
+			for _, occ := range occasions {
+				occConditions = append(occConditions, fmt.Sprintf("LOWER(p.occasion) = LOWER($%d)", argIndex))
+				args = append(args, strings.TrimSpace(occ))
+				argIndex++
+			}
+			conditions = append(conditions, "("+strings.Join(occConditions, " OR ")+")")
+		}
+
+		if minPriceStr != "" {
+			if minPrice, err := strconv.ParseFloat(minPriceStr, 64); err == nil && minPrice > 0 {
+				conditions = append(conditions, fmt.Sprintf("p.price >= $%d", argIndex))
+				args = append(args, minPrice)
+				argIndex++
+			}
+		}
+
+		if maxPriceStr != "" {
+			if maxPrice, err := strconv.ParseFloat(maxPriceStr, 64); err == nil && maxPrice > 0 {
+				conditions = append(conditions, fmt.Sprintf("p.price <= $%d", argIndex))
+				args = append(args, maxPrice)
+				argIndex++
+			}
+		}
+
+		if minRatingStr != "" {
+			if minRating, err := strconv.ParseFloat(minRatingStr, 64); err == nil && minRating > 0 {
+				conditions = append(conditions, fmt.Sprintf("COALESCE(r.avg_rating, 0.0) >= $%d", argIndex))
+				args = append(args, minRating)
+				argIndex++
+			}
+		}
+
+		if inStockOnlyStr == "true" {
+			conditions = append(conditions, "p.stock > 0")
+		}
+
+		if minDiscountStr != "" {
+			if minDiscount, err := strconv.ParseFloat(minDiscountStr, 64); err == nil && minDiscount > 0 {
+				conditions = append(conditions, fmt.Sprintf("p.original_price > 0 AND ((p.original_price - p.price) * 100 / p.original_price) >= $%d", argIndex))
+				args = append(args, minDiscount)
+				argIndex++
+			}
+		}
+
+		if newArrivalStr == "true" {
+			conditions = append(conditions, "p.is_new_arrival = TRUE")
+		}
+		if bestSellerStr == "true" {
+			conditions = append(conditions, "p.is_best_seller = TRUE")
+		}
+		if featuredStr == "true" {
+			conditions = append(conditions, "p.is_featured = TRUE")
+		}
+
+		baseQuery := `
+			SELECT 
+				p.id, p.name, p.description, p.price, p.image_url, p.stock, p.category, 
+				COALESCE(p.sizes, ''), COALESCE(p.sizes_stock, '{}'),
+				COALESCE(p.collection, ''), COALESCE(p.fabric, ''), COALESCE(p.color, ''), 
+				COALESCE(p.sleeve_type, ''), COALESCE(p.neck_type, ''), COALESCE(p.pattern, ''), 
+				COALESCE(p.occasion, ''), COALESCE(p.sku, ''), COALESCE(p.tags, ''), 
+				COALESCE(p.original_price, 0), p.is_new_arrival, p.is_best_seller, p.is_featured, 
+				COALESCE(p.created_at, ''),
+				COALESCE(r.avg_rating, 0.0) as avg_rating,
+				COALESCE(r.review_count, 0) as review_count
+			FROM products p
+			LEFT JOIN (
+				SELECT product_id, AVG(rating) as avg_rating, COUNT(*) as review_count 
+				FROM product_reviews GROUP BY product_id
+			) r ON p.id = r.product_id
+			WHERE 1=1
+		`
+
+		if len(conditions) > 0 {
+			baseQuery += " AND " + strings.Join(conditions, " AND ")
+		}
+
+		// Sorting Order
+		sortOrder := "p.id DESC"
+		switch sortBy {
+		case "newest":
+			sortOrder = "p.created_at DESC, p.id DESC"
+		case "popularity", "best_selling":
+			sortOrder = "p.is_best_seller DESC, p.id DESC"
+		case "rating":
+			sortOrder = "COALESCE(r.avg_rating, 0.0) DESC, r.review_count DESC, p.id DESC"
+		case "price_asc":
+			sortOrder = "p.price ASC, p.id DESC"
+		case "price_desc":
+			sortOrder = "p.price DESC, p.id DESC"
+		case "discount":
+			sortOrder = "CASE WHEN p.original_price > 0 THEN ((p.original_price - p.price) / p.original_price) ELSE 0 END DESC, p.id DESC"
+		case "az":
+			sortOrder = "p.name ASC, p.id DESC"
+		case "za":
+			sortOrder = "p.name DESC, p.id DESC"
+		}
+		baseQuery += " ORDER BY " + sortOrder
+
+		var total int
+		if paginated {
+			countQuery := `
+				SELECT COUNT(*) 
+				FROM products p
+				LEFT JOIN (
+					SELECT product_id, AVG(rating) as avg_rating, COUNT(*) as review_count 
+					FROM product_reviews GROUP BY product_id
+				) r ON p.id = r.product_id
+				WHERE 1=1
+			`
+			if len(conditions) > 0 {
+				countQuery += " AND " + strings.Join(conditions, " AND ")
+			}
+			err := db.QueryRow(countQuery, args...).Scan(&total)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// Add Pagination Limit & Offset if paginated
+		page := 1
+		limit := 12
+		if pageVal, err := strconv.Atoi(pageStr); err == nil && pageVal > 0 {
+			page = pageVal
+		}
+		if limitVal, err := strconv.Atoi(limitStr); err == nil && limitVal > 0 {
+			limit = limitVal
+		}
+
+		if paginated {
+			offset := (page - 1) * limit
+			baseQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+			args = append(args, limit, offset)
+		}
+
+		rows, err := db.Query(baseQuery, args...)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
 
-		var products []Product
+		products := []Product{}
 		for rows.Next() {
 			var p Product
 			var sizesStr string
-			if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.ImageURL, &p.Stock, &p.Category, &sizesStr); err != nil {
+			var sizesStockStr string
+			if err := rows.Scan(
+				&p.ID, &p.Name, &p.Description, &p.Price, &p.ImageURL, &p.Stock, &p.Category, 
+				&sizesStr, &sizesStockStr,
+				&p.Collection, &p.Fabric, &p.Color, &p.SleeveType, &p.NeckType, &p.Pattern, 
+				&p.Occasion, &p.SKU, &p.Tags, &p.OriginalPrice, &p.IsNewArrival, &p.IsBestSeller, 
+				&p.IsFeatured, &p.CreatedAt, &p.AvgRating, &p.ReviewCount,
+			); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -474,12 +840,13 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 			} else {
 				p.Sizes = []string{}
 			}
-
-			// Add primary image to gallery if valid
+			p.SizesStock = map[string]int{}
+			if sizesStockStr != "" {
+				json.Unmarshal([]byte(sizesStockStr), &p.SizesStock)
+			}
 			if p.ImageURL != "" {
 				p.GalleryImages = append(p.GalleryImages, p.ImageURL)
 			}
-
 			// Fetch extra gallery images
 			imgRows, err := db.Query("SELECT image_url FROM product_images WHERE product_id = $1", p.ID)
 			if err == nil {
@@ -491,14 +858,24 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				imgRows.Close()
 			}
-
 			products = append(products, p)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(products)
+		if paginated {
+			totalPages := int(math.Ceil(float64(total) / float64(limit)))
+			response := map[string]interface{}{
+				"products":   products,
+				"total":      total,
+				"page":       page,
+				"limit":      limit,
+				"totalPages": totalPages,
+			}
+			json.NewEncoder(w).Encode(response)
+		} else {
+			json.NewEncoder(w).Encode(products)
+		}
 	} else if r.Method == "POST" {
-		// Protect Product Creation with Admin Authorization
 		authHeader := r.Header.Get("Authorization")
 		expectedKey := os.Getenv("ADMIN_API_KEY")
 		if expectedKey == "" {
@@ -521,7 +898,6 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Security Fix: Prevent Panic index-out-of-bounds on short names
 		uniqueSuffix := fmt.Sprint(time.Now().UnixNano() % 100000)
 		prefix := "p_prod"
 		if len(p.Name) >= 2 {
@@ -530,12 +906,48 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 		p.ID = prefix + "_" + uniqueSuffix
 
 		sizesStr := strings.Join(p.Sizes, ",")
-		_, err := db.Exec("INSERT INTO products (id, name, description, price, image_url, sizes, stock, category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-			p.ID, p.Name, p.Description, p.Price, p.ImageURL, sizesStr, p.Stock, p.Category)
+		sizesStockBytes, _ := json.Marshal(p.SizesStock)
+		sizesStockStr := string(sizesStockBytes)
+		if sizesStockStr == "" || sizesStockStr == "null" {
+			sizesStockStr = "{}"
+		}
+
+		totalStock := 0
+		for _, qty := range p.SizesStock {
+			totalStock += qty
+		}
+		if totalStock > 0 {
+			p.Stock = totalStock
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		p.CreatedAt = now
+
+		_, err := db.Exec(`
+			INSERT INTO products (
+				id, name, description, price, image_url, sizes, sizes_stock, stock, category,
+				collection, fabric, color, sleeve_type, neck_type, pattern, occasion,
+				sku, tags, original_price, is_new_arrival, is_best_seller, is_featured, created_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+			p.ID, p.Name, p.Description, p.Price, p.ImageURL, sizesStr, sizesStockStr, p.Stock, p.Category,
+			p.Collection, p.Fabric, p.Color, p.SleeveType, p.NeckType, p.Pattern, p.Occasion,
+			p.SKU, p.Tags, p.OriginalPrice, p.IsNewArrival, p.IsBestSeller, p.IsFeatured, p.CreatedAt)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		for i, imgURL := range p.GalleryImages {
+			if i == 0 {
+				continue
+			}
+			trimmed := strings.TrimSpace(imgURL)
+			if trimmed == "" {
+				continue
+			}
+			db.Exec("INSERT INTO product_images (product_id, image_url) VALUES ($1, $2)", p.ID, trimmed)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(p)
@@ -644,11 +1056,24 @@ func ordersListHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	rows, err := db.Query(`SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, 
-		COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
-		COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
-		COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
-		COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, '') FROM orders ORDER BY created_at DESC`)
+	orderIDQuery := r.URL.Query().Get("orderId")
+	var rows *sql.Rows
+	var err error
+	if orderIDQuery != "" {
+		rows, err = db.Query(`SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, 
+			COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
+			COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
+			COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
+			COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
+			COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') FROM orders WHERE id = $1`, orderIDQuery)
+	} else {
+		rows, err = db.Query(`SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, 
+			COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
+			COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
+			COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
+			COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
+			COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') FROM orders ORDER BY created_at DESC`)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -659,7 +1084,8 @@ func ordersListHandler(w http.ResponseWriter, r *http.Request) {
 		var o Order
 		err := rows.Scan(&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
 			&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift,
-			&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode)
+			&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
+			&o.CheckoutType, &o.PaymentMethod)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -705,13 +1131,29 @@ func couponValidateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var c Coupon
-	err := db.QueryRow("SELECT id, code, type, value, min_order, usage_limit, used_count FROM coupons WHERE code = $1 AND is_active = TRUE", req.Code).
-		Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &c.UsageLimit, &c.UsedCount)
+	var expiryDateStr string
+	err := db.QueryRow("SELECT id, code, type, value, min_order, COALESCE(expiry_date, ''), is_active, usage_limit, used_count FROM coupons WHERE LOWER(code) = LOWER($1) AND is_active = TRUE", req.Code).
+		Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &expiryDateStr, &c.IsActive, &c.UsageLimit, &c.UsedCount)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"error":"Invalid or expired coupon"}`))
 		return
+	}
+	
+	if expiryDateStr != "" {
+		expiryTime, parseErr := time.Parse(time.RFC3339, expiryDateStr)
+		if parseErr != nil {
+			expiryTime, parseErr = time.Parse("2006-01-02", expiryDateStr)
+		}
+		if parseErr == nil {
+			if time.Now().After(expiryTime) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error":"Coupon has expired"}`))
+				return
+			}
+		}
 	}
 	if req.Total < c.MinOrder {
 		w.Header().Set("Content-Type", "application/json")
@@ -788,8 +1230,9 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var p Product
-		err := tx.QueryRow("SELECT id, name, price, stock FROM products WHERE id = $1", it.ProductID).
-			Scan(&p.ID, &p.Name, &p.Price, &p.Stock)
+		var sizesStockStr string
+		err := tx.QueryRow("SELECT id, name, price, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1", it.ProductID).
+			Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &sizesStockStr)
 		if err == sql.ErrNoRows {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -802,11 +1245,35 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if p.Stock < it.Quantity {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(fmt.Sprintf(`{"error":"Insufficient stock of %s (In stock: %d)"}`, p.Name, p.Stock)))
-			return
+		p.SizesStock = map[string]int{}
+		if sizesStockStr != "" {
+			json.Unmarshal([]byte(sizesStockStr), &p.SizesStock)
+		}
+
+		// Perform size-stock validation if size chosen is found in SizesStock map
+		if it.Size != "" && len(p.SizesStock) > 0 {
+			if sQty, ok := p.SizesStock[it.Size]; ok {
+				if sQty < it.Quantity {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte(fmt.Sprintf(`{"error":"Insufficient stock of %s for size %s (In stock: %d)"}`, p.Name, it.Size, sQty)))
+					return
+				}
+			} else {
+				// Chosen size not tracked or of 0 stock
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(fmt.Sprintf(`{"error":"Size %s is out of stock for product %s"}`, it.Size, p.Name)))
+				return
+			}
+		} else {
+			// Fallback check against aggregate stock
+			if p.Stock < it.Quantity {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(fmt.Sprintf(`{"error":"Insufficient stock of %s (In stock: %d)"}`, p.Name, p.Stock)))
+				return
+			}
 		}
 
 		subtotal += p.Price * float64(it.Quantity)
@@ -861,40 +1328,161 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	checkoutType := req.CheckoutType
+	if checkoutType == "" {
+		checkoutType = "delivery"
+	}
+	paymentMethod := req.PaymentMethod
+	if paymentMethod == "" {
+		paymentMethod = "online"
+	}
+
+	// Validate Hyderabad city for instant delivery
+	// Validate Hyderabad city and pincode for instant delivery
+	if checkoutType == "hyderabad_instant" {
+		cityLower := strings.ToLower(strings.TrimSpace(req.ShippingCity))
+		if cityLower != "hyderabad" && cityLower != "secunderabad" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"Instant delivery via Rapido/Uber is only available within Hyderabad/Secunderabad."}`))
+			return
+		}
+		
+		zipTrim := strings.TrimSpace(req.ShippingZIPCode)
+		if !strings.HasPrefix(zipTrim, "500") || len(zipTrim) != 6 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"Instant delivery via Rapido/Uber requires a valid Hyderabad pincode starting with 500 (e.g., 500081)."}`))
+			return
+		}
+	}
+
+	shippingName := req.ShippingName
+	shippingPhone := req.ShippingPhone
+	shippingAddress := req.ShippingAddress
+	shippingCity := req.ShippingCity
+	shippingState := req.ShippingState
+	shippingZIPCode := req.ShippingZIPCode
+
+	if checkoutType == "pickup" {
+		if shippingName == "" {
+			shippingName = "Store Pickup Customer"
+		}
+		if shippingPhone == "" {
+			shippingPhone = "0000000000"
+		}
+		shippingAddress = "Jubilee Hills, Road No. 36"
+		shippingCity = "Hyderabad"
+		shippingState = "Telangana"
+		shippingZIPCode = "500033"
+	} else {
+		if shippingName == "" || shippingPhone == "" || shippingAddress == "" || shippingCity == "" || shippingState == "" || shippingZIPCode == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"Shipping details are required for courier delivery"}`))
+			return
+		}
+	}
+
 	finalTotal := subtotal - discountAmt
 	orderID := "ORD_" + fmt.Sprint(time.Now().UnixNano()/1000000)
 
-	paymentProvider := os.Getenv("PAYMENT_PROVIDER")
-	if paymentProvider == "" {
-		paymentProvider = "mock"
-	}
-
 	var providerOrderID string
 	var checkoutURL string
+	orderStatus := "pending"
 
-	if paymentProvider == "razorpay" {
-		rzpID, err := createRazorpayOrder(orderID, finalTotal)
-		if err != nil {
-			log.Printf("Razorpay order creation failed: %v", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":"Razorpay service authentication failed"}`))
-			return
+	if paymentMethod == "offline_qr" {
+		providerOrderID = "OFFLINE_QR"
+		checkoutURL = "/checkout-success"
+		orderStatus = "pending_payment"
+
+		// For offline payment, book inventory stock levels immediately
+		for _, item := range orderItems {
+			var prodName string
+			var totalStock int
+			var sizesStockStr string
+			err = tx.QueryRow("SELECT name, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
+				Scan(&prodName, &totalStock, &sizesStockStr)
+			if err != nil {
+				log.Printf("Failed to select product for stock decrement: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":"Failed to verify inventory levels"}`))
+				return
+			}
+
+			var sizesStock map[string]int
+			json.Unmarshal([]byte(sizesStockStr), &sizesStock)
+			if sizesStock == nil {
+				sizesStock = map[string]int{}
+			}
+
+			if item.Size != "" && len(sizesStock) > 0 {
+				if curr, ok := sizesStock[item.Size]; ok {
+					if curr < item.Quantity {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadRequest)
+						w.Write([]byte(fmt.Sprintf(`{"error":"Insufficient stock of %s for size %s"}`, prodName, item.Size)))
+						return
+					}
+					sizesStock[item.Size] = curr - item.Quantity
+				}
+			}
+
+			newTotalStock := totalStock - item.Quantity
+			if newTotalStock < 0 {
+				newTotalStock = 0
+			}
+
+			sizesStockBytes, _ := json.Marshal(sizesStock)
+			_, err = tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3", newTotalStock, string(sizesStockBytes), item.ProductID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":"Failed to book inventory for pickup"}`))
+				return
+			}
 		}
-		providerOrderID = rzpID
-		checkoutURL = "razorpay"
+
+		// Update Coupon Use Count metrics
+		if req.CouponCode != "" {
+			_, err = tx.Exec("UPDATE coupons SET used_count = used_count + 1 WHERE code = $1", req.CouponCode)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":"Failed to map discount coupon"}`))
+				return
+			}
+		}
 	} else {
-		// Mock Provider configuration
-		providerOrderID = "MOCK_RZP_" + orderID[4:]
-		checkoutURL = fmt.Sprintf("/mock-payment?orderId=%s", orderID)
+		// Online payments (Razorpay or Mock)
+		paymentProvider := os.Getenv("PAYMENT_PROVIDER")
+		if paymentProvider == "" {
+			paymentProvider = "mock"
+		}
+		if paymentProvider == "razorpay" {
+			rzpID, err := createRazorpayOrder(orderID, finalTotal)
+			if err != nil {
+				log.Printf("Razorpay order creation failed: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":"Razorpay service authentication failed"}`))
+				return
+			}
+			providerOrderID = rzpID
+			checkoutURL = "razorpay"
+		} else {
+			providerOrderID = "MOCK_RZP_" + orderID[4:]
+			checkoutURL = fmt.Sprintf("/mock-payment?orderId=%s", orderID)
+		}
 	}
 
 	createdAt := time.Now().Format(time.RFC3339)
 	_, err = tx.Exec(`INSERT INTO orders (id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, razorpay_order_id, razorpay_payment_id,
-		shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_zip_code)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		orderID, req.CustomerEmail, finalTotal, discountAmt, req.CouponCode, "pending", createdAt, providerOrderID, "",
-		req.ShippingName, req.ShippingPhone, req.ShippingAddress, req.ShippingCity, req.ShippingState, req.ShippingZIPCode)
+		shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_zip_code, checkout_type, payment_method)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		orderID, req.CustomerEmail, finalTotal, discountAmt, req.CouponCode, orderStatus, createdAt, providerOrderID, "",
+		shippingName, shippingPhone, shippingAddress, shippingCity, shippingState, shippingZIPCode, checkoutType, paymentMethod)
 	if err != nil {
 		log.Printf("Order insert SQL failed: %v", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -929,6 +1517,8 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 		"razorpayOrderId": providerOrderID,
 		"amount":          finalTotal,
 		"razorpayKey":     os.Getenv("RAZORPAY_KEY_ID"),
+		"status":          orderStatus,
+		"paymentMethod":   paymentMethod,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -962,8 +1552,10 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	var couponCode string
 	var totalAmount float64
 	var customerEmail string
-	err := db.QueryRow("SELECT status, coupon_code, total_amount, customer_email FROM orders WHERE id = $1", req.OrderID).
-		Scan(&status, &couponCode, &totalAmount, &customerEmail)
+	var checkoutType string
+	var paymentMethod string
+	err := db.QueryRow("SELECT status, coupon_code, total_amount, customer_email, COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') FROM orders WHERE id = $1", req.OrderID).
+		Scan(&status, &couponCode, &totalAmount, &customerEmail, &checkoutType, &paymentMethod)
 	if err == sql.ErrNoRows {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -1027,7 +1619,7 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	// Fetch buy list details to process stock deduction
-	rows, err := tx.Query("SELECT product_id, quantity FROM order_items WHERE order_id = $1", req.OrderID)
+	rows, err := tx.Query("SELECT product_id, quantity, COALESCE(size, '') FROM order_items WHERE order_id = $1", req.OrderID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -1039,11 +1631,12 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	type deduct struct {
 		prodID string
 		qty    int
+		size   string
 	}
 	var deductions []deduct
 	for rows.Next() {
 		var d deduct
-		if err := rows.Scan(&d.prodID, &d.qty); err == nil {
+		if err := rows.Scan(&d.prodID, &d.qty, &d.size); err == nil {
 			deductions = append(deductions, d)
 		}
 	}
@@ -1051,18 +1644,50 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Reduce inventory stock levels safely
 	for _, d := range deductions {
-		res, err := tx.Exec("UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1", d.qty, d.prodID)
+		var prodName string
+		var totalStock int
+		var sizesStockStr string
+		err = tx.QueryRow("SELECT name, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", d.prodID).
+			Scan(&prodName, &totalStock, &sizesStockStr)
+		if err != nil {
+			log.Printf("Failed to select product for stock decrement: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error":"Failed to update inventory during verification"}`))
+			return
+		}
+
+		var sizesStock map[string]int
+		json.Unmarshal([]byte(sizesStockStr), &sizesStock)
+		if sizesStock == nil {
+			sizesStock = map[string]int{}
+		}
+
+		// Decrement size-wise stock balance if key matches
+		if d.size != "" && len(sizesStock) > 0 {
+			if curr, ok := sizesStock[d.size]; ok {
+				if curr < d.qty {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte(fmt.Sprintf(`{"error":"Insufficient stock of %s for size %s"}`, prodName, d.size)))
+					return
+				}
+				sizesStock[d.size] = curr - d.qty
+			}
+		}
+
+		// Update total stock fallback
+		newTotalStock := totalStock - d.qty
+		if newTotalStock < 0 {
+			newTotalStock = 0
+		}
+
+		sizesStockBytes, _ := json.Marshal(sizesStock)
+		_, err = tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3", newTotalStock, string(sizesStockBytes), d.prodID)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(`{"error":"Inventory database update conflict"}`))
-			return
-		}
-		rowsAffected, _ := res.RowsAffected()
-		if rowsAffected == 0 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"error":"Out of stock items selected"}`))
 			return
 		}
 	}
@@ -1107,12 +1732,13 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	var discountType, couponFormat, physicalName string
 	var discountValueThreshold float64
 	var tierFound bool
+	var couponExpiryDays int
 
 	// query database for highest matching tier
-	rowsTier, err := db.Query("SELECT reward_type, discount_type, discount_value, coupon_format, physical_name FROM gift_tiers WHERE $1 >= threshold ORDER BY threshold DESC LIMIT 1", totalAmount)
+	rowsTier, err := db.Query("SELECT reward_type, discount_type, discount_value, coupon_format, physical_name, COALESCE(coupon_expiry_days, 30) FROM gift_tiers WHERE $1 >= threshold ORDER BY threshold DESC LIMIT 1", totalAmount)
 	if err == nil {
 		if rowsTier.Next() {
-			err = rowsTier.Scan(&rewardType, &discountType, &discountValueThreshold, &couponFormat, &physicalName)
+			err = rowsTier.Scan(&rewardType, &discountType, &discountValueThreshold, &couponFormat, &physicalName, &couponExpiryDays)
 			if err == nil {
 				tierFound = true
 			}
@@ -1120,13 +1746,22 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 		rowsTier.Close()
 	}
 
+	var giftExpiryDate string
 	if tierFound {
 		if rewardType == "coupon" {
 			giftCode = generateCouponCode(couponFormat, req.OrderID)
 			unlockedGift = giftCode
-			log.Printf("[GIFT SYSTEM] Generated coupon for %s: %s (Format: %s, Value: %.2f)", customerEmail, giftCode, couponFormat, discountValueThreshold)
-			_, err = db.Exec("INSERT INTO coupons (id, code, type, value, min_order, usage_limit, owner_email) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
-				"c_"+giftCode, giftCode, discountType, discountValueThreshold, 0, 1, customerEmail)
+			
+			var expiryDateVal interface{} = nil
+			if couponExpiryDays > 0 {
+				exp := time.Now().AddDate(0, 0, couponExpiryDays)
+				giftExpiryDate = exp.Format(time.RFC3339)
+				expiryDateVal = giftExpiryDate
+			}
+			
+			log.Printf("[GIFT SYSTEM] Generated coupon for %s: %s (Format: %s, Value: %.2f, Expiry Days: %d)", customerEmail, giftCode, couponFormat, discountValueThreshold, couponExpiryDays)
+			_, err = db.Exec("INSERT INTO coupons (id, code, type, value, min_order, expiry_date, usage_limit, owner_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING",
+				"c_"+giftCode, giftCode, discountType, discountValueThreshold, 0, expiryDateVal, 1, customerEmail)
 			if err != nil {
 				log.Printf("Failed to seed generated coupon into DB: %v", err)
 			}
@@ -1144,17 +1779,43 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// AUTOMATED SHIPPING INTEGRATION PIPELINE
-	trackingNumber, shippedAt, err := automateShipping(req.OrderID, customerEmail)
-	if err != nil {
-		log.Printf("[SHIPPING ERROR] Automated shipment dispatch failed: %v", err)
-	} else {
-		_, err = db.Exec("UPDATE orders SET status = 'shipped', tracking_number = $1, shipped_at = $2 WHERE id = $3",
+	var trackingNumber string
+	var shippedAt string
+	if checkoutType == "pickup" {
+		trackingNumber = "STORE-PICKUP"
+		shippedAt = time.Now().Format(time.RFC3339)
+		_, err = db.Exec("UPDATE orders SET status = 'ready_for_pickup', tracking_number = $1, shipped_at = $2 WHERE id = $3",
 			trackingNumber, shippedAt, req.OrderID)
 		if err != nil {
-			log.Printf("[SHIPPING ERROR] Failed to update orders tracking dataset: %v", err)
+			log.Printf("[PICKUP ERROR] Failed to update orders pickup status: %v", err)
 		} else {
-			log.Printf("[SHIPPING SUCCESS] Order %s dispatched automatically. Tracking ID: %s", req.OrderID, trackingNumber)
-			status = "shipped"
+			status = "ready_for_pickup"
+		}
+	} else if checkoutType == "hyderabad_instant" {
+		randomID := fmt.Sprint(time.Now().UnixNano() % 1000000)
+		trackingNumber = "RAPIDO-INSTANT-" + randomID
+		shippedAt = time.Now().Format(time.RFC3339)
+		_, err = db.Exec("UPDATE orders SET status = 'dispatched_instant', tracking_number = $1, shipped_at = $2 WHERE id = $3",
+			trackingNumber, shippedAt, req.OrderID)
+		if err != nil {
+			log.Printf("[INSTANT SHIPPING ERROR] Failed to update orders instant shipping status: %v", err)
+		} else {
+			status = "dispatched_instant"
+		}
+	} else {
+		var trkErr error
+		trackingNumber, shippedAt, trkErr = automateShipping(req.OrderID, customerEmail)
+		if trkErr != nil {
+			log.Printf("[SHIPPING ERROR] Automated shipment dispatch failed: %v", trkErr)
+		} else {
+			_, err = db.Exec("UPDATE orders SET status = 'shipped', tracking_number = $1, shipped_at = $2 WHERE id = $3",
+				trackingNumber, shippedAt, req.OrderID)
+			if err != nil {
+				log.Printf("[SHIPPING ERROR] Failed to update orders tracking dataset: %v", err)
+			} else {
+				log.Printf("[SHIPPING SUCCESS] Order %s dispatched automatically. Tracking ID: %s", req.OrderID, trackingNumber)
+				status = "shipped"
+			}
 		}
 	}
 
@@ -1166,6 +1827,7 @@ func orderVerifyHandler(w http.ResponseWriter, r *http.Request) {
 		"giftCode":       giftCode,
 		"unlockedGift":   unlockedGift,
 		"giftType":       rewardType,
+		"giftExpiryDate": giftExpiryDate,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
@@ -1695,7 +2357,8 @@ func profileOrdersHandler(w http.ResponseWriter, r *http.Request) {
 			COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
 			COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
 			COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
-			COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, '') FROM orders WHERE customer_email = $1 ORDER BY created_at DESC`, email)
+			COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
+			COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') FROM orders WHERE LOWER(customer_email) = LOWER($1) ORDER BY created_at DESC`, email)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1705,7 +2368,8 @@ func profileOrdersHandler(w http.ResponseWriter, r *http.Request) {
 			var o Order
 			err := rows.Scan(&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
 				&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift,
-				&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode)
+				&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
+				&o.CheckoutType, &o.PaymentMethod)
 			if err == nil {
 				itemRows, itemErr := db.Query(`SELECT oi.product_id, oi.quantity, oi.price_at_qty, p.name 
 					FROM order_items oi 
@@ -1762,8 +2426,8 @@ func profileCouponsHandler(w http.ResponseWriter, r *http.Request) {
 
 	coupons := []Coupon{}
 	if email != "" {
-		rows, err := db.Query(`SELECT id, code, type, value, min_order, expiry_date, is_active, usage_limit, used_count 
-			FROM coupons WHERE owner_email = $1 ORDER BY id DESC`, email)
+		rows, err := db.Query(`SELECT id, code, type, value, min_order, COALESCE(expiry_date, ''), is_active, usage_limit, used_count 
+			FROM coupons WHERE LOWER(owner_email) = LOWER($1) ORDER BY id DESC`, email)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -2002,11 +2666,413 @@ func adminProfileEditHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message":"profile updated successfully"}`))
 }
 
+func adminUploadHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte(`{"error":"Method not allowed"}`))
+		return
+	}
+
+	// Limit request to 10MB
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Failed to parse multipart form. File might exceed the 10MB limit."}`))
+		return
+	}
+
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Failed to retrieve file from request."}`))
+		return
+	}
+	defer file.Close()
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, file)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Failed to read file bytes."}`))
+		return
+	}
+
+	secureURL, err := uploadToCloudinary(buf.Bytes(), handler.Filename)
+	if err != nil {
+		log.Printf("[CLOUDINARY ERROR] Upload helper failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf(`{"error":"Failed to upload to Cloudinary: %s"}`, err.Error())))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"url": secureURL,
+	})
+}
+
+func uploadToCloudinary(fileBytes []byte, fileName string) (string, error) {
+	cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
+	apiKey := os.Getenv("CLOUDINARY_API_KEY")
+	apiSecret := os.Getenv("CLOUDINARY_API_SECRET")
+
+	if cloudName == "" || apiKey == "" || apiSecret == "" {
+		return "", fmt.Errorf("Cloudinary credentials are not configured in system environment")
+	}
+
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	
+	// Create signature
+	sigStr := fmt.Sprintf("timestamp=%s%s", timestamp, apiSecret)
+	hasher := sha1.New()
+	hasher.Write([]byte(sigStr))
+	signature := hex.EncodeToString(hasher.Sum(nil))
+
+	// Create multipart body
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// File field
+	part, err := writer.CreateFormFile("file", fileName)
+	if err != nil {
+		return "", err
+	}
+	if _, err := part.Write(fileBytes); err != nil {
+		return "", err
+	}
+
+	// Other fields
+	writer.WriteField("api_key", apiKey)
+	writer.WriteField("timestamp", timestamp)
+	writer.WriteField("signature", signature)
+
+	err = writer.Close()
+	if err != nil {
+		return "", err
+	}
+
+	// HTTP request
+	url := fmt.Sprintf("https://api.cloudinary.com/v1_1/%s/image/upload", cloudName)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Cloudinary upload failed with status %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	// Parse response
+	var result struct {
+		SecureURL string `json:"secure_url"`
+		URL       string `json:"url"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return "", err
+	}
+
+	if result.SecureURL != "" {
+		return result.SecureURL, nil
+	}
+	return result.URL, nil
+}
+
+func wishlistHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-User-Id")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	userID := getAuthenticatedUserID(r)
+	if userID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "authentication required"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query(`
+			SELECT 
+				p.id, p.name, p.description, p.price, p.image_url, p.stock, p.category, 
+				COALESCE(p.sizes, ''), COALESCE(p.sizes_stock, '{}'),
+				COALESCE(p.collection, ''), COALESCE(p.fabric, ''), COALESCE(p.color, ''), 
+				COALESCE(p.sleeve_type, ''), COALESCE(p.neck_type, ''), COALESCE(p.pattern, ''), 
+				COALESCE(p.occasion, ''), COALESCE(p.sku, ''), COALESCE(p.tags, ''), 
+				COALESCE(p.original_price, 0), p.is_new_arrival, p.is_best_seller, p.is_featured, 
+				COALESCE(p.created_at, ''),
+				COALESCE(r.avg_rating, 0.0) as avg_rating,
+				COALESCE(r.review_count, 0) as review_count
+			FROM wishlist w
+			JOIN products p ON w.product_id = p.id
+			LEFT JOIN (
+				SELECT product_id, AVG(rating) as avg_rating, COUNT(*) as review_count 
+				FROM product_reviews GROUP BY product_id
+			) r ON p.id = r.product_id
+			WHERE w.user_id = $1
+			ORDER BY w.created_at DESC`, userID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		products := []Product{}
+		for rows.Next() {
+			var p Product
+			var sizesStr string
+			var sizesStockStr string
+			if err := rows.Scan(
+				&p.ID, &p.Name, &p.Description, &p.Price, &p.ImageURL, &p.Stock, &p.Category, 
+				&sizesStr, &sizesStockStr,
+				&p.Collection, &p.Fabric, &p.Color, &p.SleeveType, &p.NeckType, &p.Pattern, 
+				&p.Occasion, &p.SKU, &p.Tags, &p.OriginalPrice, &p.IsNewArrival, &p.IsBestSeller, 
+				&p.IsFeatured, &p.CreatedAt, &p.AvgRating, &p.ReviewCount,
+			); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if sizesStr != "" {
+				p.Sizes = strings.Split(sizesStr, ",")
+			} else {
+				p.Sizes = []string{}
+			}
+			p.SizesStock = map[string]int{}
+			if sizesStockStr != "" {
+				json.Unmarshal([]byte(sizesStockStr), &p.SizesStock)
+			}
+			if p.ImageURL != "" {
+				p.GalleryImages = append(p.GalleryImages, p.ImageURL)
+			}
+			// Fetch extra gallery images
+			imgRows, err := db.Query("SELECT image_url FROM product_images WHERE product_id = $1", p.ID)
+			if err == nil {
+				for imgRows.Next() {
+					var url string
+					if err := imgRows.Scan(&url); err == nil {
+						p.GalleryImages = append(p.GalleryImages, url)
+					}
+				}
+				imgRows.Close()
+			}
+			products = append(products, p)
+		}
+		json.NewEncoder(w).Encode(products)
+
+	case http.MethodPost:
+		var req struct {
+			ProductID string `json:"productId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+			return
+		}
+		if req.ProductID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "productId is required"})
+			return
+		}
+
+		// check product exists
+		var dummy string
+		if checkErr := db.QueryRow("SELECT id FROM products WHERE id = $1", req.ProductID).Scan(&dummy); checkErr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "product not found"})
+			return
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, err := db.Exec(`
+			INSERT INTO wishlist (user_id, product_id, created_at)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (user_id, product_id) DO NOTHING`, userID, req.ProductID, now)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "product added to wishlist"})
+
+	case http.MethodDelete:
+		pid := r.URL.Query().Get("productId")
+		clearAll := r.URL.Query().Get("clearAll") == "true"
+
+		if clearAll {
+			_, err := db.Exec("DELETE FROM wishlist WHERE user_id = $1", userID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "wishlist cleared"})
+			return
+		}
+
+		if pid == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "productId parameter is required"})
+			return
+		}
+
+		_, err := db.Exec("DELETE FROM wishlist WHERE user_id = $1 AND product_id = $2", userID, pid)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "product removed from wishlist"})
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func wishlistMergeHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-User-Id")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := getAuthenticatedUserID(r)
+	if userID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "authentication required"})
+		return
+	}
+
+	var req struct {
+		ProductIDs []string `json:"productIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, pid := range req.ProductIDs {
+		var dummy string
+		if checkErr := db.QueryRow("SELECT id FROM products WHERE id = $1", pid).Scan(&dummy); checkErr == nil {
+			_, _ = db.Exec(`
+				INSERT INTO wishlist (user_id, product_id, created_at)
+				VALUES ($1, $2, $3)
+				ON CONFLICT (user_id, product_id) DO NOTHING`, userID, pid, now)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "wishlist merged"})
+}
+
+func confirmPickupHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OrderID string `json:"orderId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Invalid request payload"}`))
+		return
+	}
+
+	if req.OrderID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"OrderID is required"}`))
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Database error"}`))
+		return
+	}
+	defer tx.Rollback()
+
+	var checkoutType string
+	var status string
+	err = tx.QueryRow("SELECT COALESCE(checkout_type, ''), status FROM orders WHERE id = $1 FOR UPDATE", req.OrderID).
+		Scan(&checkoutType, &status)
+	if err == sql.ErrNoRows {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"Order not found"}`))
+		return
+	} else if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Database querying failure"}`))
+		return
+	}
+
+	// Update status to picked_up
+	_, err = tx.Exec("UPDATE orders SET status = 'picked_up' WHERE id = $1", req.OrderID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Failed to update order status"}`))
+		return
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Transaction commit failure"}`))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"success":true,"message":"Order marked as picked up"}`))
+}
+
 func main() {
 	initDB()
 	defer db.Close()
 
 	// Storefront routes
+	http.HandleFunc("/api/wishlist", wishlistHandler)
+	http.HandleFunc("/api/wishlist/merge", wishlistMergeHandler)
 	http.HandleFunc("/api/products", productsHandler)
 	http.HandleFunc("/api/products/", productReviewsHandler)
 	http.HandleFunc("/api/coupons/validate", couponValidateHandler)
@@ -2021,10 +3087,12 @@ func main() {
 	// Protected Admin routes
 	http.HandleFunc("/api/admin/coupons", adminAuthMiddleware(couponHandler))
 	http.HandleFunc("/api/admin/orders", adminAuthMiddleware(ordersListHandler))
+	http.HandleFunc("/api/admin/orders/confirm-pickup", adminAuthMiddleware(confirmPickupHandler))
 	http.HandleFunc("/api/admin/gift-tiers", adminAuthMiddleware(giftTiersUpdateHandler))
 	http.HandleFunc("/api/admin/profiles", adminAuthMiddleware(adminProfilesListHandler))
 	http.HandleFunc("/api/admin/profiles/details", adminAuthMiddleware(adminProfileDetailsHandler))
 	http.HandleFunc("/api/admin/profiles/edit", adminAuthMiddleware(adminProfileEditHandler))
+	http.HandleFunc("/api/admin/upload", adminAuthMiddleware(adminUploadHandler))
 
 	// Health endpoint
 	http.HandleFunc("/health", healthHandler)
@@ -2049,7 +3117,7 @@ func giftTiersGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query("SELECT id, name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name FROM gift_tiers ORDER BY threshold ASC")
+	rows, err := db.Query("SELECT id, name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name, COALESCE(coupon_expiry_days, 30) FROM gift_tiers ORDER BY threshold ASC")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2059,7 +3127,7 @@ func giftTiersGetHandler(w http.ResponseWriter, r *http.Request) {
 	tiers := []GiftTier{}
 	for rows.Next() {
 		var t GiftTier
-		err := rows.Scan(&t.ID, &t.Name, &t.Threshold, &t.RewardType, &t.DiscountType, &t.DiscountValue, &t.CouponFormat, &t.PhysicalName)
+		err := rows.Scan(&t.ID, &t.Name, &t.Threshold, &t.RewardType, &t.DiscountType, &t.DiscountValue, &t.CouponFormat, &t.PhysicalName, &t.CouponExpiryDays)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -2103,9 +3171,9 @@ func giftTiersUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, t := range reqTiers {
-		_, err = tx.Exec(`INSERT INTO gift_tiers (name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			t.Name, t.Threshold, t.RewardType, t.DiscountType, t.DiscountValue, t.CouponFormat, t.PhysicalName)
+		_, err = tx.Exec(`INSERT INTO gift_tiers (name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name, coupon_expiry_days) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			t.Name, t.Threshold, t.RewardType, t.DiscountType, t.DiscountValue, t.CouponFormat, t.PhysicalName, t.CouponExpiryDays)
 		if err != nil {
 			log.Printf("[GIFT ADMIN ERROR] Insert tier failed (Tier: %s): %v", t.Name, err)
 			w.WriteHeader(http.StatusInternalServerError)

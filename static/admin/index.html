@@ -22,6 +22,7 @@
                 <li data-tab="profiles">Manage Users</li>
                 <li data-tab="coupons">Marketing Coupons</li>
                 <li data-tab="settings">Gift Settings</li>
+                <li data-tab="pickup-scanner">Verify Store Pickups</li>
             </ul>
         </nav>
         <div class="sidebar-footer">
@@ -66,7 +67,8 @@
                             <th>Category</th>
                             <th>Price</th>
                             <th>Stock</th>
-                            <th>Actions</th>
+                            <th>Sizes</th>
+                            <th>Photos</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -198,10 +200,15 @@
                                     <input type="number" id="t_discount_value" placeholder="e.g. 20" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px; background: white;">
                                 </div>
                             </div>
-                            <div>
+                            <div style="margin-bottom: 1rem;">
                                 <label style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Coupon Code Format Pattern</label>
                                 <p style="font-size: 0.75rem; color: #888; margin-bottom: 0.5rem;">Use <code>[RAND]</code> anywhere in the pattern to replace it with a random 4-character string (e.g. <code>GFT-PLAT-[RAND]</code>).</p>
                                 <input type="text" id="t_coupon_format" placeholder="e.g. GFT-PLAT-[RAND]" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px; background: white;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--color-text-light);">Coupon Expiry (in days)</label>
+                                <p style="font-size: 0.75rem; color: #888; margin-bottom: 0.5rem;">Number of days from issuance until the user's reward coupon expires (e.g. <code>30</code>). Enter <code>0</code> for no expiry.</p>
+                                <input type="number" id="t_coupon_expiry_days" value="30" min="0" style="width: 100%; padding: 0.8rem; border: 1px solid #eee; border-radius: 8px; background: white;">
                             </div>
                         </div>
 
@@ -222,44 +229,269 @@
                 </div>
             </div>
         </div>
+
+        <!-- Pickup Scanner Tab -->
+        <div id="tab-pickup-scanner" class="tab-content">
+            <div style="background: #FFF; padding: 2.5rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.01); max-width: 750px; margin: 0 auto;">
+                <h3 style="font-family: var(--font-heading); margin-bottom: 0.5rem; font-size: 1.4rem; color: #333;">Order Boutique Verification</h3>
+                <p style="color: var(--color-text-light); margin-bottom: 2rem; font-size: 0.9rem;">
+                    Staff confirmation flow. Enter the order reference pass ID below or verify it from a scanned invoice QR pass.
+                </p>
+
+                <!-- Search Input Form -->
+                <div style="display: flex; gap: 0.8rem; margin-bottom: 2rem;">
+                    <input type="text" id="scannerOrderIdInput" placeholder="Enter Order ID (e.g. ORD_123456789)" style="flex: 1; padding: 0.85rem 1.2rem; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem;">
+                    <button class="btn-primary" onclick="triggerSearchPickupOrder()" style="padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600;">Search Order</button>
+                </div>
+
+                <div id="scannerMessage" style="display: none; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: 500;"></div>
+
+                <!-- Order Detail Card Container (Populated via JS) -->
+                <div id="pickupOrderCard" style="display: none; border: 1px solid #eee; border-radius: 12px; padding: 2rem; background: #fffcfb; transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f4f4f4; padding-bottom: 1.2rem; margin-bottom: 1.2rem;">
+                        <div>
+                            <h4 id="poCardOrderId" style="font-size: 1.2rem; font-weight: 700; color: #333; margin: 0 0 0.3rem;">Order #ORD_123</h4>
+                            <div style="color: #666; font-size: 0.85rem;">Customer: <span id="poCardCustomer" style="font-weight: 600;">-</span></div>
+                        </div>
+                        <span id="poCardStatusBadge" style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">PENDING</span>
+                    </div>
+
+                    <!-- Details content grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 0.3rem;">Fulfillment Type</div>
+                            <strong id="poCardCheckoutType" style="color: #333; font-size: 0.95rem;">Store Pickup</strong>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 0.3rem;">Payment Mode</div>
+                            <strong id="poCardPaymentMethod" style="color: #333; font-size: 0.95rem;">Offline QR</strong>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 0.3rem;">Created At</div>
+                            <span id="poCardDate" style="color: #555; font-size: 0.9rem;">-</span>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 0.3rem;">Order Total</div>
+                            <strong id="poCardAmount" style="color: var(--color-primary); font-size: 1.2rem;">₹0</strong>
+                        </div>
+                    </div>
+
+                    <div style="border-top: 1px solid #f4f4f4; padding-top: 1.2rem; margin-bottom: 1.5rem;">
+                        <div style="font-size: 0.75rem; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">Products to Collect:</div>
+                        <ul id="poCardItemsList" style="margin: 0; padding-left: 1.2rem; font-size: 0.95rem; color: #444; line-height: 1.6;"></ul>
+                    </div>
+
+                    <!-- Action container -->
+                    <div id="poCardActionsContainer" style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <!-- Action buttons will be injected here dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Product Modal -->
     <div id="productModal" class="modal-overlay">
-        <div class="modal-card">
-            <h2>Add New Product</h2>
+        <div class="modal-card" style="max-width: 680px; width: 92%; max-height: 92vh; overflow-y: auto;">
+            <h2 style="margin-bottom: 0.3rem;">Add New Product</h2>
+            <p style="font-size: 0.85rem; color: #888; margin-bottom: 1.5rem;">Fill in all product details including sizes and extra gallery images.</p>
             <form id="productForm">
-                <div>
-                    <label>Name</label>
-                    <input type="text" id="p_name" required>
-                </div>
-                <div style="display: flex; gap: 1rem;">
-                    <div style="flex:1">
-                        <label>Price (₹)</label>
-                        <input type="number" id="p_price" required>
+
+                <!-- Name + Category -->
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.2rem;">
+                    <div style="flex: 2;">
+                        <label>Product Name *</label>
+                        <input type="text" id="p_name" required placeholder="e.g. Pastel Peach Anarkali">
                     </div>
-                    <div style="flex:1">
-                        <label>Stock</label>
-                        <input type="number" id="p_stock" required>
+                    <div style="flex: 1;">
+                        <label>Category</label>
+                        <select id="p_category">
+                            <option value="Anarkali">Anarkali</option>
+                            <option value="Straight Cut">Straight Cut</option>
+                            <option value="Tunic">Tunic</option>
+                            <option value="Fusion">Fusion</option>
+                            <option value="A-Line">A-Line</option>
+                            <option value="Palazzo Set">Palazzo Set</option>
+                        </select>
                     </div>
                 </div>
-                <div>
-                    <label>Category</label>
-                    <select id="p_category">
-                        <option value="Anarkali">Anarkali</option>
-                        <option value="Straight Cut">Straight Cut</option>
-                        <option value="Tunic">Tunic</option>
-                        <option value="Fusion">Fusion</option>
-                    </select>
-                </div>
-                <div>
+
+                <!-- Description -->
+                <div style="margin-bottom: 1.2rem;">
                     <label>Description</label>
-                    <textarea id="p_desc" rows="3"></textarea>
+                    <textarea id="p_desc" rows="3" placeholder="Short product description..."></textarea>
                 </div>
-                <div>
-                    <label>Image URL</label>
-                    <input type="text" id="p_image" value="./images/kurthi_peach.png">
+
+                <!-- Price + Total Stock -->
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.2rem;">
+                    <div style="flex: 1;">
+                        <label>Price (₹) *</label>
+                        <input type="number" id="p_price" required min="0" placeholder="e.g. 2499">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Total Stock (Auto-calculated) *</label>
+                        <input type="number" id="p_stock" required readonly value="0" style="background: #f4f4f4; color: #555; cursor: not-allowed;" placeholder="Calculated from checked size stocks">
+                    </div>
                 </div>
+
+                <!-- Primary Image URL -->
+                <div style="margin-bottom: 1.5rem; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 1.2rem;">
+                    <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Primary Image *</label>
+                    <p style="font-size: 0.75rem; color: #999; margin-bottom: 0.8rem;">Enter a URL or upload a file. This is the main card product cover image.</p>
+                    <div style="display: flex; gap: 0.8rem; align-items: center;">
+                        <input type="text" id="p_image" required value="./images/kurthi_peach.png" placeholder="./images/product.png" style="flex: 1; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                        <div style="position: relative;">
+                            <button type="button" class="btn-secondary" style="padding: 0.7rem 1.2rem; cursor: pointer;">Upload File</button>
+                            <input type="file" accept="image/*" onchange="uploadImageFile(event, 'p_image')" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extra Gallery Images -->
+                <div style="margin-bottom: 1.5rem; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 1.2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+                        <label style="margin: 0; font-weight: 500;">Gallery Images (up to 5 extra)</label>
+                        <button type="button" onclick="addGalleryImageField()" style="background: none; border: 1px solid var(--color-primary); color: var(--color-primary); padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; cursor: pointer;">+ Add Image</button>
+                    </div>
+                    <p style="font-size: 0.75rem; color: #999; margin-bottom: 0.8rem;">Provide extra URLs or upload files for the detail slider gallery.</p>
+                    <div id="galleryImagesContainer">
+                        <div class="gallery-img-row" style="display: flex; gap: 0.8rem; align-items: center; margin-bottom: 0.5rem;">
+                            <input type="text" class="gallery-img-input" placeholder="./images/angle2.png" style="flex: 1; padding: 0.7rem; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box;">
+                            <div style="position: relative;">
+                                <button type="button" class="btn-secondary" style="padding: 0.7rem 1rem; font-size:0.85rem; cursor: pointer;">Upload</button>
+                                <input type="file" accept="image/*" onchange="uploadGalleryRowFile(event, this)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sizes Available -->
+                <div style="margin-bottom: 1.5rem; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 1.2rem;">
+                    <label style="display: block; margin-bottom: 0.8rem; font-weight: 500;">Available Sizes</label>
+                    <p style="font-size: 0.75rem; color: #999; margin-bottom: 1rem;">Check each size you offer. Only checked sizes appear as selector options in the product page.</p>
+
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem;" id="sizesGrid">
+                        <!-- Sizes generated by JS -->
+                    </div>
+                </div>
+
+                <!-- Advanced Meta Attributes for Search and Filtering -->
+                <div style="margin-bottom: 1.5rem; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 1.2rem;">
+                    <label style="display: block; margin-bottom: 0.8rem; font-weight: 500;">Advanced Filters & Metadata</label>
+                    <p style="font-size: 0.75rem; color: #999; margin-bottom: 1rem;">Fill in these details to populate search indexes, search recommendations, and sidebar category filters.</p>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label>Collection</label>
+                            <input type="text" id="p_collection" placeholder="e.g. Summer Breeze" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                        </div>
+                        <div>
+                            <label>SKU</label>
+                            <input type="text" id="p_sku" placeholder="e.g. TET-ANK-004" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label>Original Price (for discount % calculation)</label>
+                            <input type="number" id="p_orig_price" min="0" placeholder="e.g. 2999" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                        </div>
+                        <div>
+                            <label>Color</label>
+                            <input type="text" id="p_color" placeholder="e.g. Mint Green" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label>Fabric</label>
+                            <select id="p_fabric" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                                <option value="">Select Fabric...</option>
+                                <option value="Cotton">Cotton</option>
+                                <option value="Rayon">Rayon</option>
+                                <option value="Linen">Linen</option>
+                                <option value="Silk">Silk</option>
+                                <option value="Georgette">Georgette</option>
+                                <option value="Viscose">Viscose</option>
+                                <option value="Chiffon">Chiffon</option>
+                                <option value="Khadi">Khadi</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Sleeve Type</label>
+                            <select id="p_sleeve" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                                <option value="">Select Sleeve...</option>
+                                <option value="Half Sleeve">Half Sleeve</option>
+                                <option value="Full Sleeve">Full Sleeve</option>
+                                <option value="Sleeveless">Sleeveless</option>
+                                <option value="Three Quarter">Three Quarter</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label>Neck Type</label>
+                            <select id="p_neck" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                                <option value="">Select Neck...</option>
+                                <option value="Round">Round</option>
+                                <option value="V Neck">V Neck</option>
+                                <option value="Collar">Collar</option>
+                                <option value="Boat Neck">Boat Neck</option>
+                                <option value="Square">Square</option>
+                                <option value="Mandarin">Mandarin</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Pattern</label>
+                            <select id="p_pattern" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                                <option value="">Select Pattern...</option>
+                                <option value="Printed">Printed</option>
+                                <option value="Solid">Solid</option>
+                                <option value="Embroidered">Embroidered</option>
+                                <option value="Floral">Floral</option>
+                                <option value="Striped">Striped</option>
+                                <option value="Block Print">Block Print</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label>Occasion</label>
+                            <select id="p_occasion" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                                <option value="">Select Occasion...</option>
+                                <option value="Daily Wear">Daily Wear</option>
+                                <option value="Office">Office</option>
+                                <option value="Festival">Festival</option>
+                                <option value="Wedding">Wedding</option>
+                                <option value="Party">Party</option>
+                                <option value="Casual">Casual</option>
+                                <option value="Traditional">Traditional</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Search Tags (comma-separated)</label>
+                            <input type="text" id="p_tags" placeholder="e.g. kurthi, cotton, embroidery, daily" style="width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1.5rem; margin-top: 1rem; background: #fff; padding: 0.8rem; border-radius: 6px; border: 1px solid #eee;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin: 0; cursor: pointer; font-size: 0.85rem;">
+                            <input type="checkbox" id="p_new_arrival" style="width:16px; height:16px; accent-color:var(--color-primary);">
+                            <span>New Arrival</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin: 0; cursor: pointer; font-size: 0.85rem;">
+                            <input type="checkbox" id="p_best_seller" style="width:16px; height:16px; accent-color:var(--color-primary);">
+                            <span>Best Seller</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin: 0; cursor: pointer; font-size: 0.85rem;">
+                            <input type="checkbox" id="p_featured" style="width:16px; height:16px; accent-color:var(--color-primary);">
+                            <span>Featured Product</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="closeModals()">Cancel</button>
                     <button type="submit" class="btn-primary">Save Product</button>

@@ -26,27 +26,180 @@ const fallbackProducts = [
 
 // --- COMPONENTS ---
 
-const Navbar = ({ cartCount, authUser, authLoading }) => {
-    const [animate, setAnimate] = useState(false);
-    
+const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onSearchSubmit, globalSearch, setGlobalSearch }) => {
+    const [animateCart, setAnimateCart] = useState(false);
+    const [animateWishlist, setAnimateWishlist] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
+    const [recentSearches, setRecentSearches] = useState([]);
+    const overlayRef = useRef(null);
+    const navigate = useNavigate();
+
     useEffect(() => {
         if (cartCount > 0) {
-            setAnimate(true);
-            const timer = setTimeout(() => setAnimate(false), 450);
+            setAnimateCart(true);
+            const timer = setTimeout(() => setAnimateCart(false), 450);
             return () => clearTimeout(timer);
         }
     }, [cartCount]);
 
+    useEffect(() => {
+        if (wishlistCount > 0) {
+            setAnimateWishlist(true);
+            const timer = setTimeout(() => setAnimateWishlist(false), 450);
+            return () => clearTimeout(timer);
+        }
+    }, [wishlistCount]);
+
+    useEffect(() => {
+        const stored = localStorage.getItem('tet_recent_searches');
+        if (stored) {
+            try { setRecentSearches(JSON.parse(stored)); } catch(e){}
+        }
+    }, []);
+
+    const addRecentSearch = (q) => {
+        if (!q.trim()) return;
+        const filtered = [q.trim(), ...recentSearches.filter(s => s.toLowerCase() !== q.trim().toLowerCase())].slice(0, 5);
+        setRecentSearches(filtered);
+        localStorage.setItem('tet_recent_searches', JSON.stringify(filtered));
+    };
+
+    const handleSearchSubmit = (q) => {
+        addRecentSearch(q);
+        setGlobalSearch(q);
+        setIsFocused(false);
+        onSearchSubmit(q);
+    };
+
+    const popularTags = ["Silk", "Cotton", "Daily Wear", "Anarkali", "Embroidered"];
+
+    const matchingProducts = (globalSearch.trim().length > 1 && Array.isArray(products))
+        ? products.filter(p => 
+            p.name.toLowerCase().includes(globalSearch.toLowerCase()) || 
+            (p.category && p.category.toLowerCase().includes(globalSearch.toLowerCase())) || 
+            (p.tags && p.tags.toLowerCase().includes(globalSearch.toLowerCase()))
+          ).slice(0, 4)
+        : [];
+
     return (
-        <nav className="navbar">
-            <div className="nav-container">
-                <Link to="/" className="logo">The Ethnic Touch</Link>
-                <ul className="nav-links">
+        <nav className="navbar" style={{ padding: '0.8rem 5%' }}>
+            <div className="nav-container" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', width: '100%' }}>
+                <Link to="/" onClick={() => setGlobalSearch('')} className="logo" style={{ flexShrink: 0 }}>The Ethnic Touch</Link>
+                
+                {/* Search Container */}
+                <div className="search-container" ref={overlayRef} style={{ flex: 1, maxWidth: '350px', margin: '0 auto' }}>
+                    <div className="search-input-wrapper">
+                        <span className="search-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </span>
+                        <input 
+                            type="text" 
+                            className="search-input" 
+                            placeholder="Search wardrobe, fabrics..."
+                            value={globalSearch}
+                            onChange={(e) => setGlobalSearch(e.target.value)}
+                            onFocus={() => setIsFocused(true)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSearchSubmit(globalSearch);
+                            }}
+                        />
+                        {globalSearch && (
+                            <button 
+                                onClick={() => setGlobalSearch('')} 
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '1.1rem', padding: '0 4px' }}
+                            >
+                                &times;
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Suggestions Overlay */}
+                    {isFocused && (
+                        <div className="search-suggestions-overlay" style={{ left: 0, right: 0, width: '100%' }}>
+                            {globalSearch.trim().length <= 1 ? (
+                                <div>
+                                    {recentSearches.length > 0 && (
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <div className="suggestion-section-title">Recent Searches</div>
+                                            <div className="suggestion-tags">
+                                                {recentSearches.map((s, idx) => (
+                                                    <span 
+                                                        key={idx} 
+                                                        className="suggestion-tag-chip"
+                                                        onClick={() => handleSearchSubmit(s)}
+                                                    >
+                                                        {s}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <div className="suggestion-section-title">Trending Now</div>
+                                        <div className="suggestion-tags">
+                                            {popularTags.map((tag, idx) => (
+                                                <span 
+                                                    key={idx} 
+                                                    className="suggestion-tag-chip"
+                                                    onClick={() => handleSearchSubmit(tag)}
+                                                >
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="suggestion-section-title">Suggested Products</div>
+                                    {matchingProducts.length === 0 ? (
+                                        <div style={{ fontSize: '0.85rem', color: '#999', padding: '8px 0' }}>No products matching "{globalSearch}"</div>
+                                    ) : (
+                                        <div className="matching-products-list">
+                                            {matchingProducts.map(p => (
+                                                <Link 
+                                                    key={p.id} 
+                                                    to={`/product/${p.id}`} 
+                                                    className="matching-product-item"
+                                                    onClick={() => setIsFocused(false)}
+                                                >
+                                                    <img src={p.imageUrl} className="matching-product-img" alt={p.name} />
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div className="matching-product-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                                                        <div className="matching-product-price">₹{p.price.toLocaleString('en-IN')}</div>
+                                                    </div>
+                                                </Link>
+                                            ))}
+                                            <div 
+                                                onClick={() => handleSearchSubmit(globalSearch)}
+                                                style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: '600', padding: '6px 0', borderTop: '1px solid #f5f5f5', marginTop: '4px', cursor: 'pointer' }}
+                                            >
+                                                View all matches &rarr;
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <ul className="nav-links" style={{ flexShrink: 0, margin: 0, display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
                     <li><Link to="/">Home</Link></li>
-                    <li><a href="/#collection">Collection</a></li>
+                    <li><Link to="/shop">Shop</Link></li>
+
+                    
+                    {/* Wishlist Link */}
                     <li>
-                        <Link to="/cart" className="cart-btn" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                            Cart <span className={animate ? 'cart-animated' : ''} style={{ marginLeft: '4px' }}>({cartCount})</span>
+                        <Link to="/wishlist" className={`wishlist-btn ${animateWishlist ? 'wishlist-badge' : ''}`}>
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill={wishlistCount > 0 ? "var(--color-primary)" : "none"} style={{ color: wishlistCount > 0 ? "var(--color-primary)" : "currentColor", transition: 'all 0.3s ease' }}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            <span>Wishlist ({wishlistCount})</span>
+                        </Link>
+                    </li>
+
+                    <li>
+                        <Link to="/cart" className="cart-btn">
+                            <span className={animateCart ? 'cart-animated' : ''}>Cart ({cartCount})</span>
                         </Link>
                     </li>
                     {authLoading ? (
@@ -58,6 +211,10 @@ const Navbar = ({ cartCount, authUser, authLoading }) => {
                     )}
                 </ul>
             </div>
+            {/* Click outside listener */}
+            {isFocused && (
+                <div onClick={() => setIsFocused(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} />
+            )}
         </nav>
     );
 };
@@ -74,47 +231,1051 @@ const Footer = () => (
 
 // --- PAGES ---
 
-const Home = ({ products, loading }) => (
-    <div>
-        <header id="home" className="hero">
-            <div className="hero-content">
-                <h1>Minimalist Indo-Western Elegance</h1>
-                <p>A highly curated, premium collection of pastel kurthis crafted for the modern woman. Delicate, fresh, and beautiful.</p>
-                <a href="#collection" className="btn btn-primary">Shop the Collection</a>
-            </div>
-            <div className="hero-image">
-                <img src="./images/hero_banner.png" alt="Premium Indo-Western Pastel Kurthi Fashion Model" />
-            </div>
-        </header>
+const RenderProductCard = ({ product, wishlist, toggleWishlist }) => {
+    const isWished = wishlist.some(item => item.id === product.id);
 
-        <section id="collection" className="collection-section">
-            <div className="section-header">
-                <h2>Our Premium Selection</h2>
-                <p>Meticulously designed for unmatched quality and comfort.</p>
-            </div>
-            <div className="product-grid">
-                {loading ? (
-                    <div className="loading-state" style={{gridColumn: '1/-1', textAlign:'center'}}>Loading premium selection...</div>
-                ) : (
-                    products.map(product => (
-                        <Link to={`/product/${product.id}`} key={product.id} className="product-card">
-                            <div className="product-image-container">
-                                <img src={product.imageUrl} alt={product.name} className="product-image" />
+    return (
+        <div style={{ position: 'relative' }}>
+            <Link to={`/product/${product.id}`} className="product-card" style={{ display: 'block' }}>
+                <div className="product-image-container">
+                    <img src={product.imageUrl} alt={product.name} className="product-image" />
+                </div>
+                <div className="product-info">
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>
+                        <h3 className="product-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{product.name}</h3>
+                        <p className="product-desc" style={{ marginTop: '0.2rem' }}>{product.description}</p>
+                        
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                            {product.isNewArrival && (
+                                <span style={{ fontSize: '0.65rem', background: '#faeedd', color: '#9c6c40', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>New</span>
+                            )}
+                            {product.isBestSeller && (
+                                <span style={{ fontSize: '0.65rem', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>Best Seller</span>
+                            )}
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                        <div className="product-price">₹{product.price.toLocaleString('en-IN')}</div>
+                        {product.originalPrice > product.price && (
+                            <div style={{ textDecoration: 'line-through', color: '#999', fontSize: '0.8rem', marginTop: '2px' }}>
+                                ₹{product.originalPrice.toLocaleString('en-IN')}
                             </div>
-                            <div className="product-info">
-                                <div>
-                                    <h3 className="product-name">{product.name}</h3>
-                                    <p className="product-desc">{product.description}</p>
+                        )}
+                    </div>
+                </div>
+            </Link>
+
+            <button 
+                className={`wishlist-heart-btn ${isWished ? 'active' : ''}`}
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleWishlist(product);
+                }}
+                aria-label={isWished ? "Remove from wishlist" : "Add to wishlist"}
+            >
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+            </button>
+        </div>
+    );
+};
+
+const FilterSidebarContent = ({
+    selectedCategories, setSelectedCategories,
+    selectedSizes, setSelectedSizes,
+    selectedFabrics, setSelectedFabrics,
+    selectedPatterns, setSelectedPatterns,
+    selectedSleeves, setSelectedSleeves,
+    selectedOccasions, setSelectedOccasions,
+    selectedCollections, setSelectedCollections,
+    selectedColors, setSelectedColors,
+    onlyNewArrivals, setOnlyNewArrivals,
+    onlyBestSellers, setOnlyBestSellers,
+    priceRange, setPriceRange
+}) => {
+    const handleCheckboxToggle = (list, setList, val) => {
+        if (list.includes(val)) {
+            setList(list.filter(item => item !== val));
+        } else {
+            setList([...list, val]);
+        }
+    };
+
+    const categories = ["Straight Cut", "Anarkali", "Tunic", "Fusion", "Palazzo Set", "A-Line"];
+    const sizes = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
+    const fabrics = ["Cotton", "Rayon", "Linen", "Silk", "Georgette", "Viscose", "Chiffon", "Khadi"];
+    const sleeves = ["Half Sleeve", "Full Sleeve", "Sleeveless", "Three Quarter"];
+    const patterns = ["Printed", "Solid", "Embroidered", "Floral", "Striped", "Block Print"];
+    const occasions = ["Daily Wear", "Office", "Festival", "Wedding", "Party", "Casual", "Traditional"];
+    const collections = ["Festive Glow", "Summer Breeze", "Lavender Dream", "Monsoon Magic"];
+    const colors = ["Peach", "Mint Green", "Lavender", "Blue", "Pink", "Red", "Yellow", "White", "Black"];
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="filter-section">
+                <div className="filter-title">Specials</div>
+                <div className="filter-options">
+                    <label className="filter-checkbox-label">
+                        <input 
+                            type="checkbox" 
+                            checked={onlyNewArrivals}
+                            onChange={(e) => setOnlyNewArrivals(e.target.checked)}
+                        />
+                        <span>New Arrivals Only</span>
+                    </label>
+                    <label className="filter-checkbox-label">
+                        <input 
+                            type="checkbox" 
+                            checked={onlyBestSellers}
+                            onChange={(e) => setOnlyBestSellers(e.target.checked)}
+                        />
+                        <span>Best Sellers Only</span>
+                    </label>
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Collection</div>
+                <div className="filter-options">
+                    {collections.map(col => (
+                        <label key={col} className="filter-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedCollections.includes(col)}
+                                onChange={() => handleCheckboxToggle(selectedCollections, setSelectedCollections, col)}
+                            />
+                            <span>{col}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Category</div>
+                <div className="filter-options">
+                    {categories.map(c => (
+                        <label key={c} className="filter-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedCategories.includes(c)}
+                                onChange={() => handleCheckboxToggle(selectedCategories, setSelectedCategories, c)}
+                            />
+                            <span>{c}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Sizes</div>
+                <div className="filter-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', maxHeight: 'none' }}>
+                    {sizes.map(s => {
+                        const active = selectedSizes.includes(s);
+                        return (
+                            <button
+                                key={s}
+                                onClick={() => handleCheckboxToggle(selectedSizes, setSelectedSizes, s)}
+                                style={{
+                                    padding: '6px 0',
+                                    border: `1.5px solid ${active ? 'var(--color-primary)' : 'rgba(0,0,0,0.08)'}`,
+                                    background: active ? '#fffcf9' : '#FFF',
+                                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                                    borderRadius: '6px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: '500',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >
+                                {s}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Price Range</div>
+                <div className="filter-options">
+                    {[
+                        { label: 'All Prices', value: 'all' },
+                        { label: 'Under ₹2,000', value: 'under_2k' },
+                        { label: '₹2,000 - ₹4,999', value: '2k_5k' },
+                        { label: '₹5,000 - ₹9,999', value: '5k_10k' },
+                        { label: '₹10,000+', value: 'over_10k' }
+                    ].map(opt => (
+                        <label key={opt.value} className="filter-checkbox-label">
+                            <input 
+                                type="radio" 
+                                checked={priceRange === opt.value}
+                                onChange={() => setPriceRange(opt.value)}
+                            />
+                            <span>{opt.label}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Fabric</div>
+                <div className="filter-options">
+                    {fabrics.map(f => (
+                        <label key={f} className="filter-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedFabrics.includes(f)}
+                                onChange={() => handleCheckboxToggle(selectedFabrics, setSelectedFabrics, f)}
+                            />
+                            <span>{f}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Color</div>
+                <div className="filter-options">
+                    {colors.map(col => (
+                        <label key={col} className="filter-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedColors.includes(col)}
+                                onChange={() => handleCheckboxToggle(selectedColors, setSelectedColors, col)}
+                            />
+                            <span>{col}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Occasion</div>
+                <div className="filter-options">
+                    {occasions.map(o => (
+                        <label key={o} className="filter-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedOccasions.includes(o)}
+                                onChange={() => handleCheckboxToggle(selectedOccasions, setSelectedOccasions, o)}
+                            />
+                            <span>{o}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div className="filter-title">Sleeve</div>
+                <div className="filter-options">
+                    {sleeves.map(sl => (
+                        <label key={sl} className="filter-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedSleeves.includes(sl)}
+                                onChange={() => handleCheckboxToggle(selectedSleeves, setSelectedSleeves, sl)}
+                            />
+                            <span>{sl}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="filter-section" style={{ borderBottom: 'none', marginBottom: 0 }}>
+                <div className="filter-title">Pattern</div>
+                <div className="filter-options">
+                    {patterns.map(p => (
+                        <label key={p} className="filter-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedPatterns.includes(p)}
+                                onChange={() => handleCheckboxToggle(selectedPatterns, setSelectedPatterns, p)}
+                            />
+                            <span>{p}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const CustomSelect = ({ value, options, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const wrapperRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedOption = options.find(opt => opt.value === value) || options[0];
+
+    return (
+        <div className="custom-select-wrapper" ref={wrapperRef}>
+            <div className={`custom-select-trigger ${isOpen ? 'open' : ''}`} onClick={() => setIsOpen(!isOpen)}>
+                <span>{selectedOption.label}</span>
+                <svg className={`sort-select-icon ${isOpen ? 'rotated' : ''}`} viewBox="0 0 16 16" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 8 11 13 6"></polyline></svg>
+            </div>
+            {isOpen && (
+                <div className="custom-select-options">
+                    {options.map(opt => (
+                        <div 
+                            key={opt.value} 
+                            className={`custom-select-option ${value === opt.value ? 'selected' : ''}`}
+                            onClick={() => {
+                                onChange(opt.value);
+                                setIsOpen(false);
+                            }}
+                        >
+                            {opt.label}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGlobalSearch }) => {
+    const [products, setProducts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [totalProducts, setTotalProducts] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [sort, setSort] = useState('newest');
+
+    const [selectedCategories, setSelectedCategories] = useState([]);
+    const [selectedSizes, setSelectedSizes] = useState([]);
+    const [selectedFabrics, setSelectedFabrics] = useState([]);
+    const [selectedPatterns, setSelectedPatterns] = useState([]);
+    const [selectedSleeves, setSelectedSleeves] = useState([]);
+    const [selectedOccasions, setSelectedOccasions] = useState([]);
+    const [selectedCollections, setSelectedCollections] = useState([]);
+    const [selectedColors, setSelectedColors] = useState([]);
+    const [onlyNewArrivals, setOnlyNewArrivals] = useState(false);
+    const [onlyBestSellers, setOnlyBestSellers] = useState(false);
+    const [priceRange, setPriceRange] = useState('all');
+
+    const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+    const location = ReactRouterDOM.useLocation();
+    const navigate = ReactRouterDOM.useNavigate();
+    const isFirstRender = useRef(true);
+
+    // Map HashRouter query parameters directly to active filter states on load/route updates
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        
+        const category = params.get('category');
+        setSelectedCategories(category ? category.split(',') : []);
+        
+        const size = params.get('sizes');
+        setSelectedSizes(size ? size.split(',') : []);
+        
+        const fabric = params.get('fabrics') || params.get('fabric');
+        setSelectedFabrics(fabric ? fabric.split(',') : []);
+        
+        const pattern = params.get('patterns') || params.get('pattern');
+        setSelectedPatterns(pattern ? pattern.split(',') : []);
+        
+        const sleeve = params.get('sleeveTypes') || params.get('sleeve_type');
+        setSelectedSleeves(sleeve ? sleeve.split(',') : []);
+        
+        const occasion = params.get('occasions') || params.get('occasion');
+        setSelectedOccasions(occasion ? occasion.split(',') : []);
+        
+        const collection = params.get('collection');
+        setSelectedCollections(collection ? collection.split(',') : []);
+        
+        const colors = params.get('colors');
+        setSelectedColors(colors ? colors.split(',') : []);
+        
+        setOnlyNewArrivals(params.get('newArrival') === 'true');
+        setOnlyBestSellers(params.get('bestSeller') === 'true');
+        
+        const pRange = params.get('priceRange') || params.get('price_range');
+        if (pRange) {
+            setPriceRange(pRange);
+        } else {
+            const minP = params.get('minPrice') || params.get('min_price');
+            const maxP = params.get('maxPrice') || params.get('max_price');
+            if (maxP === '1999') setPriceRange('under_2k');
+            else if (minP === '2000' && maxP === '4999') setPriceRange('2k_5k');
+            else if (minP === '5000' && maxP === '9999') setPriceRange('5k_10k');
+            else if (minP === '10000') setPriceRange('over_10k');
+            else setPriceRange('all');
+        }
+        
+        setCurrentPage(1);
+    }, [location.search]);
+
+    // Push local filter state changes to URL to support copy-paste deep links
+    useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+
+        const params = new URLSearchParams();
+        if (selectedCategories.length > 0) params.set('category', selectedCategories.join(','));
+        if (selectedSizes.length > 0) params.set('sizes', selectedSizes.join(','));
+        if (selectedFabrics.length > 0) params.set('fabrics', selectedFabrics.join(','));
+        if (selectedPatterns.length > 0) params.set('patterns', selectedPatterns.join(','));
+        if (selectedSleeves.length > 0) params.set('sleeveTypes', selectedSleeves.join(','));
+        if (selectedOccasions.length > 0) params.set('occasions', selectedOccasions.join(','));
+        if (selectedCollections.length > 0) params.set('collection', selectedCollections.join(','));
+        if (selectedColors.length > 0) params.set('colors', selectedColors.join(','));
+        if (onlyNewArrivals) params.set('newArrival', 'true');
+        if (onlyBestSellers) params.set('bestSeller', 'true');
+        if (priceRange && priceRange !== 'all') params.set('priceRange', priceRange);
+
+        if (globalSearch.trim()) {
+            params.set('q', globalSearch.trim());
+        }
+
+        const newSearch = params.toString();
+        const currentSearch = location.search.replace(/^\?/, '');
+        
+        if (newSearch !== currentSearch) {
+            navigate('/shop?' + newSearch, { replace: true });
+        }
+    }, [
+        selectedCategories,
+        selectedSizes,
+        selectedFabrics,
+        selectedPatterns,
+        selectedSleeves,
+        selectedOccasions,
+        selectedCollections,
+        selectedColors,
+        onlyNewArrivals,
+        onlyBestSellers,
+        priceRange,
+        globalSearch
+    ]);
+
+    useEffect(() => {
+        let active = true;
+        
+        const fetchFilteredProducts = async () => {
+            setLoading(true);
+            const params = new URLSearchParams();
+            params.append('paginated', 'true');
+            params.append('page', currentPage.toString());
+            params.append('limit', '8');
+            
+            // Map React sort state to Go backend sortBy keys
+            let sortByVal = sort;
+            if (sort === 'rating_desc') sortByVal = 'rating';
+            params.append('sortBy', sortByVal);
+
+            if (globalSearch.trim()) {
+                params.append('q', globalSearch.trim());
+            }
+
+            if (selectedCategories.length > 0) {
+                params.append('category', selectedCategories.join(','));
+            }
+            if (selectedSizes.length > 0) {
+                params.append('sizes', selectedSizes.join(','));
+            }
+            if (selectedFabrics.length > 0) {
+                params.append('fabrics', selectedFabrics.join(','));
+            }
+            if (selectedPatterns.length > 0) {
+                params.append('patterns', selectedPatterns.join(','));
+            }
+            if (selectedSleeves.length > 0) {
+                params.append('sleeveTypes', selectedSleeves.join(','));
+            }
+            if (selectedOccasions.length > 0) {
+                params.append('occasions', selectedOccasions.join(','));
+            }
+            if (selectedCollections.length > 0) {
+                params.append('collection', selectedCollections.join(','));
+            }
+            if (selectedColors.length > 0) {
+                params.append('colors', selectedColors.join(','));
+            }
+            
+            if (onlyNewArrivals) params.append('newArrival', 'true');
+            if (onlyBestSellers) params.append('bestSeller', 'true');
+
+            if (priceRange === 'under_2k') {
+                params.append('maxPrice', '1999');
+            } else if (priceRange === '2k_5k') {
+                params.append('minPrice', '2000');
+                params.append('maxPrice', '4999');
+            } else if (priceRange === '5k_10k') {
+                params.append('minPrice', '5000');
+                params.append('maxPrice', '9999');
+            } else if (priceRange === 'over_10k') {
+                params.append('minPrice', '10000');
+            }
+
+            try {
+                const res = await fetch(`/api/products?${params.toString()}`);
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                const data = await res.json();
+                
+                if (active) {
+                    if (data && Array.isArray(data.products)) {
+                        setProducts(data.products);
+                        setTotalProducts(data.total);
+                        setTotalPages(data.pages);
+                    } else if (Array.isArray(data)) {
+                        setProducts(data);
+                        setTotalProducts(data.length);
+                        setTotalPages(1);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch filtered products, falling back to local filtration:", err);
+                if (active && Array.isArray(productsGlobal)) {
+                    let list = [...productsGlobal];
+
+                    if (globalSearch.trim()) {
+                        const s = globalSearch.toLowerCase();
+                        list = list.filter(p => 
+                            p.name.toLowerCase().includes(s) || 
+                            p.description.toLowerCase().includes(s) ||
+                            (p.category && p.category.toLowerCase().includes(s)) ||
+                            (p.tags && p.tags.toLowerCase().includes(s))
+                        );
+                    }
+
+                    if (selectedCategories.length > 0) {
+                        list = list.filter(p => selectedCategories.includes(p.category));
+                    }
+                    if (selectedSizes.length > 0) {
+                        list = list.filter(p => p.sizes && p.sizes.some(sz => selectedSizes.includes(sz)));
+                    }
+                    if (selectedFabrics.length > 0) {
+                        list = list.filter(p => p.fabric && selectedFabrics.includes(p.fabric));
+                    }
+                    if (selectedPatterns.length > 0) {
+                        list = list.filter(p => p.pattern && selectedPatterns.includes(p.pattern));
+                    }
+                    if (selectedSleeves.length > 0) {
+                        list = list.filter(p => p.sleeveType && selectedSleeves.includes(p.sleeveType));
+                    }
+                    if (selectedOccasions.length > 0) {
+                        list = list.filter(p => p.occasion && selectedOccasions.includes(p.occasion));
+                    }
+                    if (selectedCollections.length > 0) {
+                        list = list.filter(p => p.collection && selectedCollections.includes(p.collection));
+                    }
+                    if (selectedColors.length > 0) {
+                        list = list.filter(p => p.color && selectedColors.includes(p.color));
+                    }
+                    if (onlyNewArrivals) {
+                        list = list.filter(p => p.isNewArrival);
+                    }
+                    if (onlyBestSellers) {
+                        list = list.filter(p => p.isBestSeller);
+                    }
+
+                    if (priceRange === 'under_2k') {
+                        list = list.filter(p => p.price <= 1999);
+                    } else if (priceRange === '2k_5k') {
+                        list = list.filter(p => p.price >= 2000 && p.price <= 4999);
+                    } else if (priceRange === '5k_10k') {
+                        list = list.filter(p => p.price >= 5000 && p.price <= 9999);
+                    } else if (priceRange === 'over_10k') {
+                        list = list.filter(p => p.price >= 10000);
+                    }
+
+                    if (sort === 'price_asc') {
+                        list.sort((a,b) => a.price - b.price);
+                    } else if (sort === 'price_desc') {
+                        list.sort((a,b) => b.price - a.price);
+                    } else if (sort === 'rating_desc') {
+                        list.sort((a,b) => (b.avgRating || 0) - (a.avgRating || 0));
+                    } else {
+                        list.sort((a,b) => b.id.localeCompare(a.id));
+                    }
+
+                    const limit = 8;
+                    const total = list.length;
+                    const pages = Math.ceil(total / limit) || 1;
+                    const offset = (currentPage - 1) * limit;
+                    
+                    setProducts(list.slice(offset, offset + limit));
+                    setTotalProducts(total);
+                    setTotalPages(pages);
+                }
+            } finally {
+                if (active) setLoading(false);
+            }
+        };
+
+        fetchFilteredProducts();
+        return () => { active = false; };
+    }, [currentPage, sort, selectedCategories, selectedSizes, selectedFabrics, selectedPatterns, selectedSleeves, selectedOccasions, selectedCollections, selectedColors, onlyNewArrivals, onlyBestSellers, priceRange, globalSearch, productsGlobal]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [sort, selectedCategories, selectedSizes, selectedFabrics, selectedPatterns, selectedSleeves, selectedOccasions, selectedCollections, selectedColors, onlyNewArrivals, onlyBestSellers, priceRange, globalSearch]);
+
+    const activeChips = [];
+    selectedCategories.forEach(c => activeChips.push({ label: `Category: ${c}`, type: 'category', value: c }));
+    selectedSizes.forEach(s => activeChips.push({ label: `Size: ${s}`, type: 'size', value: s }));
+    selectedFabrics.forEach(f => activeChips.push({ label: `Fabric: ${f}`, type: 'fabric', value: f }));
+    selectedPatterns.forEach(p => activeChips.push({ label: `Pattern: ${p}`, type: 'pattern', value: p }));
+    selectedSleeves.forEach(sl => activeChips.push({ label: `Sleeve: ${sl}`, type: 'sleeve', value: sl }));
+    selectedOccasions.forEach(o => activeChips.push({ label: `Occasion: ${o}`, type: 'occasion', value: o }));
+    selectedCollections.forEach(col => activeChips.push({ label: `Collection: ${col}`, type: 'collection', value: col }));
+    selectedColors.forEach(color => activeChips.push({ label: `Color: ${color}`, type: 'colors', value: color }));
+    if (onlyNewArrivals) activeChips.push({ label: 'New Arrivals Only', type: 'newArrival', value: true });
+    if (onlyBestSellers) activeChips.push({ label: 'Best Sellers Only', type: 'bestSeller', value: true });
+
+    if (priceRange !== 'all') {
+        let label = 'Price: All';
+        if (priceRange === 'under_2k') label = 'Price: Under ₹2,000';
+        else if (priceRange === '2k_5k') label = 'Price: ₹2,000 - ₹4,999';
+        else if (priceRange === '5k_10k') label = 'Price: ₹5,000 - ₹9,999';
+        else if (priceRange === 'over_10k') label = 'Price: ₹10,000+';
+        activeChips.push({ label, type: 'priceRange', value: priceRange });
+    }
+    if (globalSearch.trim()) {
+        activeChips.push({ label: `Search: "${globalSearch}"`, type: 'search', value: globalSearch });
+    }
+
+    const removeChip = (chip) => {
+        if (chip.type === 'category') setSelectedCategories(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'size') setSelectedSizes(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'fabric') setSelectedFabrics(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'pattern') setSelectedPatterns(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'sleeve') setSelectedSleeves(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'occasion') setSelectedOccasions(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'collection') setSelectedCollections(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'colors') setSelectedColors(prev => prev.filter(v => v !== chip.value));
+        else if (chip.type === 'newArrival') setOnlyNewArrivals(false);
+        else if (chip.type === 'bestSeller') setOnlyBestSellers(false);
+        else if (chip.type === 'priceRange') setPriceRange('all');
+        else if (chip.type === 'search') setGlobalSearch('');
+    };
+
+    const clearAllFilters = () => {
+        setSelectedCategories([]);
+        setSelectedSizes([]);
+        setSelectedFabrics([]);
+        setSelectedPatterns([]);
+        setSelectedSleeves([]);
+        setSelectedOccasions([]);
+        setSelectedCollections([]);
+        setSelectedColors([]);
+        setOnlyNewArrivals(false);
+        setOnlyBestSellers(false);
+        setPriceRange('all');
+        setGlobalSearch('');
+    };
+
+    const handlePageChange = (p) => {
+        setCurrentPage(p);
+        const el = document.getElementById('shop-top-anchor');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    return (
+        <div>
+            <span id="shop-top-anchor" style={{ display: 'block', height: '1px' }}></span>
+
+            <div className="catalog-page-container">
+                {/* Desktop Sidebar */}
+                <aside className="catalog-sidebar">
+                    <div style={{ position: 'sticky', top: '100px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f0efee', paddingBottom: '0.5rem' }}>
+                            <h3 style={{ textTransform: 'uppercase', fontSize: '0.85rem', fontWeight: '700', letterSpacing: '1px' }}>Filters</h3>
+                            {activeChips.length > 0 && (
+                                <button onClick={clearAllFilters} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}>Clear All</button>
+                            )}
+                        </div>
+                        <FilterSidebarContent 
+                            selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
+                            selectedSizes={selectedSizes} setSelectedSizes={setSelectedSizes}
+                            selectedFabrics={selectedFabrics} setSelectedFabrics={setSelectedFabrics}
+                            selectedPatterns={selectedPatterns} setSelectedPatterns={setSelectedPatterns}
+                            selectedSleeves={selectedSleeves} setSelectedSleeves={setSelectedSleeves}
+                            selectedOccasions={selectedOccasions} setSelectedOccasions={setSelectedOccasions}
+                            selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections}
+                            selectedColors={selectedColors} setSelectedColors={setSelectedColors}
+                            onlyNewArrivals={onlyNewArrivals} setOnlyNewArrivals={setOnlyNewArrivals}
+                            onlyBestSellers={onlyBestSellers} setOnlyBestSellers={setOnlyBestSellers}
+                            priceRange={priceRange} setPriceRange={setPriceRange}
+                        />
+                    </div>
+                </aside>
+
+                {/* Main Content Area */}
+                <main className="catalog-main-content">
+                    <div className="catalog-toolbar">
+                        <div className="toolbar-info">
+                            Showing <strong>{products.length}</strong> of <strong>{totalProducts}</strong> products
+                        </div>
+                        <div className="toolbar-actions">
+                            <button 
+                                className="mobile-filter-trigger" 
+                                onClick={() => setMobileFilterOpen(true)}
+                            >
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                                <span>Filters</span>
+                            </button>
+
+                            <CustomSelect 
+                                value={sort}
+                                options={[
+                                    { value: 'newest', label: 'New Arrivals' },
+                                    { value: 'price_asc', label: 'Price: Low to High' },
+                                    { value: 'price_desc', label: 'Price: High to Low' },
+                                    { value: 'rating_desc', label: 'Top Rated' }
+                                ]}
+                                onChange={setSort}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Active Chips Bar */}
+                    {activeChips.length > 0 && (
+                        <div className="active-chips-container">
+                            {activeChips.map((chip, idx) => (
+                                <span className="active-chip" key={idx}>
+                                    {chip.label}
+                                    <button className="active-chip-remove" onClick={() => removeChip(chip)}>&times;</button>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Product Grid */}
+                    {loading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '30vh' }}>
+                            <p style={{ color: '#8c8883', fontSize: '1rem', fontStyle: 'italic' }}>Curating products...</p>
+                        </div>
+                    ) : products.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '5rem 0', background: '#fff', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.02)' }}>
+                            <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: '400', marginBottom: '0.5rem' }}>No products found</h3>
+                            <p style={{ color: '#8c8883', fontSize: '0.95rem' }}>Try clearing some filters or searching for something else.</p>
+                        </div>
+                    ) : (
+                        <div>
+                            <div className="product-grid">
+                                {products.map(product => (
+                                    <RenderProductCard 
+                                        key={product.id} 
+                                        product={product} 
+                                        wishlist={wishlist} 
+                                        toggleWishlist={toggleWishlist} 
+                                    />
+                                ))}
+                            </div>
+
+                            {/* Pagination Controls */}
+                            {totalPages > 1 && (
+                                <div className="catalog-pagination">
+                                    <button 
+                                        className="pagination-btn"
+                                        disabled={currentPage === 1}
+                                        onClick={() => handlePageChange(currentPage - 1)}
+                                    >
+                                        &larr;
+                                    </button>
+                                    
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                                        <button
+                                            key={p}
+                                            className={`pagination-btn ${p === currentPage ? 'active' : ''}`}
+                                            onClick={() => handlePageChange(p)}
+                                        >
+                                            {p}
+                                        </button>
+                                    ))}
+
+                                    <button 
+                                        className="pagination-btn"
+                                        disabled={currentPage === totalPages}
+                                        onClick={() => handlePageChange(currentPage + 1)}
+                                    >
+                                        &rarr;
+                                    </button>
                                 </div>
-                                <div className="product-price">₹{product.price.toLocaleString('en-IN')}</div>
+                            )}
+                        </div>
+                    )}
+                </main>
+            </div>
+
+            {/* Mobile Filter Drawer bottom sheet */}
+            <div className={`mobile-filter-drawer ${mobileFilterOpen ? 'show' : ''}`}>
+                <div className="mobile-filter-drawer-content">
+                    <div className="mobile-drawer-header">
+                        <h3 style={{ textTransform: 'uppercase', fontSize: '1rem', fontWeight: '700', letterSpacing: '0.5px' }}>Filters</h3>
+                        <button 
+                            onClick={() => setMobileFilterOpen(false)}
+                            style={{ background: 'none', border: 'none', fontSize: '1.8rem', cursor: 'pointer', color: '#999', padding: 0 }}
+                        >
+                            &times;
+                        </button>
+                    </div>
+                    <FilterSidebarContent 
+                        selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
+                        selectedSizes={selectedSizes} setSelectedSizes={setSelectedSizes}
+                        selectedFabrics={selectedFabrics} setSelectedFabrics={setSelectedFabrics}
+                        selectedPatterns={selectedPatterns} setSelectedPatterns={setSelectedPatterns}
+                        selectedSleeves={selectedSleeves} setSelectedSleeves={setSelectedSleeves}
+                        selectedOccasions={selectedOccasions} setSelectedOccasions={setSelectedOccasions}
+                        selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections}
+                        selectedColors={selectedColors} setSelectedColors={setSelectedColors}
+                        onlyNewArrivals={onlyNewArrivals} setOnlyNewArrivals={setOnlyNewArrivals}
+                        onlyBestSellers={onlyBestSellers} setOnlyBestSellers={setOnlyBestSellers}
+                        priceRange={priceRange} setPriceRange={setPriceRange}
+                    />
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={() => setMobileFilterOpen(false)}
+                        style={{ width: '100%', marginTop: '2rem', padding: '0.8rem 0', borderRadius: '8px' }}
+                    >
+                        Apply Filters ({totalProducts})
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
+    const bestSellers = React.useMemo(() => {
+        return (productsGlobal || []).filter(p => p.isBestSeller).slice(0, 4);
+    }, [productsGlobal]);
+
+    const newArrivals = React.useMemo(() => {
+        return (productsGlobal || []).filter(p => p.isNewArrival).slice(0, 4);
+    }, [productsGlobal]);
+
+    return (
+        <div>
+            {/* Editorial Hero Banner */}
+            <header className="hero" style={{ minHeight: '85vh', paddingTop: '120px', paddingBottom: '60px' }}>
+                <div className="hero-content">
+                    <span style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '3px', color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '1rem' }}>Handcrafted Luxury</span>
+                    <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 'clamp(2.5rem, 5vw, 4rem)', fontWeight: '400', lineHeight: '1.1', marginBottom: '1.5rem' }}>Minimalist Indo-Western Silhouette</h1>
+                    <p style={{ fontSize: '1.1rem', color: 'var(--color-text-light)', marginBottom: '2.5rem', lineHeight: '1.6' }}>A curated destination for timeless pastel aesthetics, tailored meticulously with pure breathable fabrics for the contemporary woman.</p>
+                    <Link to="/shop" className="btn btn-primary" style={{ padding: '0.9rem 2.5rem', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.8rem' }}>Browse Shop</Link>
+                </div>
+                <div className="hero-image" style={{ flex: '1.2', position: 'relative', borderRadius: '24px', overflow: 'hidden', height: '60vh', background: 'var(--color-peach)' }}>
+                    <img src="./images/hero_banner.png" alt="Premium Indo-Western Pastel Kurthi Fashion Model" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+            </header>
+
+            {/* Shop by Category */}
+            <section className="home-section" style={{ backgroundColor: '#FAF8F5', paddingTop: '4rem', paddingBottom: '4rem' }}>
+                <div className="home-section-header">
+                    <h2>Shop by Category</h2>
+                    <p>Discover boutique silhouettes, tailored for every occasion and style preference</p>
+                </div>
+                <div className="home-category-grid">
+                    {[
+                        { name: 'Straight Cut', label: 'Straight Cut', desc: 'Crisp & Modern', image: './images/kurthi_peach.png', color: 'var(--color-peach)' },
+                        { name: 'Anarkali', label: 'Anarkali Set', desc: 'Flowing Grace', image: './images/kurthi_mint.png', color: 'var(--color-mint)' },
+                        { name: 'Tunic', label: 'Tunic Dress', desc: 'Casual Comfort', image: './images/kurthi_lavender.png', color: 'var(--color-lavender)' },
+                        { name: 'Fusion', label: 'Fusion Wear', desc: 'Indo-Western Styles', image: './images/kurthi_blue.png', color: 'var(--color-blue)' }
+                    ].map(cat => (
+                        <Link to={`/shop?category=${cat.name}`} key={cat.name} className="home-category-card">
+                            <div className="home-category-img-container" style={{ backgroundColor: cat.color }}>
+                                <img src={cat.image} alt={cat.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                            <div className="home-category-overlay">
+                                <span>{cat.desc}</span>
+                                <h3>{cat.label}</h3>
                             </div>
                         </Link>
-                    ))
+                    ))}
+                </div>
+            </section>
+
+            {/* Best Sellers Section */}
+            <section className="home-section">
+                <div className="home-section-header">
+                    <h2>Most Coveted Styles</h2>
+                    <p>Highly sought-after silhouettes curated by our boutique designers for timeless appeal</p>
+                </div>
+                {bestSellers.length === 0 ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '20vh' }}>
+                        <p style={{ color: '#8c8883', fontStyle: 'italic' }}>Curating our best sellers...</p>
+                    </div>
+                ) : (
+                    <div>
+                        <div className="product-grid">
+                            {bestSellers.map(product => (
+                                <RenderProductCard 
+                                    key={product.id} 
+                                    product={product} 
+                                    wishlist={wishlist} 
+                                    toggleWishlist={toggleWishlist} 
+                                />
+                            ))}
+                        </div>
+                        <div className="home-action-btn-container">
+                            <Link to="/shop?bestSeller=true" className="btn-premium-outline">
+                                View All Best Sellers
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </Link>
+                        </div>
+                    </div>
                 )}
+            </section>
+
+            {/* Brand Story Showcase */}
+            <section className="brand-story-section">
+                <div className="brand-story-container">
+                    <div className="brand-story-image">
+                        <img src="./images/login_art.png" alt="Detail of fine tailoring and pastel embroidery" />
+                    </div>
+                    <div className="brand-story-text">
+                        <span className="brand-story-tag">The Boutique Philosophy</span>
+                        <h2>Honoring Slow Fashion & Indian Aesthetics</h2>
+                        <p>At The Ethnic Touch, we discard mass production rules. Every garment is treated as a piece of art, starting from premium handpicked cotton and linens to natural mineral dyes and elegant embroidery details.</p>
+                        
+                        <div className="brand-values-grid">
+                            <div className="value-card">
+                                <div className="value-icon">
+                                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M7 6h10M5 12h14M7 18h10"/></svg>
+                                </div>
+                                <h3>Loomed with Love</h3>
+                                <p>Sourced from traditional Indian weaver clusters, celebrating pure, raw weaves that get softer with every wear.</p>
+                            </div>
+
+                            <div className="value-card">
+                                <div className="value-icon">
+                                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22v-6M12 16a4 4 0 0 0-4-4c-1.5 0-3 1-3 3s1.5 3 3 3h8c1.5 0 3-1 3-3s-1.5-3-3-3a4 4 0 0 0-4 4z"/></svg>
+                                </div>
+                                <h3>Bespoke Colorways</h3>
+                                <p>Our signatures pale peach, mint green, and lavender palettes are carefully dyed in small, curated lots.</p>
+                            </div>
+
+                            <div className="value-card">
+                                <div className="value-icon">
+                                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                                </div>
+                                <h3>Tailored For You</h3>
+                                <p>Designed with meticulous cuts, including standard custom margins, ensuring a premium contour drape.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* New Arrivals Section */}
+            <section className="home-section" style={{ borderTop: '1px solid rgba(0,0,0,0.03)', paddingBottom: '8rem' }}>
+                <div className="home-section-header">
+                    <h2>Fresh Off the Loom</h2>
+                    <p>Be the first to step out in our latest custom creations and season-defining tones</p>
+                </div>
+                {newArrivals.length === 0 ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '20vh' }}>
+                        <p style={{ color: '#8c8883', fontStyle: 'italic' }}>Weaving new collections...</p>
+                    </div>
+                ) : (
+                    <div>
+                        <div className="product-grid">
+                            {newArrivals.map(product => (
+                                <RenderProductCard 
+                                    key={product.id} 
+                                    product={product} 
+                                    wishlist={wishlist} 
+                                    toggleWishlist={toggleWishlist} 
+                                />
+                            ))}
+                        </div>
+                        <div className="home-action-btn-container">
+                            <Link to="/shop?newArrival=true" className="btn-premium-outline">
+                                Explore New Arrivals
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </Link>
+                        </div>
+                    </div>
+                )}
+            </section>
+        </div>
+    );
+};
+
+const WishlistPage = ({ wishlist, toggleWishlist, addToCart }) => {
+
+    return (
+        <div className="wishlist-page-container">
+            <div className="wishlist-header-row">
+                <div>
+                    <span className="profile-eyebrow">Wardrobe Selection</span>
+                    <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: '400', margin: '0.2rem 0 0' }}>Your Wishlist</h1>
+                </div>
+                <div style={{ fontSize: '0.95rem', color: '#686461' }}>
+                    {wishlist.length} {wishlist.length === 1 ? 'item' : 'items'} saved
+                </div>
             </div>
-        </section>
-    </div>
-);
+
+            {wishlist.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '6rem 1rem', background: '#FFFdfc', borderRadius: '12px', border: '1px dashed var(--color-peach)' }}>
+                    <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--color-primary)" strokeWidth="1.5" fill="none" style={{ marginBottom: '1.2rem' }}>
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                    <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: '400', marginBottom: '0.5rem' }}>Your wishlist is empty</h2>
+                    <p style={{ margin: '0 auto 1.5rem', fontSize: '0.95rem', color: '#686461' }}>Explore our premium collections and tap the heart icon to save products here.</p>
+                    <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none' }}>Shop the Collection</Link>
+                </div>
+            ) : (
+                <div className="product-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+                    {wishlist.map(p => {
+                        const handleQuickAddToCart = (e) => {
+                            e.preventDefault();
+                            const defaultSz = (p.sizes && p.sizes.length > 0) ? p.sizes[0] : 'S';
+                            addToCart({ ...p, size: defaultSz });
+                        };
+
+                        return (
+                            <div key={p.id} style={{ position: 'relative' }}>
+                                <div className="product-card">
+                                    <Link to={`/product/${p.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                                        <div className="product-image-container" style={{ position: 'relative' }}>
+                                            <div className="wishlist-heart-btn active" onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleWishlist(p);
+                                            }} style={{ top: '15px', right: '15px' }}>
+                                                <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                            </div>
+                                            <img src={p.imageUrl} alt={p.name} className="product-image" />
+                                        </div>
+                                        <div className="product-info" style={{ marginBottom: '1rem' }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <h3 className="product-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</h3>
+                                                <div className="product-price">₹{p.price.toLocaleString('en-IN')}</div>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                    <button 
+                                        onClick={handleQuickAddToCart}
+                                        className="btn btn-primary"
+                                        style={{ width: '100%', borderRadius: '8px', padding: '0.6rem', fontSize: '0.85rem' }}
+                                    >
+                                        Add to Cart
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const ProductDetails = ({ products, addToCart, authUser }) => {
     const { id } = useParams();
@@ -130,9 +1291,22 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
     const [reviewFormError, setReviewFormError] = useState('');
     const [reviewLoading, setReviewLoading] = useState(false);
 
+    // Collapsible Accordion Tabs state
+    const [openTabs, setOpenTabs] = useState({ specs: true, shipping: false, sizeGuide: false });
+    
+    const toggleTab = (tabKey) => {
+        setOpenTabs(prev => ({ ...prev, [tabKey]: !prev[tabKey] }));
+    };
+
     useEffect(() => {
         if (product && product.sizes && product.sizes.length > 0) {
-            setSelectedSize(product.sizes[0]);
+            // Select first size that has stock > 0
+            const firstAvailable = product.sizes.find(sz => {
+                const stk = (product.sizesStock && product.sizesStock[sz] !== undefined) ? product.sizesStock[sz] : -1;
+                return stk !== 0;
+            });
+            setSelectedSize(firstAvailable || '');
+            setActiveImage(0); // reset image index on product change
         }
     }, [product]);
 
@@ -152,6 +1326,14 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
     const galleryImages = (product.galleryImages && product.galleryImages.length > 0) 
         ? product.galleryImages 
         : [product.imageUrl];
+
+    const nextImage = () => {
+        setActiveImage(prev => (prev + 1) % galleryImages.length);
+    };
+
+    const prevImage = () => {
+        setActiveImage(prev => (prev - 1 + galleryImages.length) % galleryImages.length);
+    };
 
     const handleBack = (e) => {
         e.preventDefault();
@@ -198,9 +1380,15 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
         ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) 
         : 0;
 
+    // Find up to 3 recommended products (excluding current one)
+    const recommendedList = products
+        .filter(p => p.id !== product.id)
+        .slice(0, 3);
+
     return (
         <div style={{padding: '8rem 5% 4rem', maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
-            <a href="#" onClick={handleBack} style={{display:'inline-block', marginBottom:'2rem', color:'var(--color-text-light)', textDecoration:'none'}}>&larr; Back to Collection</a>
+            <a href="#" onClick={handleBack} style={{display:'inline-block', marginBottom:'2rem', color:'var(--color-text-light)', textDecoration:'none', transition:'color 0.2s'}}>&larr; Back to Collection</a>
+            
             <div style={{display: 'flex', flexWrap: 'wrap', gap: '4rem', alignItems: 'flex-start'}}>
                 
                 {/* Image Slider Gallery */}
@@ -211,10 +1399,30 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
                         boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
                         marginBottom: '1rem',
                         aspectRatio: '3/4',
-                        backgroundColor: '#fafafa'
+                        backgroundColor: '#fafafa',
+                        position: 'relative'
                     }}>
                         <img className="gallery-main-img" src={galleryImages[activeImage]} alt={product.name} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block'}} />
+                        
+                        {galleryImages.length > 1 && (
+                            <React.Fragment>
+                                <button className="slider-nav-btn prev" onClick={prevImage} aria-label="Previous image">&lsaquo;</button>
+                                <button className="slider-nav-btn next" onClick={nextImage} aria-label="Next image">&rsaquo;</button>
+                                
+                                <div className="slider-dots">
+                                    {galleryImages.map((_, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            className={`slider-dot ${activeImage === idx ? 'active' : ''}`}
+                                            onClick={() => setActiveImage(idx)}
+                                        />
+                                    ))}
+                                </div>
+                            </React.Fragment>
+                        )}
                     </div>
+
+                    {/* Gallery Thumbnails List */}
                     {galleryImages.length > 1 && (
                         <div style={{display: 'flex', gap: '0.8rem', overflowX: 'auto', padding: '0.5rem 0'}}>
                             {galleryImages.map((imgUrl, idx) => (
@@ -239,20 +1447,22 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
                     )}
                 </div>
 
-                {/* Product Summary & Actions */}
-                <div style={{flex: 1, minWidth: '300px'}}>
+                {/* Product Summary & Actions Sidebar */}
+                <div style={{flex: 1, minWidth: '300px', position: 'sticky', top: '120px'}}>
                     <h1 style={{fontSize: '2.8rem', marginBottom: '0.5rem', fontFamily: 'var(--font-title)'}}>{product.name}</h1>
                     
-                    {reviews.length > 0 && (
+                    {reviews.length > 0 ? (
                         <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem'}}>
                             <div style={{color: '#d4af37', fontSize: '1.2rem', letterSpacing: '2px'}}>
                                 {'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}
                             </div>
                             <span style={{color: 'var(--color-text-light)', fontSize: '0.9rem'}}>{avgRating} ({reviews.length} reviews)</span>
                         </div>
+                    ) : (
+                        <div style={{color: '#bbb', fontSize: '0.9rem', marginBottom: '1.5rem'}}>No reviews yet</div>
                     )}
 
-                    <div style={{fontSize: '2rem', fontWeight: '500', marginBottom: '2rem', color: 'var(--color-text)'}}>
+                    <div style={{fontSize: '2.2rem', fontWeight: '500', marginBottom: '1.5rem', color: 'var(--color-primary)'}}>
                         ₹{product.price.toLocaleString('en-IN')}
                     </div>
                     
@@ -261,40 +1471,122 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
                     {/* Size Selector */}
                     {product.sizes && product.sizes.length > 0 && (
                         <div style={{marginBottom: '2.5rem'}}>
-                            <h4 style={{marginBottom: '1rem', fontSize: '1rem', color: '#333'}}>Select Size</h4>
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+                                <h4 style={{margin: 0, fontSize: '0.95rem', fontWeight: '600', color: '#333'}}>Select Size</h4>
+                                {selectedSize && (
+                                    <span style={{fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: '500'}}>
+                                        {(() => {
+                                            const qty = (product.sizesStock && product.sizesStock[selectedSize] !== undefined) ? product.sizesStock[selectedSize] : -1;
+                                            if (qty === 0) return 'Out of Stock';
+                                            if (qty > 0 && qty <= 5) return `Only ${qty} left!`;
+                                            if (qty > 5) return 'In Stock';
+                                            return '';
+                                        })()}
+                                    </span>
+                                )}
+                            </div>
                             <div style={{display: 'flex', gap: '0.8rem', flexWrap: 'wrap'}}>
-                                {product.sizes.map((size) => (
-                                    <button 
-                                        key={size}
-                                        onClick={() => setSelectedSize(size)}
-                                        className={`size-pill ${selectedSize === size ? 'active' : ''}`}
-                                        style={{
-                                            padding: '0.8rem 1.5rem',
-                                            borderRadius: '6px',
-                                            border: '1px solid #ddd',
-                                            backgroundColor: '#fff',
-                                            color: '#555',
-                                            fontWeight: '600',
-                                            cursor: 'pointer',
-                                            fontSize: '1rem'
-                                        }}
-                                    >
-                                        {size}
-                                    </button>
-                                ))}
+                                {product.sizes.map((size) => {
+                                    const stockQty = (product.sizesStock && product.sizesStock[size] !== undefined) ? product.sizesStock[size] : -1;
+                                    const isDisabled = stockQty === 0;
+                                    return (
+                                        <button 
+                                            key={size}
+                                            disabled={isDisabled}
+                                            onClick={() => setSelectedSize(size)}
+                                            className={`size-pill ${selectedSize === size ? 'active' : ''}`}
+                                            title={isDisabled ? 'Out of stock' : ''}
+                                            style={{
+                                                padding: '0.8rem 1.5rem',
+                                                borderRadius: '6px',
+                                                border: '1px solid #ddd',
+                                                backgroundColor: '#fff',
+                                                color: '#555',
+                                                fontWeight: '600',
+                                                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                                fontSize: '1rem'
+                                            }}
+                                        >
+                                            {size}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
 
                     <button 
                         className="btn btn-primary" 
-                        onClick={handleAddToCart} 
-                        style={{fontSize: '1.1rem', padding: '1.2rem 3rem', width: '100%', marginBottom: '3rem'}}
+                        onClick={handleAddToCart}
+                        disabled={!selectedSize}
+                        style={{fontSize: '1.1rem', padding: '1.2rem 3rem', width: '100%', marginBottom: '2rem', height:'55px', display:'flex', alignItems:'center', justifyContent:'center'}}
                     >
-                        Add to Cart {selectedSize && `- Size ${selectedSize}`}
+                        {selectedSize ? `Add to Cart - Size ${selectedSize}` : 'Out of Stock'}
                     </button>
+
+                    {/* Premium Specifications Accordion Section */}
+                    <div className="spec-accordion">
+                        <div className="acc-item">
+                            <button className="acc-header" onClick={() => toggleTab('specs')}>
+                                <span>Fabric & Composition</span>
+                                <span className={`acc-icon ${openTabs.specs ? 'open' : ''}`}>▼</span>
+                            </button>
+                            <div className="acc-content" style={{ maxHeight: openTabs.specs ? '200px' : '0' }}>
+                                <div className="acc-content-inner">
+                                    Crafted with high-grade premium georgette and fine silk weaves. Features dual hand-embroidered silver Resham work on cuffs and collar templates. Dry clean is recommended to preserve premium sheen and fiber lock.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="acc-item">
+                            <button className="acc-header" onClick={() => toggleTab('shipping')}>
+                                <span>Shipping & Return policy</span>
+                                <span className={`acc-icon ${openTabs.shipping ? 'open' : ''}`}>▼</span>
+                            </button>
+                            <div className="acc-content" style={{ maxHeight: openTabs.shipping ? '200px' : '0' }}>
+                                <div className="acc-content-inner">
+                                    Dispatched within 24 to 48 hours for swift local delivery. Delivery timelines scale from 3 to 7 working days. Free standard domestic returns are honored within 7 days from placement if tags are kept intact.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="acc-item">
+                            <button className="acc-header" onClick={() => toggleTab('sizeGuide')}>
+                                <span>Sizing & Fit guide</span>
+                                <span className={`acc-icon ${openTabs.sizeGuide ? 'open' : ''}`}>▼</span>
+                            </button>
+                            <div className="acc-content" style={{ maxHeight: openTabs.sizeGuide ? '200px' : '0' }}>
+                                <div className="acc-content-inner">
+                                    Runs standard size. We suggest choosing chest sizes mapping to your current fitted garments. Regular relaxed straight cut silhouette. Size configurations available: XS, S, M, L, XL, XXL, XXXL.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
+
+            {/* Recommended Products Carousel Section */}
+            {recommendedList.length > 0 && (
+                <div className="recommended-section">
+                    <h2 style={{fontFamily: 'var(--font-title)', fontSize: '2.2rem', marginBottom: '0.5rem', textAlign: 'center'}}>You May Also Like</h2>
+                    <p style={{color: 'var(--color-text-light)', textAlign: 'center', marginBottom: '2.5rem', fontSize: '1rem'}}>Complete your look with our top pastel pairings.</p>
+                    <div className="recommendations-grid">
+                        {recommendedList.map(item => (
+                            <Link to={`/product/${item.id}`} key={item.id} className="recommended-card" onClick={() => window.scrollTo(0, 0)}>
+                                <div className="recommended-image-wrapper">
+                                    <img className="recommended-img" src={item.imageUrl} alt={item.name} />
+                                    <span className="recommended-badge">{item.category}</span>
+                                </div>
+                                <div style={{padding: '1.2rem'}}>
+                                    <h3 style={{fontSize: '1.15rem', fontWeight: '500', marginBottom: '0.4rem', fontFamily: 'var(--font-body)'}}>{item.name}</h3>
+                                    <span style={{fontSize: '1.15rem', color: 'var(--color-primary)', fontWeight: '600'}}>₹{item.price.toLocaleString('en-IN')}</span>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Customer Reviews Section */}
             <div style={{marginTop: '5rem', borderTop: '1px solid #eee', paddingTop: '4rem'}}>
@@ -611,6 +1903,8 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     const [email, setEmail] = useState('');
     const [addresses, setAddresses] = useState([]);
     const [selectedAddressID, setSelectedAddressID] = useState(null);
+    const [checkoutType, setCheckoutType] = useState('delivery'); // 'delivery' | 'pickup' | 'hyderabad_instant'
+    const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' | 'offline_qr'
     const [shippingForm, setShippingForm] = useState({
         fullName: '',
         phone: '',
@@ -626,6 +1920,13 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
 
     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
     const finalTotal = subtotal - (discount?.amt || 0);
+
+    const activeAddr = authUser && addresses.length > 0 ? addresses.find(a => a.id === selectedAddressID) : null;
+    const isCityHyderabad = activeAddr && (
+        activeAddr.city.toLowerCase().trim() === 'hyderabad' ||
+        activeAddr.city.toLowerCase().trim() === 'secunderabad'
+    );
+    const isInstantDeliveryBlocked = checkoutType === 'hyderabad_instant' && activeAddr && !isCityHyderabad;
 
     useEffect(() => {
         if (authUser) {
@@ -702,33 +2003,60 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     const placeOrder = async () => {
         if (!email) return alert('Email required');
         
-        let activeAddr = null;
-        if (authUser && addresses.length > 0) {
-            activeAddr = addresses.find(a => a.id === selectedAddressID);
-        }
-        
-        if (!activeAddr) {
-            return alert('Please select or add a shipping address before paying.');
+        let order = {};
+        if (checkoutType === 'pickup') {
+            order = {
+                customerEmail: email,
+                couponCode: discount?.code || '',
+                items: cart.map(item => ({
+                    productId: item.id,
+                    quantity: 1,
+                    size: item.size || ''
+                })),
+                checkoutType: 'pickup',
+                paymentMethod: paymentMethod,
+                shippingName: "Store Pickup Customer",
+                shippingPhone: authUser?.phone || "0000000000",
+                shippingAddress: "Jubilee Hills boutique pickup",
+                shippingCity: "Hyderabad",
+                shippingState: "Telangana",
+                shippingZipCode: "500033"
+            };
+        } else {
+            if (!activeAddr) {
+                return alert('Please select or add a shipping address before paying.');
+            }
+            if (checkoutType === 'hyderabad_instant') {
+                const city = (activeAddr.city || '').trim().toLowerCase();
+                if (city !== 'hyderabad' && city !== 'secunderabad') {
+                    return alert('Instant delivery is only available inside Hyderabad/Secunderabad.');
+                }
+                const zip = (activeAddr.zipCode || '').trim();
+                if (!zip.startsWith('500') || zip.length !== 6) {
+                    return alert('Instant delivery requires a local Hyderabad pincode starting with 500 (e.g., 500081).');
+                }
+            }
+            order = {
+                customerEmail: email,
+                couponCode: discount?.code || '',
+                items: cart.map(item => ({
+                    productId: item.id,
+                    quantity: 1,
+                    size: item.size || ''
+                })),
+                checkoutType: checkoutType,
+                paymentMethod: 'online',
+                shippingName: activeAddr.fullName,
+                shippingPhone: activeAddr.phone,
+                shippingAddress: activeAddr.addressLine,
+                shippingCity: activeAddr.city,
+                shippingState: activeAddr.state,
+                shippingZipCode: activeAddr.zipCode
+            };
         }
 
         setOrdering(true);
 
-        const order = {
-            customerEmail: email,
-            couponCode: discount?.code || '',
-            items: cart.map(item => ({
-                productId: item.id,
-                quantity: 1,
-                size: item.size || ''
-            })),
-            shippingName: activeAddr.fullName,
-            shippingPhone: activeAddr.phone,
-            shippingAddress: activeAddr.addressLine,
-            shippingCity: activeAddr.city,
-            shippingState: activeAddr.state,
-            shippingZipCode: activeAddr.zipCode
-        };
-        
         try {
             const res = await fetch('/api/orders', {
                 method: 'POST',
@@ -745,7 +2073,17 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
 
             const data = await res.json();
 
-            if (data.checkoutUrl !== "razorpay") {
+            if (data.paymentMethod === 'offline_qr') {
+                clearCart();
+                navigate('/checkout-success', {
+                    state: {
+                        orderId: data.orderId,
+                        checkoutType: 'pickup',
+                        paymentMethod: 'offline_qr',
+                        amount: data.amount
+                    }
+                });
+            } else if (data.checkoutUrl !== "razorpay") {
                 clearCart();
                 let targetUrl = data.checkoutUrl;
                 if (targetUrl.startsWith('/#')) {
@@ -782,7 +2120,10 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                                     gift: verifyData.giftCode, 
                                     unlockedGift: verifyData.unlockedGift,
                                     giftType: verifyData.giftType,
-                                    tracking: verifyData.trackingNumber 
+                                    giftExpiryDate: verifyData.giftExpiryDate,
+                                    tracking: verifyData.trackingNumber,
+                                    checkoutType: checkoutType,
+                                    paymentMethod: 'online'
                                 } 
                             });
                         } else {
@@ -810,6 +2151,108 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
         <div style={{padding: '8rem 5% 4rem', maxWidth: '680px', margin: '0 auto', minHeight: '80vh'}}>
             <h1 style={{fontFamily: 'var(--font-title)', color: 'var(--color-peach)', marginBottom: '1.5rem'}}>Checkout</h1>
             
+            {/* Delivery Methods Selector */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: '12px',
+                marginBottom: '2.5rem',
+            }}>
+                <button
+                    onClick={() => {
+                        setCheckoutType('delivery');
+                        setPaymentMethod('online');
+                    }}
+                    style={{
+                        padding: '16px 10px',
+                        borderRadius: '12px',
+                        border: '1.5px solid',
+                        borderColor: checkoutType === 'delivery' ? '#D4A373' : '#E6E4E0',
+                        background: checkoutType === 'delivery' ? '#FAF3ED' : '#fff',
+                        color: checkoutType === 'delivery' ? '#8F5E36' : '#5C5854',
+                        fontWeight: '600',
+                        fontSize: '0.88rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: checkoutType === 'delivery' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
+                        outline: 'none'
+                    }}
+                >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{transition: 'transform 0.3s ease'}}>
+                        <rect x="1" y="3" width="15" height="13" rx="2" ry="2" />
+                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                        <circle cx="5.5" cy="18.5" r="2.5" />
+                        <circle cx="18.5" cy="18.5" r="2.5" />
+                    </svg>
+                    <span style={{fontFamily: 'Inter, sans-serif', letterSpacing: '-0.01em'}}>Standard Delivery</span>
+                </button>
+
+                <button
+                    onClick={() => {
+                        setCheckoutType('pickup');
+                        setPaymentMethod('online');
+                    }}
+                    style={{
+                        padding: '16px 10px',
+                        borderRadius: '12px',
+                        border: '1.5px solid',
+                        borderColor: checkoutType === 'pickup' ? '#D4A373' : '#E6E4E0',
+                        background: checkoutType === 'pickup' ? '#FAF3ED' : '#fff',
+                        color: checkoutType === 'pickup' ? '#8F5E36' : '#5C5854',
+                        fontWeight: '600',
+                        fontSize: '0.88rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: checkoutType === 'pickup' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
+                        outline: 'none'
+                    }}
+                >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                        <polyline points="9 22 9 12 15 12 15 22" />
+                    </svg>
+                    <span style={{fontFamily: 'Inter, sans-serif', letterSpacing: '-0.01em'}}>Store Pickup</span>
+                </button>
+
+                <button
+                    onClick={() => {
+                        setCheckoutType('hyderabad_instant');
+                        setPaymentMethod('online');
+                    }}
+                    style={{
+                        padding: '16px 10px',
+                        borderRadius: '12px',
+                        border: '1.5px solid',
+                        borderColor: checkoutType === 'hyderabad_instant' ? '#D4A373' : '#E6E4E0',
+                        background: checkoutType === 'hyderabad_instant' ? '#FAF3ED' : '#fff',
+                        color: checkoutType === 'hyderabad_instant' ? '#8F5E36' : '#5C5854',
+                        fontWeight: '600',
+                        fontSize: '0.88rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: checkoutType === 'hyderabad_instant' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
+                        outline: 'none'
+                    }}
+                >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    <span style={{fontFamily: 'Inter, sans-serif', letterSpacing: '-0.01em'}}>Hyderabad Instant</span>
+                </button>
+            </div>
+
             <div style={{marginBottom: '2rem'}}>
                 <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#333'}}>Confirm Email *</label>
                 <input 
@@ -823,121 +2266,316 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                 />
             </div>
 
-            <div style={{padding: '2rem', border: '1px solid #eee', borderRadius: '8px', background: '#fff', marginBottom: '2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.02)'}}>
-                <h3 style={{fontSize: '1rem', fontWeight: 600, marginBottom: '1rem'}}>Order Summary</h3>
-                <p style={{fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem'}}>Items in cart: {cart.length}</p>
-                <h4 style={{fontSize: '1.1rem', fontWeight: 700, color: '#333'}}>Total to Pay: ₹{finalTotal.toLocaleString('en-IN')}</h4>
+            <div style={{
+                padding: '2rem', 
+                border: '1.5px solid #E6E4E0', 
+                borderRadius: '12px', 
+                background: '#FAF9F6', 
+                marginBottom: '2.5rem', 
+                boxShadow: '0 4px 15px rgba(0,0,0,0.015)'
+            }}>
+                <h3 style={{fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.8rem', color: '#2D2A26', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Order Summary</h3>
+                <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.92rem', color: '#6C6863'}}>
+                    <span>Garments in Cart:</span>
+                    <span>{cart.length} pc{cart.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E6E4E0', paddingTop: '0.8rem', marginTop: '0.8rem'}}>
+                    <span style={{fontWeight: 600, color: '#2D2A26'}}>Total Amount to Pay:</span>
+                    <strong style={{fontSize: '1.25rem', color: '#8F5E36'}}>₹{finalTotal.toLocaleString('en-IN')}</strong>
+                </div>
             </div>
 
-            <div style={{marginBottom: '2rem'}}>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
-                    <h3 style={{fontSize: '1.1rem', fontWeight: 600, color: '#333'}}>Select Shipping Address *</h3>
-                    {authUser && (
-                        <button className="btn btn-secondary" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem'}} onClick={() => {
-                            setShippingForm({ fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
-                            setShowNewAddressForm(prev => !prev);
-                            setAddressMessage('');
+            {/* Store Pickup Details UI */}
+            {checkoutType === 'pickup' && (
+                <div style={{marginBottom: '2.5rem'}}>
+                    <div style={{
+                        background: '#FAF3ED',
+                        border: '1px solid #FFE5D9',
+                        borderRadius: '12px',
+                        padding: '1.8rem',
+                        marginBottom: '2rem',
+                        boxShadow: '0 4px 12px rgba(212,163,115,0.06)'
+                    }}>
+                        <h4 style={{fontFamily: 'var(--font-title)', color: '#8F5E36', marginBottom: '0.8rem', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px'}}>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
+                                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                <polyline points="9 22 9 12 15 12 15 22" />
+                            </svg>
+                            Jubilee Hills Boutique Collection
+                        </h4>
+                        <p style={{fontSize: '0.95rem', color: '#2D2A26', fontWeight: 600, margin: '0 0 0.4rem'}}>The Ethnic Touch Boutique</p>
+                        <p style={{fontSize: '0.88rem', color: '#6C6863', margin: '0 0 0.8rem', lineHeight: '1.5'}}>
+                            Road No. 36, Near Jubilee Hills Check Post,<br/>
+                            Hyderabad, Telangana - 500033<br/>
+                            Assistant Desk: <strong>+91 98765 43210</strong>
+                        </p>
+                        <p style={{fontSize: '0.85rem', color: '#8F5E36', fontStyle: 'italic', margin: 0, borderTop: '1px solid rgba(212,163,115,0.2)', paddingTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36', flexShrink: 0}}>
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="16" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                            </svg>
+                            <span>Collected packages are custom steamed and gift-wrapped on arrival. Pickups available 10:30 AM - 8:30 PM.</span>
+                        </p>
+                    </div>
+
+                    {/* Payment Mode (Online / Offline QR) */}
+                    <div style={{marginBottom: '2rem'}}>
+                        <h3 style={{fontSize: '1.1rem', fontWeight: 600, color: '#333', marginBottom: '1.1rem'}}>Select Payment Mode</h3>
+                        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                            <div 
+                                onClick={() => setPaymentMethod('online')}
+                                style={{
+                                    border: paymentMethod === 'online' ? '2px solid #D4A373' : '1px solid #E6E4E0',
+                                    borderRadius: '12px',
+                                    padding: '1.5rem 1rem',
+                                    background: paymentMethod === 'online' ? '#FAF3ED' : '#fff',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '12px',
+                                    transition: 'all 0.3s ease',
+                                    boxShadow: paymentMethod === 'online' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none'
+                                }}
+                            >
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
+                                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                                    <line x1="1" y1="10" x2="23" y2="10" />
+                                </svg>
+                                <span style={{fontSize: '0.98rem', fontWeight: 600, color: '#2D2A26'}}>Prepay Online</span>
+                                <span style={{fontSize: '0.75rem', color: '#6C6863', textAlign: 'center'}}>Instant checkout verification</span>
+                            </div>
+                            
+                            <div 
+                                onClick={() => setPaymentMethod('offline_qr')}
+                                style={{
+                                    border: paymentMethod === 'offline_qr' ? '2px solid #D4A373' : '1px solid #E6E4E0',
+                                    borderRadius: '12px',
+                                    padding: '1.5rem 1rem',
+                                    background: paymentMethod === 'offline_qr' ? '#FAF3ED' : '#fff',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '12px',
+                                    transition: 'all 0.3s ease',
+                                    boxShadow: paymentMethod === 'offline_qr' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none'
+                                }}
+                            >
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
+                                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                                    <line x1="12" y1="18" x2="12.01" y2="18" />
+                                </svg>
+                                <span style={{fontSize: '0.98rem', fontWeight: 600, color: '#2D2A26'}}>Pay In-Store</span>
+                                <span style={{fontSize: '0.75rem', color: '#6C6863', textAlign: 'center'}}>Book now, scan pass at boutique</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Standard Delivery Mode Info Banner */}
+            {checkoutType === 'delivery' && (
+                <div style={{
+                    background: '#F9FAF9',
+                    border: '1px solid #E6E6E6',
+                    borderRadius: '12px',
+                    padding: '1.2rem',
+                    marginBottom: '2rem',
+                    fontSize: '0.88rem',
+                    color: '#555',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#555', flexShrink: 0}}>
+                        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+                        <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+                    </svg>
+                    <div>
+                        <strong>Standard Shipping Details:</strong> Dispatched via premium express post (Delhivery/BlueDart). Expected delivery within <strong>3-5 business days</strong> nationwide.
+                    </div>
+                </div>
+            )}
+
+            {/* Hyderabad Instant Courier Mode Info Banner */}
+            {checkoutType === 'hyderabad_instant' && (
+                <div style={{
+                    background: '#FFF9F2',
+                    border: '1px solid #FFE9D1',
+                    borderRadius: '12px',
+                    padding: '1.2rem',
+                    marginBottom: '2rem',
+                    fontSize: '0.88rem',
+                    color: '#8F5E36',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36', flexShrink: 0}}>
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    <div>
+                        <strong>Local courier dispatch:</strong> Delivered within <strong>2-4 hours</strong> via instant courier (Uber/Rapido) direct from Road No. 36 boutique.
+                    </div>
+                </div>
+            )}
+
+            {/* Address Selector list (Hidden for Store Pickup) */}
+            {checkoutType !== 'pickup' && (
+                <div style={{marginBottom: '2rem'}}>
+                    <div style={{display: 'flex', justifycontent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
+                        <h3 style={{fontSize: '1.1rem', fontWeight: 600, color: '#333'}}>Select Shipping Address *</h3>
+                        {authUser && (
+                            <button className="btn btn-secondary" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem'}} onClick={() => {
+                                setShippingForm({ fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
+                                setShowNewAddressForm(prev => !prev);
+                                setAddressMessage('');
+                            }}>
+                                {showNewAddressForm ? 'Cancel' : '+ Add New Address'}
+                            </button>
+                        )}
+                    </div>
+
+                    {addressMessage && <div className="profile-message error" style={{marginBottom: '1rem'}}>{addressMessage}</div>}
+
+                    {showNewAddressForm && (
+                        <form onSubmit={handleAddAddress} style={{background: '#FAF9F6', border: '1.5px solid #E6E4E0', padding: '1.8rem', borderRadius: '12px', marginBottom: '2rem'}}>
+                            <h4 style={{fontSize: '1rem', fontWeight: 600, marginBottom: '1.2rem', color: '#2D2A26'}}>New Shipping Address</h4>
+                            <div className="profile-grid">
+                                <label className="profile-field">
+                                    <span>Contact Name *</span>
+                                    <input className="profile-input" value={shippingForm.fullName} onChange={e => setShippingForm({...shippingForm, fullName: e.target.value})} required />
+                                </label>
+                                <label className="profile-field">
+                                    <span>Phone Number *</span>
+                                    <input className="profile-input" value={shippingForm.phone} onChange={e => setShippingForm({...shippingForm, phone: e.target.value})} required />
+                                </label>
+                                <label className="profile-field profile-span-2">
+                                    <span>Address Line *</span>
+                                    <input className="profile-input" value={shippingForm.addressLine} onChange={e => setShippingForm({...shippingForm, addressLine: e.target.value})} required />
+                                </label>
+                                <label className="profile-field">
+                                    <span>City *</span>
+                                    <input className="profile-input" value={shippingForm.city} onChange={e => setShippingForm({...shippingForm, city: e.target.value})} required />
+                                </label>
+                                <label className="profile-field">
+                                    <span>State *</span>
+                                    <input className="profile-input" value={shippingForm.state} onChange={e => setShippingForm({...shippingForm, state: e.target.value})} required />
+                                </label>
+                                <label className="profile-field">
+                                    <span>ZIP / Postal Code *</span>
+                                    <input className="profile-input" value={shippingForm.zipCode} onChange={e => setShippingForm({...shippingForm, zipCode: e.target.value})} required style={{letterSpacing: '0.1em'}} placeholder="6 digits" />
+                                </label>
+                            </div>
+                            <button className="btn btn-primary" type="submit" style={{marginTop: '1.2rem', padding: '0.75rem 1.8rem', borderRadius: '50px'}}>Save and Use Address</button>
+                        </form>
+                    )}
+
+                    {addresses.length === 0 ? (
+                        <div style={{background: '#fafafa', border: '1px dashed #ccc', padding: '2.5rem 1.5rem', borderRadius: '12px', textAlign: 'center'}}>
+                            <p style={{fontSize: '0.92rem', color: '#6C6863', marginBottom: '1.2rem'}}>You don't have any saved shipping addresses.</p>
+                            {!showNewAddressForm && authUser && (
+                                <button className="btn btn-primary" onClick={() => setShowNewAddressForm(true)}>+ Add Shipping Address</button>
+                            )}
+                            {!authUser && (
+                                <p style={{fontSize: '0.85rem', color: '#999'}}>Please sign in to save and manage shipping addresses.</p>
+                            )}
+                        </div>
+                    ) : (
+                        <div style={{display: 'grid', gridTemplateColumns: '1fr', gap: '1.2rem'}}>
+                            {addresses.map(addr => {
+                                const isSelected = selectedAddressID === addr.id;
+                                return (
+                                    <div 
+                                        key={addr.id} 
+                                        onClick={() => setSelectedAddressID(addr.id)}
+                                        style={{
+                                            border: isSelected ? '2px solid #D4A373' : '1px solid #E6E4E0', 
+                                            borderRadius: '12px', 
+                                            padding: '1.5rem', 
+                                            background: isSelected ? '#FAF3ED' : '#fff', 
+                                            cursor: 'pointer',
+                                            position: 'relative',
+                                            transition: 'all 0.3s ease',
+                                            boxShadow: isSelected ? '0 6px 15px rgba(212,163,115,0.12)' : 'none'
+                                        }}
+                                    >
+                                        <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.5rem'}}>
+                                            <input 
+                                                type="radio" 
+                                                checked={isSelected} 
+                                                onChange={() => setSelectedAddressID(addr.id)} 
+                                                style={{cursor: 'pointer', accentColor: '#D4A373'}} 
+                                            />
+                                            <h4 style={{fontSize: '0.98rem', fontWeight: 600, margin: 0, color: '#2D2A26'}}>{addr.fullName}</h4>
+                                            {addr.isDefault && <span style={{background: '#FFE5D9', color: '#8F5E36', fontSize: '0.65rem', padding: '3px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Default</span>}
+                                        </div>
+                                        <p style={{fontSize: '0.88rem', color: '#6C6863', margin: '0.2rem 0 0.2rem 24px', lineHeight: '1.5'}}>{addr.addressLine}</p>
+                                        <p style={{fontSize: '0.88rem', color: '#6C6863', margin: '0 0 0.2rem 24px', lineHeight: '1.5'}}>{addr.city}, {addr.state} - {addr.zipCode}</p>
+                                        <p style={{fontSize: '0.88rem', color: '#6C6863', margin: '0 0 0 24px'}}>Phone: <strong>{addr.phone}</strong></p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Instant Shipping Warning if City is not Hyderabad */}
+                    {isInstantDeliveryBlocked && (
+                        <div style={{
+                            background: '#FDF2F2',
+                            border: '1.5px solid #F8D7DA',
+                            color: '#721C24',
+                            borderRadius: '12px',
+                            padding: '1.2rem',
+                            marginTop: '1.5rem',
+                            fontSize: '0.9rem',
+                            lineHeight: '1.5',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '12px'
                         }}>
-                            {showNewAddressForm ? 'Cancel' : '+ Add New Address'}
-                        </button>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#721C24', flexShrink: 0}}>
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                            <div>
+                                <strong>Local Instant Courier Blocked:</strong> Your shipping address city ({activeAddr?.city || 'Selected location'}) is outside the Hyderabad/Secunderabad delivery radius.<br/>
+                                <span style={{fontSize: '0.85rem', color: '#90242E', marginTop: '0.4rem', display: 'block'}}>
+                                    To proceed, select standard nationwide delivery, pick up in boutique, or update your shipping address.
+                                </span>
+                            </div>
+                        </div>
                     )}
                 </div>
-
-                {addressMessage && <div className="profile-message error" style={{marginBottom: '1rem'}}>{addressMessage}</div>}
-
-                {showNewAddressForm && (
-                    <form onSubmit={handleAddAddress} style={{background: '#fcfcfc', border: '1px solid #eee', padding: '1.5rem', borderRadius: '8px', marginBottom: '1.5rem'}}>
-                        <h4 style={{fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem'}}>New Shipping Address</h4>
-                        <div className="profile-grid">
-                            <label className="profile-field">
-                                <span>Contact Name *</span>
-                                <input className="profile-input" value={shippingForm.fullName} onChange={e => setShippingForm({...shippingForm, fullName: e.target.value})} required />
-                            </label>
-                            <label className="profile-field">
-                                <span>Phone Number *</span>
-                                <input className="profile-input" value={shippingForm.phone} onChange={e => setShippingForm({...shippingForm, phone: e.target.value})} required />
-                            </label>
-                            <label className="profile-field profile-span-2">
-                                <span>Address Line *</span>
-                                <input className="profile-input" value={shippingForm.addressLine} onChange={e => setShippingForm({...shippingForm, addressLine: e.target.value})} required />
-                            </label>
-                            <label className="profile-field">
-                                <span>City *</span>
-                                <input className="profile-input" value={shippingForm.city} onChange={e => setShippingForm({...shippingForm, city: e.target.value})} required />
-                            </label>
-                            <label className="profile-field">
-                                <span>State *</span>
-                                <input className="profile-input" value={shippingForm.state} onChange={e => setShippingForm({...shippingForm, state: e.target.value})} required />
-                            </label>
-                            <label className="profile-field">
-                                <span>ZIP / Postal Code *</span>
-                                <input className="profile-input" value={shippingForm.zipCode} onChange={e => setShippingForm({...shippingForm, zipCode: e.target.value})} required />
-                            </label>
-                        </div>
-                        <button className="btn btn-primary" type="submit" style={{marginTop: '1.2rem', padding: '0.6rem 1.2rem'}}>Save and Use Address</button>
-                    </form>
-                )}
-
-                {addresses.length === 0 ? (
-                    <div style={{background: '#fafafa', border: '1px dashed #ccc', padding: '2rem', borderRadius: '8px', textAlign: 'center'}}>
-                        <p style={{fontSize: '0.9rem', color: '#666', marginBottom: '1rem'}}>You don't have any saved shipping addresses.</p>
-                        {!showNewAddressForm && authUser && (
-                            <button className="btn btn-primary" onClick={() => setShowNewAddressForm(true)}>+ Add Shipping Address</button>
-                        )}
-                        {!authUser && (
-                            <p style={{fontSize: '0.85rem', color: '#999'}}>Please sign in to save and manage shipping addresses.</p>
-                        )}
-                    </div>
-                ) : (
-                    <div style={{display: 'grid', gridTemplateColumns: '1fr', gap: '1rem'}}>
-                        {addresses.map(addr => {
-                            const isSelected = selectedAddressID === addr.id;
-                            return (
-                                <div 
-                                    key={addr.id} 
-                                    onClick={() => setSelectedAddressID(addr.id)}
-                                    style={{
-                                        border: isSelected ? '2px solid #e4b39b' : '1px solid #ddd', 
-                                        borderRadius: '8px', 
-                                        padding: '1.2rem', 
-                                        background: isSelected ? '#fffcf9' : '#fff', 
-                                        cursor: 'pointer',
-                                        position: 'relative',
-                                        transition: 'all 0.2s ease',
-                                        boxShadow: isSelected ? '0 2px 8px rgba(228,179,155,0.1)' : 'none'
-                                    }}
-                                >
-                                    <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.4rem'}}>
-                                        <input 
-                                            type="radio" 
-                                            checked={isSelected} 
-                                            onChange={() => setSelectedAddressID(addr.id)} 
-                                            style={{cursor: 'pointer', accentColor: '#e4b39b'}} 
-                                        />
-                                        <h4 style={{fontSize: '0.95rem', fontWeight: 600, margin: 0}}>{addr.fullName}</h4>
-                                        {addr.isDefault && <span style={{background: '#ffe5d9', color: '#b97a66', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '20px', fontWeight: 'bold'}}>Default</span>}
-                                    </div>
-                                    <p style={{fontSize: '0.85rem', color: '#666', margin: '0.2rem 0 0.2rem 24px', lineHeight: '1.4'}}>{addr.addressLine}</p>
-                                    <p style={{fontSize: '0.85rem', color: '#666', margin: '0 0 0.2rem 24px', lineHeight: '1.4'}}>{addr.city}, {addr.state} - {addr.zipCode}</p>
-                                    <p style={{fontSize: '0.85rem', color: '#666', margin: '0 0 0 24px'}}>Phone: {addr.phone}</p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+            )}
 
             <button 
                 className="btn btn-primary" 
                 onClick={placeOrder} 
-                style={{marginTop: '1.5rem', width: '100%', padding: '1rem'}}
-                disabled={ordering || (addresses.length === 0)}
+                style={{
+                    marginTop: '2rem', 
+                    width: '100%', 
+                    padding: '1.2rem', 
+                    fontSize: '1.05rem', 
+                    fontWeight: '600', 
+                    borderRadius: '50px',
+                    letterSpacing: '0.02em',
+                    boxShadow: '0 8px 25px rgba(45,42,38,0.15)'
+                }}
+                disabled={ordering || (checkoutType !== 'pickup' && addresses.length === 0) || isInstantDeliveryBlocked}
             >
-                {ordering ? "Verifying Stock & Routing..." : "Pay & Secure Order"}
+                {ordering ? "Verifying Stock & Routing..." : 
+                 checkoutType === 'pickup' && paymentMethod === 'offline_qr' ? "Book Store Pickup Pass" : 
+                 "Secure Checkout & Prepay"}
             </button>
         </div>
     );
-};
+};;
 
 // --- MOCK PAYMENT GATEWAY SIMULATOR ---
 const MockPayment = ({ onPaymentSuccess }) => {
@@ -977,6 +2615,7 @@ const MockPayment = ({ onPaymentSuccess }) => {
                         gift: data.giftCode, 
                         unlockedGift: data.unlockedGift,
                         giftType: data.giftType,
+                        giftExpiryDate: data.giftExpiryDate,
                         tracking: data.trackingNumber 
                     } 
                 });
@@ -1037,7 +2676,33 @@ const MockPayment = ({ onPaymentSuccess }) => {
 // --- CHECKOUT SUCCESS PAGE ---
 const CheckoutSuccess = () => {
     const state = ReactRouterDOM.useLocation().state || {};
-    const { orderId, gift, tracking, unlockedGift, giftType } = state;
+    const { orderId, gift, tracking, unlockedGift, giftType, giftExpiryDate, checkoutType, paymentMethod, amount } = state;
+
+    useEffect(() => {
+        if (typeof confetti === 'function') {
+            confetti({
+                particleCount: 150,
+                spread: 80,
+                origin: { y: 0.6 }
+            });
+            setTimeout(() => {
+                confetti({
+                    particleCount: 60,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0 }
+                });
+            }, 250);
+            setTimeout(() => {
+                confetti({
+                    particleCount: 60,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1 }
+                });
+            }, 400);
+        }
+    }, [orderId]);
 
     if (!orderId) {
         return (
@@ -1051,51 +2716,221 @@ const CheckoutSuccess = () => {
     const displayGift = unlockedGift || gift;
     const isPhysical = giftType === 'physical';
 
+    // Store pickup OR offline QR payment
+    const isPickup = checkoutType === 'pickup' || tracking === 'STORE-PICKUP' || paymentMethod === 'offline_qr';
+    const isOffline = paymentMethod === 'offline_qr';
+    
+    // QR Code data: point to admin confirm pickup view
+    const qrUrl = window.location.origin + "/static/admin/index.html#pickup-scanner?orderId=" + orderId;
+    const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=2c2c2c&data=${encodeURIComponent(qrUrl)}`;
+
     return (
-        <div style={{padding: '8rem 5% 4rem', maxWidth: '600px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
+        <div style={{padding: '9rem 5% 4rem', maxWidth: '680px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
+            {/* Celebration Icon */}
+            {isOffline ? (
+                <div style={{
+                    width: '100px',
+                    height: '100px',
+                    borderRadius: '50%',
+                    background: '#FAF3ED',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 1.5rem',
+                    boxShadow: '0 10px 25px rgba(208,136,59,0.12)'
+                }}>
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#8F5E36" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                </div>
+            ) : (
+                <div style={{
+                    width: '100px',
+                    height: '100px',
+                    borderRadius: '50%',
+                    background: '#E8F5E9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 1.5rem',
+                    boxShadow: '0 10px 25px rgba(46,125,50,0.12)'
+                }}>
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                </div>
+            )}
+            
+            <h1 style={{
+                fontFamily:'var(--font-heading)', 
+                fontSize: '2.5rem',
+                marginBottom: '0.8rem', 
+                color: '#2D2A26',
+                letterSpacing: '-0.01em'
+            }}>
+                {isOffline ? "Boutique Order Reserved!" : "Order Placed Successfully!"}
+            </h1>
+            <p style={{fontSize: '1rem', color: '#6C6863', marginBottom: '2rem'}}>Thank you for choosing luxury, custom Indo-Western aesthetics.</p>
+            
             <div style={{
-                fontSize: '5rem',
-                color: '#2e7d32',
-                marginBottom: '1rem'
-            }}>✓</div>
-            <h1 style={{fontFamily:'var(--font-title)', marginBottom: '1rem'}}>Payment Success!</h1>
-            <div style={{padding: '3rem', backgroundColor: '#f4fbf7', border: '1px solid #c8e6c9', borderRadius: 'var(--border-radius-lg)', margin: '2rem 0'}}>
-                <h2 style={{color: '#2e7d32'}}>Order #{orderId} Confirmed</h2>
-                <p style={{marginTop:'1.5rem', fontSize:'1.05rem', color:'#4caf50', fontWeight:'500'}}>
-                    Order has been approved and automatically shipped.
+                padding: '2.5rem 2rem', 
+                backgroundColor: '#fff', 
+                border: '1.5px solid #E6E4E0', 
+                borderRadius: '16px', 
+                margin: '2rem 0',
+                boxShadow: '0 8px 30px rgba(0,0,0,0.025)',
+                position: 'relative'
+            }}>
+                <div style={{
+                    position: 'absolute',
+                    top: '-12px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: '#D4A373',
+                    color: '#fff',
+                    padding: '4px 16px',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: '700',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em'
+                }}>
+                    Boutique Receipt
+                </div>
+
+                <h2 style={{color: '#2D2A26', fontSize: '1.3rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '1.2rem'}}>Order Reference: #{orderId}</h2>
+                
+                <p style={{fontSize:'0.96rem', color: '#5C5854', lineHeight: '1.6', margin: '0 0 2rem'}}>
+                    {isOffline 
+                        ? `Please present the verification pass QR code below at the reception counter to finalize payments of ₹${(amount || 0).toLocaleString('en-IN')} and collect your bespoke kurthi garments.` 
+                        : isPickup 
+                        ? "Your boutique collection checkout is complete and fully paid. Keep this code handy for scanning at the retail checkout."
+                        : tracking && (tracking.startsWith('RAPIDO-INSTANT-') || tracking.startsWith('UBER-INSTANT-'))
+                        ? "Registered for direct instant courier shipping. Your designer styles are prepared, steamed, and dispatched from Jubilee Hills via direct courier."
+                        : "Your designer packaging is ready and handed over to express delivery trackers for prompt dispatch to your wardrobe."
+                    }
                 </p>
-                {tracking && (
+
+                {/* Show QR Code for In-Store Pickup */}
+                {isPickup && (
                     <div style={{
                         marginTop: '1.5rem',
-                        padding: '1rem',
-                        background: 'white',
-                        border: '1px solid #a5d6a7',
-                        borderRadius: '6px',
-                        display: 'inline-block'
+                        padding: '1.8rem',
+                        background: '#FAF9F6',
+                        border: '2px solid #D4A373',
+                        borderRadius: '16px',
+                        display: 'inline-block',
+                        boxShadow: '0 8px 20px rgba(212,163,115,0.08)'
                     }}>
-                        <p style={{margin: 0, fontSize: '0.9rem', color: '#555'}}>Carrier Tracking Number:</p>
-                        <strong style={{fontSize: '1.2rem', color: '#2e7d32'}}>{tracking}</strong>
+                        <p style={{margin: '0 0 1.2rem', fontSize: '0.82rem', color: '#8F5E36', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.08em'}}>
+                            Boutique Verification Scanner Pass
+                        </p>
+                        <div style={{
+                            padding: '10px',
+                            background: '#fff',
+                            borderRadius: '12px',
+                            display: 'inline-block',
+                            border: '1px solid #E6E4E0'
+                        }}>
+                            <img 
+                                src={qrImgUrl} 
+                                alt="Order Pickup Pass" 
+                                style={{width: '200px', height: '200px', display: 'block', margin: '0 auto'}}
+                            />
+                        </div>
+                        <span style={{
+                            display: 'block', 
+                            marginTop: '1rem', 
+                            fontSize: '1.1rem', 
+                            fontWeight: '700',
+                            fontFamily: 'monospace',
+                            color: '#2D2A26',
+                            letterSpacing: '0.05em'
+                        }}>
+                            {orderId}
+                        </span>
                     </div>
                 )}
+
+                {/* Standard Shipping Tracking code */}
+                {!isPickup && tracking && (
+                    <div style={{
+                        marginTop: '1.5rem',
+                        padding: '1.2rem 2rem',
+                        background: '#FAF9F6',
+                        border: '1.5px dashed #D4A373',
+                        borderRadius: '12px',
+                        display: 'inline-block'
+                    }}>
+                        <p style={{margin: '0 0 0.4rem', fontSize: '0.88rem', color: '#6C6863'}}>Carrier Waybill ID:</p>
+                        <strong style={{fontSize: '1.25rem', color: '#8F5E36', fontFamily: 'monospace'}}>{tracking}</strong>
+                    </div>
+                )}
+
                 {displayGift && (
-                    <div style={{marginTop: '2rem', padding: '1.5rem', border: '2px dashed var(--color-peach)', backgroundColor: '#fffdfb', borderRadius: '8px'}}>
+                    <div style={{
+                        marginTop: '2.5rem', 
+                        padding: '1.8rem', 
+                        border: '1.5px solid #FFE5D9', 
+                        backgroundColor: '#FAF3ED', 
+                        borderRadius: '16px',
+                        boxShadow: '0 4px 12px rgba(212,163,115,0.04)'
+                    }}>
                         {isPhysical ? (
                             <div>
-                                <h4 style={{color: '#e65100', margin: '0 0 0.5rem'}}>Free Gift Earned!</h4>
-                                <p style={{margin:0, fontSize:'0.9rem', color: '#5d4037'}}>
-                                    Congratulations! You've unlocked a free <strong>{displayGift}</strong>. It will be packaged and shipped together with your items!
+                                <h4 style={{color: '#8F5E36', margin: '0 0 0.5rem', fontFamily: 'var(--font-heading)', fontSize: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}>
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
+                                        <polyline points="20 12 20 22 4 22 4 12" />
+                                        <rect x="2" y="7" width="20" height="5" />
+                                        <line x1="12" y1="22" x2="12" y2="7" />
+                                        <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+                                        <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+                                    </svg>
+                                    Free Gift Gained!
+                                </h4>
+                                <p style={{margin:0, fontSize:'0.92rem', color: '#6C6863', lineHeight: '1.5'}}>
+                                    A complimentary bespoke <strong>{displayGift}</strong> has been contributed to your package and will dispatch in the same carton!
                                 </p>
                             </div>
                         ) : (
                             <div>
-                                <h4 style={{color: 'var(--color-peach)', margin: '0 0 0.5rem'}}>Surprise Gift Coupon Distributed!</h4>
-                                <p style={{margin:0, fontSize:'0.9rem'}}>Use code <strong>{displayGift}</strong> on your next purchase.</p>
+                                <h4 style={{color: '#8F5E36', margin: '0 0 0.5rem', fontFamily: 'var(--font-heading)', fontSize: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}>
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
+                                        <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
+                                    </svg>
+                                    Boutique Reward Promoted!
+                                </h4>
+                                <p style={{margin:'0 0 0.8rem', fontSize:'0.92rem', color: '#6C6863'}}>Apply code <strong style={{color: '#2D2A26', fontSize: '1.05rem', fontFamily: 'monospace'}}>{displayGift}</strong> on your next checkout visit.</p>
+                                {giftExpiryDate && (
+                                    <span style={{
+                                        fontSize: '0.75rem',
+                                        color: '#B83232',
+                                        fontWeight: '700',
+                                        backgroundColor: '#FFF2F2',
+                                        padding: '4px 12px',
+                                        borderRadius: '20px',
+                                        display: 'inline-block',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.04em'
+                                    }}>
+                                        Valid Until: {new Date(giftExpiryDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                                    </span>
+                                )}
                             </div>
                         )}
                     </div>
                 )}
             </div>
-            <Link to="/" className="btn btn-primary" style={{padding: '1rem 3rem'}}>Return to Store</Link>
+            
+            <Link to="/" className="btn btn-primary" style={{
+                padding: '1rem 3.5rem', 
+                fontSize: '1rem', 
+                fontWeight: '600',
+                borderRadius: '50px',
+                letterSpacing: '0.02em',
+                boxShadow: '0 6px 20px rgba(45,42,38,0.1)'
+            }}>Return to Storefront</Link>
         </div>
     );
 };
@@ -1541,6 +3376,33 @@ const ProfilePage = ({ authUser }) => {
                         >
                             My Coupons
                         </li>
+                        <li 
+                            onClick={() => {
+                                if (auth) {
+                                    auth.signOut().then(() => {
+                                        window.location.hash = "#/";
+                                    });
+                                }
+                            }}
+                            style={{
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: '500',
+                                backgroundColor: 'transparent',
+                                color: '#d32f2f',
+                                transition: 'all 0.2s',
+                                marginTop: '1rem',
+                                borderTop: '1px solid #f5f5f5',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.8rem'
+                            }}
+                            onMouseEnter={e => { e.target.style.backgroundColor = '#fdf2f2'; }}
+                            onMouseLeave={e => { e.target.style.backgroundColor = 'transparent'; }}
+                        >
+                            Sign Out
+                        </li>
                     </ul>
                 </div>
 
@@ -1977,6 +3839,51 @@ const ProfilePage = ({ authUser }) => {
                                             <p style={{ margin: 0, fontSize: '0.75rem', color: '#888' }}>
                                                 Min order of ₹{c.minOrder}
                                             </p>
+                                            {(() => {
+                                                if (!c.expiryDate) return null;
+                                                const expiryDate = new Date(c.expiryDate);
+                                                const today = new Date();
+                                                today.setHours(0,0,0,0);
+                                                expiryDate.setHours(0,0,0,0);
+                                                
+                                                const diffTime = expiryDate.getTime() - today.getTime();
+                                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                                
+                                                let badgeColor = '#666';
+                                                let text = '';
+                                                
+                                                if (diffDays < 0) {
+                                                    badgeColor = '#ef4444';
+                                                    text = `Expired on ${new Date(c.expiryDate).toLocaleDateString()}`;
+                                                } else if (diffDays === 0) {
+                                                    badgeColor = '#d97706';
+                                                    text = 'Expires today!';
+                                                } else if (diffDays === 1) {
+                                                    badgeColor = '#d97706';
+                                                    text = 'Expires tomorrow!';
+                                                } else if (diffDays <= 7) {
+                                                    badgeColor = '#d97706';
+                                                    text = `Expires in ${diffDays} days`;
+                                                } else {
+                                                    badgeColor = '#15803d';
+                                                    text = `Expires in ${diffDays} days`;
+                                                }
+                                                
+                                                return (
+                                                    <div style={{ 
+                                                        marginTop: '0.5rem', 
+                                                        fontSize: '0.72rem', 
+                                                        padding: '4px 8px', 
+                                                        borderRadius: '4px',
+                                                        backgroundColor: badgeColor + '10',
+                                                        color: badgeColor,
+                                                        fontWeight: '600',
+                                                        display: 'inline-block' 
+                                                    }}>
+                                                        {text}
+                                                    </div>
+                                                );
+                                            })()}
                                             <div style={{
                                                 marginTop: '1rem', fontSize: '0.8rem', color: '#555',
                                                 borderTop: '1px dashed #eee', paddingTop: '0.8rem'
@@ -2016,8 +3923,11 @@ const App = () => {
     const [discount, setDiscount] = useState(null);
     const [authUser, setAuthUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
-    const [toast, setToast] = useState({ visible: false, message: '' });
+    const [toastProduct, setToastProduct] = useState(null);
     const toastTimerRef = useRef(null);
+
+    const [wishlist, setWishlist] = useState([]);
+    const [globalSearch, setGlobalSearch] = useState('');
 
     useEffect(() => {
         fetch('/api/products')
@@ -2047,17 +3957,110 @@ const App = () => {
         return unsubscribe;
     }, []);
 
+    // Sync wishlist from Database or Guest Local Storage
+    useEffect(() => {
+        const syncWishlist = async () => {
+            if (authUser) {
+                // Merge guest wishlist
+                const local = localStorage.getItem('tet_guest_wishlist');
+                if (local) {
+                    try {
+                        const parsed = JSON.parse(local);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            const ids = parsed.map(p => p.id);
+                            await fetch('/api/wishlist/merge', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-User-Id': authUser.uid
+                                },
+                                body: JSON.stringify({ productIds: ids })
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Merge error:", e);
+                    } finally {
+                        localStorage.removeItem('tet_guest_wishlist');
+                    }
+                }
+
+                // Load from database persist layer
+                try {
+                    const res = await fetch('/api/wishlist', {
+                        headers: { 'X-User-Id': authUser.uid }
+                    });
+                    if (res.ok) {
+                        const items = await res.json();
+                        setWishlist(items || []);
+                    }
+                } catch (e) {
+                    console.error("Fetch wishlist error:", e);
+                }
+            } else {
+                const local = localStorage.getItem('tet_guest_wishlist');
+                if (local) {
+                    try {
+                        setWishlist(JSON.parse(local) || []);
+                    } catch (e) {
+                        setWishlist([]);
+                    }
+                } else {
+                    setWishlist([]);
+                }
+            }
+        };
+
+        if (!authLoading) {
+            syncWishlist();
+        }
+    }, [authUser, authLoading]);
+
+    const toggleWishlist = async (product) => {
+        const isWished = wishlist.some(item => item.id === product.id);
+        let updated;
+        if (isWished) {
+            updated = wishlist.filter(item => item.id !== product.id);
+        } else {
+            updated = [...wishlist, product];
+        }
+        setWishlist(updated);
+
+        if (authUser) {
+            try {
+                if (isWished) {
+                    await fetch(`/api/wishlist?productId=${product.id}`, {
+                        method: 'DELETE',
+                        headers: { 'X-User-Id': authUser.uid }
+                    });
+                } else {
+                    await fetch('/api/wishlist', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-User-Id': authUser.uid
+                        },
+                        body: JSON.stringify({ productId: product.id })
+                    });
+                }
+            } catch (e) {
+                console.error("DB wishlist toggle error:", e);
+            }
+        } else {
+            localStorage.setItem('tet_guest_wishlist', JSON.stringify(updated));
+        }
+    };
+
     const addToCart = (product) => {
         setCart(prev => [...prev, product]);
-        
-        // Premium toast alert
+        triggerLocalConfetti();
+
         if (toastTimerRef.current) {
             window.clearTimeout(toastTimerRef.current);
         }
-        setToast({ visible: true, message: `Added "${product.name}" to your cart.` });
+        setToastProduct(product);
         toastTimerRef.current = window.setTimeout(() => {
-            setToast({ visible: false, message: '' });
-        }, 3000);
+            setToastProduct(null);
+        }, 5500);
     };
 
     const clearCart = () => {
@@ -2065,57 +4068,196 @@ const App = () => {
         setDiscount(null);
     };
 
+    const handleSearchSubmit = (q) => {
+        setGlobalSearch(q);
+        if (window.location.hash !== "#/shop") {
+            window.location.hash = "#/shop";
+        }
+    };
+
+
     return (
         <HashRouter>
             <ScrollToTop />
-            <Navbar cartCount={cart.length} authUser={authUser} authLoading={authLoading} />
+            <Navbar 
+                products={products}
+                cartCount={cart.length} 
+                wishlistCount={wishlist.length} 
+                authUser={authUser} 
+                authLoading={authLoading} 
+                onSearchSubmit={handleSearchSubmit}
+                globalSearch={globalSearch}
+                setGlobalSearch={setGlobalSearch}
+            />
             <Routes>
-                <Route path="/" element={<Home products={products} loading={loading} />} />
+                <Route 
+                    path="/" 
+                    element={
+                        <Home 
+                            productsGlobal={products}
+                            wishlist={wishlist}
+                            toggleWishlist={toggleWishlist}
+                        />
+                    } 
+                />
+                <Route 
+                    path="/shop" 
+                    element={
+                        <Shop 
+                            productsGlobal={products}
+                            wishlist={wishlist}
+                            toggleWishlist={toggleWishlist}
+                            globalSearch={globalSearch}
+                            setGlobalSearch={setGlobalSearch}
+                        />
+                    } 
+                />
+
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} authUser={authUser} />} />
                 <Route path="/cart" element={<Cart cart={cart} onApplyCoupon={setDiscount} discount={discount} />} />
                 <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} />} />
                 <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={clearCart} />} />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
                 <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
+                <Route 
+                    path="/wishlist" 
+                    element={
+                        <WishlistPage 
+                            wishlist={wishlist}
+                            toggleWishlist={toggleWishlist}
+                            addToCart={addToCart}
+                        />
+                    } 
+                />
             </Routes>
             <Footer />
 
-            {/* Premium Toast Notification */}
-            {toast.visible && (
-                <div style={{
-                    position: 'fixed',
-                    bottom: '30px',
-                    right: '30px',
-                    backgroundColor: '#fff',
-                    border: '1px solid #e4b39b',
-                    borderRadius: '6px',
-                    padding: '0.9rem 1.4rem',
-                    boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
-                    zIndex: 100000,
-                    animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px'
-                }}>
-                    <span style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        backgroundColor: '#e4b39b'
-                    }}></span>
-                    <span style={{ 
-                        color: 'var(--color-text)', 
-                        fontSize: '0.9rem',
-                        fontWeight: '500',
-                        fontFamily: 'var(--font-body)'
-                    }}>
-                        {toast.message}
-                    </span>
+            {/* Premium Toast Drawer Notification */}
+            {toastProduct && (
+                <div className="cart-success-notification show">
+                    <div style={{ display: 'flex', gap: '1.2rem', alignItems: 'flex-start', marginBottom: '1.2rem' }}>
+                        <div style={{ width: '60px', height: '80px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+                            <img src={toastProduct.imageUrl} alt={toastProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '4px' }}>
+                                ✓ Added to Wardrobe
+                            </div>
+                            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: 'var(--color-text)', lineHeight: '1.4' }}>{toastProduct.name}</h4>
+                            <div style={{ fontSize: '0.85rem', color: '#686461', marginTop: '3px' }}>
+                                Size: <strong style={{color:'var(--color-text)'}}>{toastProduct.size || 'Standard'}</strong> &bull; ₹{toastProduct.price.toLocaleString('en-IN')}
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => setToastProduct(null)} 
+                            style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#ccc', padding: 0, lineHeight: 0 }}
+                            aria-label="Close notification"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '0.8rem' }}>
+                        <button 
+                            onClick={() => setToastProduct(null)} 
+                            className="btn" 
+                            style={{ flex: 1, padding: '0.75rem', fontSize: '0.85rem', background: '#fafafa', color: '#555', border: '1px solid #e0e0e0', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}
+                        >
+                            Continue Shopping
+                        </button>
+                        <a 
+                            href="#/cart" 
+                            onClick={() => setToastProduct(null)} 
+                            className="btn btn-primary" 
+                            style={{ flex: 1, padding: '0.75rem', fontSize: '0.85rem', textAlign: 'center', textDecoration: 'none', borderRadius: '6px', fontWeight: '600', display: 'block', boxSizing: 'border-box' }}
+                        >
+                            Checkout
+                        </a>
+                    </div>
                 </div>
             )}
         </HashRouter>
     );
 };
+
+// --- CUSTOM confetti particle fx emitter ---
+function triggerLocalConfetti() {
+    let canvas = document.getElementById('confetti-canvas');
+    if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.id = 'confetti-canvas';
+        document.body.appendChild(canvas);
+    }
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+
+    const colors = [
+        '#e4b39b', // Peach
+        '#d4af37', // Gold
+        '#ebd7cb', // Light Cream
+        '#8c8883', // Secondary styling
+        '#c68b59'  // Muted bronze
+    ];
+
+    const particles = [];
+    // Spawn particles rising up in arcs
+    for (let i = 0; i < 90; i++) {
+        particles.push({
+            x: window.innerWidth / 2,
+            y: window.innerHeight * 0.75,
+            size: Math.random() * 8 + 5,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            vx: (Math.random() - 0.5) * 16,
+            vy: (Math.random() - 0.7) * 16 - 6,
+            rotation: Math.random() * 360,
+            rotationSpeed: (Math.random() - 0.5) * 8,
+            opacity: 1,
+            shape: Math.random() > 0.55 ? 'circle' : 'square'
+        });
+    }
+
+    function animateConfetti() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let active = false;
+
+        particles.forEach(p => {
+            if (p.opacity > 0) {
+                active = true;
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.4; // gravity
+                p.vx *= 0.98; // friction
+                p.rotation += p.rotationSpeed;
+                p.opacity -= 0.014; // decay rate
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation * Math.PI / 180);
+                ctx.globalAlpha = Math.max(p.opacity, 0);
+                ctx.fillStyle = p.color;
+
+                if (p.shape === 'circle') {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                }
+                ctx.restore();
+            }
+        });
+
+        if (active) {
+            requestAnimationFrame(animateConfetti);
+        } else {
+            if (canvas.parentNode) {
+                canvas.parentNode.removeChild(canvas);
+            }
+        }
+    }
+    animateConfetti();
+}
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
