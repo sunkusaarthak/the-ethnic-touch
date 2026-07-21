@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("[SETTINGS DIAG] Page Loaded. Initializing tabs and listeners.");
     initTabs();
     loadDashboard();
+    initProductModal(); // Build size checkboxes on load
     
     // Form Submissions
     console.log("[SETTINGS DIAG] Hooking submit events...");
@@ -20,7 +21,168 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logout) {
         logout.addEventListener('click', () => window.location.href = '/');
     }
+
+    // Monitor url hashes for scanner scanning trigger
+    handleUrlHashChange();
+    window.addEventListener('hashchange', handleUrlHashChange);
 });
+
+const AVAILABLE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+
+function initProductModal() {
+    const grid = document.getElementById('sizesGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    AVAILABLE_SIZES.forEach(size => {
+        const card = document.createElement('div');
+        card.style.cssText = 'display:flex; flex-direction:column; gap:0.5rem; padding:0.8rem; background:#fff; border:1px solid #e0e0e0; border-radius:8px; transition:all 0.2s;';
+        card.innerHTML = `
+            <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; margin:0;">
+                <input type="checkbox" class="size-check" value="${size}" style="width:16px;height:16px;accent-color:var(--color-primary);">
+                <span style="font-weight:600; font-size:0.95rem;">${size}</span>
+            </label>
+            <div class="size-stock-wrapper" style="display:none; align-items:center; gap:0.4rem; margin-top:0.2rem;">
+                <span style="font-size:0.8rem; color:#666;">Stock:</span>
+                <input type="number" class="size-stock-input" value="10" min="0" style="width:100%; padding:0.4rem; border:1px solid #ccc; border-radius:4px; font-size:0.85rem; box-sizing:border-box;">
+            </div>
+        `;
+        const checkbox = card.querySelector('.size-check');
+        const wrapper = card.querySelector('.size-stock-wrapper');
+        const stockInput = card.querySelector('.size-stock-input');
+
+        checkbox.addEventListener('change', () => {
+            card.style.borderColor = checkbox.checked ? 'var(--color-primary)' : '#e0e0e0';
+            card.style.backgroundColor = checkbox.checked ? '#fffdf9' : '#fff';
+            wrapper.style.display = checkbox.checked ? 'flex' : 'none';
+            updateTotalStockFallback();
+        });
+
+        stockInput.addEventListener('input', () => {
+            updateTotalStockFallback();
+        });
+
+        grid.appendChild(card);
+    });
+    updateTotalStockFallback();
+}
+
+function updateTotalStockFallback() {
+    const totalInput = document.getElementById('p_stock');
+    if (!totalInput) return;
+    
+    let sum = 0;
+    const checks = document.querySelectorAll('.size-check');
+    checks.forEach(cb => {
+        if (cb.checked) {
+            const card = cb.closest('div');
+            const stockInput = card.querySelector('.size-stock-input');
+            const val = parseInt(stockInput.value) || 0;
+            sum += val;
+        }
+    });
+
+    totalInput.value = sum;
+}
+
+function addGalleryImageField() {
+    const container = document.getElementById('galleryImagesContainer');
+    const existingInputs = container.querySelectorAll('.gallery-img-input');
+    if (existingInputs.length >= 5) {
+        alert('Maximum 5 extra gallery images allowed.');
+        return;
+    }
+    const idx = existingInputs.length + 2;
+
+    const row = document.createElement('div');
+    row.className = 'gallery-img-row';
+    row.style.cssText = 'display: flex; gap: 0.8rem; align-items: center; margin-bottom: 0.5rem;';
+    row.innerHTML = `
+        <input type="text" class="gallery-img-input" placeholder="./images/angle${idx}.png" style="flex: 1; padding: 0.7rem; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box;">
+        <div style="position: relative;">
+            <button type="button" class="btn-secondary" style="padding: 0.7rem 1rem; font-size:0.85rem; cursor: pointer;">Upload</button>
+            <input type="file" accept="image/*" onchange="uploadGalleryRowFile(event, this)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+        </div>
+    `;
+    container.appendChild(row);
+}
+
+async function uploadImageFile(event, targetInputId) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const btn = event.target.previousElementSibling;
+    const oldText = btn.innerText;
+    btn.innerText = 'Uploading...';
+    btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch('/api/admin/upload', {
+            method: 'POST',
+            headers: {
+                ...getAuthHeader()
+            },
+            body: formData
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        document.getElementById(targetInputId).value = data.url;
+        btn.innerText = 'Success!';
+        setTimeout(() => { btn.innerText = 'Upload File'; btn.disabled = false; }, 2000);
+    } catch (err) {
+        alert('File upload failed: ' + err.message);
+        btn.innerText = 'Failed';
+        setTimeout(() => { btn.innerText = 'Upload File'; btn.disabled = false; }, 3000);
+    }
+}
+
+async function uploadGalleryRowFile(event, fileInputElement) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const btn = fileInputElement.previousElementSibling;
+    const oldText = btn.innerText;
+    btn.innerText = '...';
+    btn.disabled = true;
+
+    // Find the text input in the same row
+    const row = fileInputElement.closest('.gallery-img-row');
+    const textInput = row.querySelector('.gallery-img-input');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch('/api/admin/upload', {
+            method: 'POST',
+            headers: {
+                ...getAuthHeader()
+            },
+            body: formData
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        textInput.value = data.url;
+        btn.innerText = '✓';
+        setTimeout(() => { btn.innerText = 'Upload'; btn.disabled = false; }, 2000);
+    } catch (err) {
+        alert('File upload failed: ' + err.message);
+        btn.innerText = '✗';
+        setTimeout(() => { btn.innerText = 'Upload'; btn.disabled = false; }, 3000);
+    }
+}
 
 // Helper to assemble Auth headers dynamically
 function getAuthHeader() {
@@ -78,6 +240,14 @@ async function loadTabData(tab) {
     if (tab === 'coupons') loadCoupons();
     if (tab === 'settings') loadSettings();
     if (tab === 'profiles') loadProfiles();
+    if (tab === 'pickup-scanner') {
+        const card = document.getElementById('pickupOrderCard');
+        const msg = document.getElementById('scannerMessage');
+        const inp = document.getElementById('scannerOrderIdInput');
+        if (card) card.style.display = 'none';
+        if (msg) msg.style.display = 'none';
+        if (inp) inp.value = '';
+    }
 }
 
 async function loadDashboard() {
@@ -100,25 +270,34 @@ async function loadDashboard() {
 
 async function loadProducts() {
     const body = document.querySelector('#productsTable tbody');
-    body.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+    body.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
     
     try {
         const products = await fetch('/api/products').then(r => r.json());
         body.innerHTML = '';
         products.forEach(p => {
+            let sizesDisplay = '<span style="color:#bbb">—</span>';
+            if (p.sizes && p.sizes.length) {
+                sizesDisplay = p.sizes.map(sz => {
+                    const stk = (p.sizesStock && p.sizesStock[sz] !== undefined) ? p.sizesStock[sz] : 0;
+                    return `<span class="size-badge" style="display:inline-block; background:#fbf5eb; border:1px solid #f6dcb6; color:#a05d2c; margin:2px; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:600;">${sz} (${stk})</span>`;
+                }).join(' ');
+            }
+            const imageCount = (p.galleryImages && p.galleryImages.length) ? p.galleryImages.length : 1;
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><img src="${p.imageUrl}" style="width:40px; height:40px; border-radius:4px; object-fit:cover;"></td>
+                <td><img src="${p.imageUrl}" style="width:44px; height:52px; border-radius:4px; object-fit:cover;"></td>
                 <td style="font-weight:500">${p.name}</td>
-                <td>${p.category}</td>
+                <td><span style="background:#f5f5f5; padding:2px 8px; border-radius:4px; font-size:0.8rem;">${p.category}</span></td>
                 <td>₹${p.price.toLocaleString('en-IN')}</td>
                 <td>${p.stock}</td>
-                <td><button class="btn-secondary" style="padding:4px 12px; font-size:0.8rem">Edit</button></td>
+                <td style="font-size:0.85rem; color:#666;">${sizesDisplay}</td>
+                <td style="font-size:0.8rem; color:#888;">${imageCount} photo${imageCount !== 1 ? 's' : ''}</td>
             `;
             body.appendChild(tr);
         });
     } catch (err) {
-        body.innerHTML = '<tr><td colspan="6" style="color:red">Failed to load products.</td></tr>';
+        body.innerHTML = '<tr><td colspan="7" style="color:red">Failed to load products.</td></tr>';
     }
 }
 
@@ -137,9 +316,16 @@ async function loadOrders() {
             const itemsStr = o.items ? o.items.map(it => `${it.productName || it.productId} (x${it.quantity})`).join(', ') : 'No Details';
             
             // Determine tracking badge
-            const trackingStr = o.trackingNumber 
+            let trackingStr = o.trackingNumber 
                 ? `<span style="font-family:monospace; color:#2e7d32">🚚 ${o.trackingNumber}</span>`
                 : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
+            
+            if (o.checkoutType === 'pickup') {
+                trackingStr = `<span style="font-family:monospace; color:#6b4c35; font-weight:600">🏪 Store Pickup</span>` + (o.paymentMethod === 'offline_qr' ? ` <span style="font-size:0.75rem; background:#fff3cd; color:#856404; padding:2px 4px; border-radius:3px;">Offline QR</span>` : ' (Online)');
+            } else if (o.checkoutType === 'hyderabad_instant') {
+                trackingStr = `<div style="font-family:monospace; color:#bf7c00; font-weight:600">⚡ Hyderabad Instant</div>` + 
+                    (o.trackingNumber ? `<span style="font-size:0.75rem; font-family:monospace; color:#555">${o.trackingNumber}</span>` : '');
+            }
 
             // Status label style
             let badgeBg = '#ffe0b2';
@@ -147,9 +333,21 @@ async function loadOrders() {
             if (o.status === 'shipped') {
                 badgeBg = '#e8f5e9';
                 badgeColor = '#2e7d32';
+            } else if (o.status === 'ready_for_pickup') {
+                badgeBg = '#fff8e1';
+                badgeColor = '#f57f17';
+            } else if (o.status === 'picked_up') {
+                badgeBg = '#e8f5e9';
+                badgeColor = '#1b5e20';
+            } else if (o.status === 'dispatched_instant') {
+                badgeBg = '#efebe9';
+                badgeColor = '#4e342e';
             } else if (o.status === 'paid') {
                 badgeBg = '#e3f2fd';
                 badgeColor = '#0d47a1';
+            } else if (o.status === 'pending_payment') {
+                badgeBg = '#ffebee';
+                badgeColor = '#c62828';
             }
 
             tr.innerHTML = `
@@ -194,13 +392,58 @@ async function loadCoupons() {
 
 async function handleAddProduct(e) {
     e.preventDefault();
+
+    const primaryImage = document.getElementById('p_image').value.trim();
+
+    // Collect gallery images: primary first, then extras
+    const galleryInputs = document.querySelectorAll('.gallery-img-input');
+    const galleryImages = [primaryImage];
+    galleryInputs.forEach(input => {
+        const val = input.value.trim();
+        if (val) galleryImages.push(val);
+    });
+
+    // Collect checked sizes and their stock inputs
+    const sizeChecks = document.querySelectorAll('.size-check:checked');
+    const sizes = [];
+    const sizesStock = {};
+    sizeChecks.forEach(cb => {
+        const sizeVal = cb.value;
+        sizes.push(sizeVal);
+        const card = cb.closest('div');
+        const stockInput = card.querySelector('.size-stock-input');
+        const qty = parseInt(stockInput.value) || 0;
+        sizesStock[sizeVal] = qty;
+    });
+
+    if (sizes.length === 0) {
+        alert('Please select at least one available size.');
+        return;
+    }
+
     const data = {
-        name: document.getElementById('p_name').value,
+        name: document.getElementById('p_name').value.trim(),
         price: parseFloat(document.getElementById('p_price').value),
-        stock: parseInt(document.getElementById('p_stock').value),
+        stock: parseInt(document.getElementById('p_stock').value) || 0,
         category: document.getElementById('p_category').value,
-        description: document.getElementById('p_desc').value,
-        imageUrl: document.getElementById('p_image').value
+        description: document.getElementById('p_desc').value.trim(),
+        imageUrl: primaryImage,
+        galleryImages: galleryImages,
+        sizes: sizes,
+        sizesStock: sizesStock,
+        collection: document.getElementById('p_collection').value.trim(),
+        sku: document.getElementById('p_sku').value.trim(),
+        originalPrice: parseFloat(document.getElementById('p_orig_price').value) || 0,
+        color: document.getElementById('p_color').value.trim(),
+        fabric: document.getElementById('p_fabric').value,
+        sleeveType: document.getElementById('p_sleeve').value,
+        neckType: document.getElementById('p_neck').value,
+        pattern: document.getElementById('p_pattern').value,
+        occasion: document.getElementById('p_occasion').value,
+        tags: document.getElementById('p_tags').value.trim(),
+        isNewArrival: document.getElementById('p_new_arrival').checked,
+        isBestSeller: document.getElementById('p_best_seller').checked,
+        isFeatured: document.getElementById('p_featured').checked
     };
 
     const res = await fetch('/api/products', {
@@ -216,9 +459,22 @@ async function handleAddProduct(e) {
         closeModals();
         loadProducts();
         document.getElementById('productForm').reset();
+        // Re-init size checkboxes to cleared state
+        initProductModal();
+        // Reset gallery images to single empty row field containing upload button
+        const container = document.getElementById('galleryImagesContainer');
+        container.innerHTML = `
+            <div class="gallery-img-row" style="display: flex; gap: 0.8rem; align-items: center; margin-bottom: 0.5rem;">
+                <input type="text" class="gallery-img-input" placeholder="./images/angle2.png" style="flex: 1; padding: 0.7rem; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box;">
+                <div style="position: relative;">
+                    <button type="button" class="btn-secondary" style="padding: 0.7rem 1rem; font-size:0.85rem; cursor: pointer;">Upload</button>
+                    <input type="file" accept="image/*" onchange="uploadGalleryRowFile(event, this)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+                </div>
+            </div>
+        `;
     } else {
-        const errData = await res.json();
-        alert(errData.error || "Failed to create product");
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to create product');
     }
 }
 
@@ -303,7 +559,7 @@ function renderTiersTable() {
         
         let detailsStr = '';
         if (tier.rewardType === 'coupon') {
-            detailsStr = `<strong>${tier.discountType === 'percentage' ? tier.discountValue + '%' : '₹' + tier.discountValue} Off</strong> Coupon (Pattern: <code>${tier.couponFormat}</code>)`;
+            detailsStr = `<strong>${tier.discountType === 'percentage' ? tier.discountValue + '%' : '₹' + tier.discountValue} Off</strong> Coupon (Pattern: <code>${tier.couponFormat}</code>, Expiry: ${tier.couponExpiryDays || 30} days)`;
         } else {
             detailsStr = `Physical item: <strong>${tier.physicalName}</strong>`;
         }
@@ -348,11 +604,13 @@ function editTier(idx) {
         document.getElementById('t_discount_type').value = tier.discountType;
         document.getElementById('t_discount_value').value = tier.discountValue;
         document.getElementById('t_coupon_format').value = tier.couponFormat;
+        document.getElementById('t_coupon_expiry_days').value = tier.couponExpiryDays !== undefined ? tier.couponExpiryDays : 30;
         document.getElementById('t_physical_name').value = '';
     } else {
         document.getElementById('t_physical_name').value = tier.physicalName;
         document.getElementById('t_discount_value').value = '';
         document.getElementById('t_coupon_format').value = '';
+        document.getElementById('t_coupon_expiry_days').value = 0;
     }
     
     document.getElementById('formTitle').innerText = "Edit Reward Tier";
@@ -371,6 +629,7 @@ function resetTierForm() {
     document.getElementById('t_edit_idx').value = '';
     document.getElementById('formTitle').innerText = "Add New Reward Tier";
     document.getElementById('cancelBtn').style.display = 'none';
+    document.getElementById('t_coupon_expiry_days').value = 30;
     toggleRewardTypeInputs();
 }
 
@@ -401,12 +660,14 @@ async function handleSaveTier(e) {
             const discType = document.getElementById('t_discount_type').value;
             const discValStr = document.getElementById('t_discount_value').value;
             const copFormat = document.getElementById('t_coupon_format').value;
+            const expDaysStr = document.getElementById('t_coupon_expiry_days').value;
             
-            console.log("[SETTINGS DIAG] Coupon Input Values:", { discType, discValStr, copFormat });
+            console.log("[SETTINGS DIAG] Coupon Input Values:", { discType, discValStr, copFormat, expDaysStr });
             
             tier.discountType = discType;
             tier.discountValue = parseFloat(discValStr || 0);
             tier.couponFormat = copFormat || "GFT-[RAND]";
+            tier.couponExpiryDays = parseInt(expDaysStr || 0);
             tier.physicalName = "";
         } else {
             const physName = document.getElementById('t_physical_name').value;
@@ -415,6 +676,7 @@ async function handleSaveTier(e) {
             tier.discountType = "";
             tier.discountValue = 0;
             tier.couponFormat = "";
+            tier.couponExpiryDays = 0;
             tier.physicalName = physName;
         }
         
@@ -703,3 +965,210 @@ window.handleSaveTier = handleSaveTier;
 window.viewProfileDetails = viewProfileDetails;
 window.saveProfileFromAdmin = saveProfileFromAdmin;
 window.loadProfiles = loadProfiles;
+window.addGalleryImageField = addGalleryImageField;
+window.initProductModal = initProductModal;
+window.uploadImageFile = uploadImageFile;
+window.uploadGalleryRowFile = uploadGalleryRowFile;
+
+// --- VERIFY & CONFIRM STORE PICKUPS ---
+function triggerSearchPickupOrder() {
+    const input = document.getElementById('scannerOrderIdInput');
+    if (!input) return;
+    const orderId = input.value.trim();
+    if (!orderId) {
+        showScannerMessage("Please enter a valid Order ID.", "red", "#fff5f5");
+        return;
+    }
+    searchPickupOrder(orderId);
+}
+
+function showScannerMessage(text, color, bgColor) {
+    const msgEl = document.getElementById('scannerMessage');
+    if (!msgEl) return;
+    msgEl.innerText = text;
+    msgEl.style.color = color;
+    msgEl.style.backgroundColor = bgColor || '#fff';
+    msgEl.style.border = `1px solid ${color}40`;
+    msgEl.style.display = 'block';
+}
+
+async function searchPickupOrder(orderId) {
+    const msgEl = document.getElementById('scannerMessage');
+    const cardEl = document.getElementById('pickupOrderCard');
+    if (msgEl) msgEl.style.display = 'none';
+    if (cardEl) cardEl.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/admin/orders?orderId=${encodeURIComponent(orderId)}`, {
+            headers: getAuthHeader()
+        });
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            showScannerMessage(errData.error || `Failed to fetch order. Status: ${res.status}`, "red", "#fff5f5");
+            return;
+        }
+
+        const orders = await res.json();
+        if (!orders || orders.length === 0) {
+            showScannerMessage(`Order Reference "${orderId}" not found in database.`, "red", "#fff5f5");
+            return;
+        }
+
+        const order = orders[0];
+        displayPickupOrderDetails(order);
+
+    } catch (err) {
+        showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
+    }
+}
+
+function displayPickupOrderDetails(order) {
+    const cardEl = document.getElementById('pickupOrderCard');
+    if (!cardEl) return;
+
+    // Fill fields
+    document.getElementById('poCardOrderId').innerText = `Order #${order.id}`;
+    document.getElementById('poCardCustomer').innerText = order.customerEmail;
+    document.getElementById('poCardCheckoutType').innerText = order.checkoutType === 'pickup' ? '🏪 Boutique Pickup' : order.checkoutType;
+    document.getElementById('poCardPaymentMethod').innerText = order.paymentMethod === 'offline_qr' ? '💳 Offline UPI QR Pass' : '🌐 Paid Online (RazorPay)';
+    document.getElementById('poCardDate').innerText = new Date(order.createdAt).toLocaleString();
+    document.getElementById('poCardAmount').innerText = `₹${order.totalAmount.toLocaleString('en-IN')}`;
+
+    // Status Badge
+    const badge = document.getElementById('poCardStatusBadge');
+    badge.innerText = order.status;
+    
+    let badgeBg = '#ffe0b2';
+    let badgeColor = '#e65100';
+    if (order.status === 'picked_up') {
+        badgeBg = '#e8f5e9';
+        badgeColor = '#2e7d32';
+    } else if (order.status === 'ready_for_pickup') {
+        badgeBg = '#fff8e1';
+        badgeColor = '#f57f17';
+    } else if (order.status === 'pending_payment') {
+        badgeBg = '#ffebee';
+        badgeColor = '#c62828';
+    } else if (order.status === 'paid') {
+        badgeBg = '#e3f2fd';
+        badgeColor = '#0d47a1';
+    }
+    badge.style.backgroundColor = badgeBg;
+    badge.style.color = badgeColor;
+
+    // Items list
+    const itemsList = document.getElementById('poCardItemsList');
+    itemsList.innerHTML = '';
+    if (order.items && order.items.length > 0) {
+        order.items.forEach(it => {
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${it.productName || it.productId}</strong> (Price: ₹${it.priceAtQty.toLocaleString('en-IN')}) &times; <strong>${it.quantity}</strong>`;
+            itemsList.appendChild(li);
+        });
+    } else {
+        itemsList.innerHTML = '<li style="color:#999; font-style:italic">No items logged for this order.</li>';
+    }
+
+    // Actions Container
+    const actions = document.getElementById('poCardActionsContainer');
+    actions.innerHTML = '';
+
+    if (order.status === 'picked_up') {
+        const infoMsg = document.createElement('div');
+        infoMsg.style.cssText = 'padding: 0.8rem; background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; border-radius: 8px; font-weight: 500; font-size: 0.9rem; flex: 1; text-align: center;';
+        infoMsg.innerText = '✓ Order is already Picked Up & Fulfilled.';
+        actions.appendChild(infoMsg);
+    } else if (order.checkoutType !== 'pickup') {
+        const warnMsg = document.createElement('div');
+        warnMsg.style.cssText = 'padding: 0.8rem; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 8px; font-size: 0.9rem; flex: 1;';
+        warnMsg.innerHTML = `⚠️ <strong>Warning:</strong> This order fulfillment method is <strong>${order.checkoutType}</strong>. Verify dispatch details instead.`;
+        actions.appendChild(warnMsg);
+    } else {
+        // Render verification details & Action button!
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary';
+        btn.style.cssText = 'padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600; flex: 1;';
+        
+        if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
+            btn.innerText = 'Verify Offline UPI Payment & Complete Pickup';
+            btn.style.backgroundColor = '#d0883b';
+        } else {
+            btn.innerText = 'Confirm Store Pickup & Release Items';
+        }
+
+        btn.onclick = () => confirmStorePickup(order.id);
+        actions.appendChild(btn);
+    }
+
+    cardEl.style.display = 'block';
+}
+
+async function confirmStorePickup(orderId) {
+    if (!confirm(`Are you sure you want to confirm pickup for Order #${orderId}?`)) return;
+
+    try {
+        const res = await fetch('/api/admin/orders/confirm-pickup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify({ orderId: orderId })
+        });
+
+        if (res.ok) {
+            showScannerMessage(`Order #${orderId} has been successfully verified, payment confirmed/checked, and marked as picked_up!`, "green", "#f4fbf7");
+            // Reload order details
+            searchPickupOrder(orderId);
+            // Refresh order list if general table is open
+            loadOrders();
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            showScannerMessage(`Failed to confirm pickup: ${errData.error || 'Server error'}`, "red", "#fff5f5");
+        }
+    } catch (err) {
+        showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
+    }
+}
+
+function handleUrlHashChange() {
+    const hash = window.location.hash || '';
+    if (hash.startsWith('#pickup-scanner') || hash.startsWith('#confirm-pickup')) {
+        const qIdx = hash.indexOf('?');
+        let orderId = '';
+        if (qIdx !== -1) {
+            const params = new URLSearchParams(hash.slice(qIdx));
+            orderId = params.get('orderId') || '';
+        }
+        
+        // Find matching li in navigation
+        const pickupTab = document.querySelector('nav li[data-tab="pickup-scanner"]');
+        if (pickupTab) {
+            const tabs = document.querySelectorAll('nav li');
+            const contents = document.querySelectorAll('.tab-content');
+            
+            tabs.forEach(t => t.classList.remove('active'));
+            pickupTab.classList.add('active');
+            
+            contents.forEach(c => c.classList.remove('active'));
+            const targetEl = document.getElementById('tab-pickup-scanner');
+            if (targetEl) targetEl.classList.add('active');
+            
+            document.getElementById('pageTitle').innerText = pickupTab.innerText;
+            updateHeaderActions('pickup-scanner');
+            
+            if (orderId) {
+                const inputEl = document.getElementById('scannerOrderIdInput');
+                if (inputEl) {
+                    inputEl.value = orderId;
+                    searchPickupOrder(orderId);
+                }
+            }
+        }
+    }
+}
+
+window.triggerSearchPickupOrder = triggerSearchPickupOrder;
+window.searchPickupOrder = searchPickupOrder;
+window.confirmStorePickup = confirmStorePickup;
+window.handleUrlHashChange = handleUrlHashChange;
