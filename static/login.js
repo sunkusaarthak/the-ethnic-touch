@@ -156,6 +156,36 @@ function setAuthMode(signUpMode) {
     signupPromptText.textContent = signUpMode ? 'Already have an account?' : 'New to The Ethnic Touch?';
     signupLink.textContent = signUpMode ? 'Sign in' : 'Create an account';
     passwordInput.autocomplete = signUpMode ? 'new-password' : 'current-password';
+
+    const tabSignIn = document.getElementById('tab-signin');
+    const tabSignUp = document.getElementById('tab-signup');
+    const tabIndicator = document.getElementById('tab-indicator');
+    const welcomeTitle = document.getElementById('welcome-title');
+    const welcomeSubtitle = document.getElementById('welcome-subtitle');
+    const dividerText = document.getElementById('divider-text');
+
+    if (tabSignIn && tabSignUp) {
+        if (signUpMode) {
+            tabSignIn.classList.remove('active');
+            tabSignUp.classList.add('active');
+            tabSignIn.setAttribute('aria-selected', 'false');
+            tabSignUp.setAttribute('aria-selected', 'true');
+            if (tabIndicator) tabIndicator.style.transform = 'translateX(100%)';
+            if (welcomeTitle) welcomeTitle.textContent = 'Create your account';
+            if (welcomeSubtitle) welcomeSubtitle.textContent = 'Join The Ethnic Touch to enjoy personalized collections & boutique rewards.';
+            if (dividerText) dividerText.textContent = 'or register with email';
+        } else {
+            tabSignUp.classList.remove('active');
+            tabSignIn.classList.add('active');
+            tabSignUp.setAttribute('aria-selected', 'false');
+            tabSignIn.setAttribute('aria-selected', 'true');
+            if (tabIndicator) tabIndicator.style.transform = 'translateX(0)';
+            if (welcomeTitle) welcomeTitle.textContent = 'Welcome back';
+            if (welcomeSubtitle) welcomeSubtitle.textContent = 'Sign in to access your curated collection, wishlist, and orders.';
+            if (dividerText) dividerText.textContent = 'or sign in with email';
+        }
+    }
+
     hideMessage();
 }
 
@@ -288,6 +318,16 @@ signupLink.addEventListener('click', (e) => {
     e.preventDefault();
     setAuthMode(!isSignUpMode);
 });
+
+// Tab Switcher Click Handlers
+const tabSignIn = document.getElementById('tab-signin');
+const tabSignUp = document.getElementById('tab-signup');
+if (tabSignIn) {
+    tabSignIn.addEventListener('click', () => setAuthMode(false));
+}
+if (tabSignUp) {
+    tabSignUp.addEventListener('click', () => setAuthMode(true));
+}
 
 // ΓöÇΓöÇΓöÇ Clear Error State on Input ΓöÇΓöÇΓöÇ
 emailInput.addEventListener('input', () => {

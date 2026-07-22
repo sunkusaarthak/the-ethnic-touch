@@ -27,6 +27,80 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('hashchange', handleUrlHashChange);
 });
 
+function copyTextToClipboard(text, btnElement) {
+    if (!text) return;
+    const textToCopy = String(text).trim();
+    const onSuccess = () => {
+        if (btnElement) {
+            const originalHTML = btnElement.innerHTML;
+            btnElement.innerHTML = `✓ Copied!`;
+            btnElement.style.backgroundColor = '#e8f5e9';
+            btnElement.style.color = '#2e7d32';
+            btnElement.style.borderColor = '#81c784';
+            setTimeout(() => {
+                btnElement.innerHTML = originalHTML;
+                btnElement.style.backgroundColor = '';
+                btnElement.style.color = '';
+                btnElement.style.borderColor = '';
+            }, 2000);
+        }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy).then(onSuccess).catch(() => fallbackCopyAdmin(textToCopy, onSuccess));
+    } else {
+        fallbackCopyAdmin(textToCopy, onSuccess);
+    }
+}
+
+function fallbackCopyAdmin(str, cb) {
+    try {
+        const el = document.createElement('textarea');
+        el.value = str;
+        el.setAttribute('readonly', '');
+        el.style.position = 'absolute';
+        el.style.left = '-9999px';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        if (cb) cb();
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function showAdminAlert(message, title = "Admin Notice", type = "warning") {
+    let modal = document.getElementById('adminCustomAlertModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'adminCustomAlertModal';
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 999999; padding: 1.5rem;
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const iconColor = type === 'error' ? '#d32f2f' : type === 'success' ? '#2e7d32' : '#b97a66';
+    const iconBg = type === 'error' ? '#ffebee' : type === 'success' ? '#e8f5e9' : '#fff0e9';
+
+    modal.innerHTML = `
+        <div style="background: #ffffff; border-radius: 16px; max-width: 440px; width: 100%; padding: 2rem 1.8rem; box-shadow: 0 25px 60px rgba(0,0,0,0.2); text-align: center; position: relative; font-family: inherit;">
+            <button onclick="document.getElementById('adminCustomAlertModal').style.display='none'" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.2rem; color: #aaa; cursor: pointer; padding: 0.3rem;">✕</button>
+            <div style="width: 60px; height: 60px; border-radius: 50%; background-color: ${iconBg}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.2rem; font-size: 1.8rem; font-weight: bold;">
+                ${type === 'error' ? '✕' : type === 'success' ? '✓' : '!'}
+            </div>
+            <h3 style="font-size: 1.3rem; font-weight: 600; color: #2D2A26; margin: 0 0 0.6rem;">${title}</h3>
+            <p style="font-size: 0.95rem; color: #6C6863; line-height: 1.6; margin: 0 0 1.5rem;">${message}</p>
+            <button onclick="document.getElementById('adminCustomAlertModal').style.display='none'" style="width: 100%; padding: 0.8rem; font-size: 0.95rem; font-weight: 600; background: #2D2A26; color: #ffffff; border: none; border-radius: 8px; cursor: pointer;">Acknowledge</button>
+        </div>
+    `;
+    modal.style.display = 'flex';
+}
+
 const AVAILABLE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
 function initProductModal() {
@@ -88,7 +162,7 @@ function addGalleryImageField() {
     const container = document.getElementById('galleryImagesContainer');
     const existingInputs = container.querySelectorAll('.gallery-img-input');
     if (existingInputs.length >= 5) {
-        alert('Maximum 5 extra gallery images allowed.');
+        showAdminAlert('Maximum 5 extra gallery images allowed.', 'Limit Exceeded', 'warning');
         return;
     }
     const idx = existingInputs.length + 2;
@@ -137,7 +211,7 @@ async function uploadImageFile(event, targetInputId) {
         btn.innerText = 'Success!';
         setTimeout(() => { btn.innerText = 'Upload File'; btn.disabled = false; }, 2000);
     } catch (err) {
-        alert('File upload failed: ' + err.message);
+        showAdminAlert('File upload failed: ' + err.message, 'Upload Error', 'error');
         btn.innerText = 'Failed';
         setTimeout(() => { btn.innerText = 'Upload File'; btn.disabled = false; }, 3000);
     }
@@ -178,7 +252,7 @@ async function uploadGalleryRowFile(event, fileInputElement) {
         btn.innerText = '✓';
         setTimeout(() => { btn.innerText = 'Upload'; btn.disabled = false; }, 2000);
     } catch (err) {
-        alert('File upload failed: ' + err.message);
+        showAdminAlert('File upload failed: ' + err.message, 'Upload Error', 'error');
         btn.innerText = '✗';
         setTimeout(() => { btn.innerText = 'Upload'; btn.disabled = false; }, 3000);
     }
@@ -417,7 +491,7 @@ async function handleAddProduct(e) {
     });
 
     if (sizes.length === 0) {
-        alert('Please select at least one available size.');
+        showAdminAlert('Please select at least one available size.', 'Size Required', 'warning');
         return;
     }
 
@@ -474,7 +548,7 @@ async function handleAddProduct(e) {
         `;
     } else {
         const errData = await res.json().catch(() => ({}));
-        alert(errData.error || 'Failed to create product');
+        showAdminAlert(errData.error || 'Failed to create product', 'Product Error', 'error');
     }
 }
 
@@ -503,7 +577,7 @@ async function handleAddCoupon(e) {
         document.getElementById('couponForm').reset();
     } else {
         const errData = await res.json();
-        alert(errData.error || "Failed to create coupon");
+        showAdminAlert(errData.error || "Failed to create coupon", 'Coupon Error', 'error');
     }
 }
 
@@ -518,7 +592,7 @@ async function loadSettings() {
     const body = document.querySelector('#tiersTable tbody');
     if (!body) {
         console.error("[SETTINGS DIAG] ERROR: Element '#tiersTable tbody' not found in DOM!");
-        alert("[JS Error] Element '#tiersTable tbody' not found in DOM!");
+        showAdminAlert("[JS Error] Element '#tiersTable tbody' not found in DOM!", 'DOM Error', 'error');
         return;
     }
     
@@ -698,7 +772,7 @@ async function handleSaveTier(e) {
         resetTierForm();
     } catch (err) {
         console.error("[SETTINGS DIAG] JS Error caught in handleSaveTier:", err);
-        alert("[JS Error] " + err.message);
+        showAdminAlert("[JS Error] " + err.message, 'Save Error', 'error');
     }
 }
 
@@ -730,11 +804,11 @@ async function saveTiersToServer() {
                 const json = JSON.parse(text);
                 errMsg = json.error || text;
             } catch(e) {}
-            alert("Error saving settings: " + errMsg);
+            showAdminAlert("Error saving settings: " + errMsg, 'Settings Error', 'error');
         }
     } catch(err) {
         console.error("[SETTINGS DIAG] Fetch request connection failed:", err);
-        alert("Failed to connect to server: " + err.message);
+        showAdminAlert("Failed to connect to server: " + err.message, 'Network Error', 'error');
     }
 }
 
@@ -944,15 +1018,15 @@ async function saveProfileFromAdmin(e, userId) {
         });
         
         if (res.ok) {
-            alert('Profile updated successfully!');
+            showAdminAlert('Profile updated successfully!', 'Profile Updated', 'success');
             viewProfileDetails(userId);
             loadProfiles();
         } else {
             const errData = await res.json();
-            alert(errData.error || 'Failed to update profile');
+            showAdminAlert(errData.error || 'Failed to update profile', 'Update Failed', 'error');
         }
     } catch (err) {
-        alert('Failed to connect to server: ' + err.message);
+        showAdminAlert('Failed to connect to server: ' + err.message, 'Network Error', 'error');
     }
 }
 
@@ -1027,7 +1101,7 @@ function displayPickupOrderDetails(order) {
     if (!cardEl) return;
 
     // Fill fields
-    document.getElementById('poCardOrderId').innerText = `Order #${order.id}`;
+    document.getElementById('poCardOrderId').innerHTML = `Order #${order.id} <button type="button" onclick="copyTextToClipboard('${order.id}', this)" style="margin-left:8px; padding:2px 8px; font-size:0.75rem; border-radius:4px; border:1px solid #ddd; background:#fff; cursor:pointer">Copy ID</button>`;
     document.getElementById('poCardCustomer').innerText = order.customerEmail;
     document.getElementById('poCardCheckoutType').innerText = order.checkoutType === 'pickup' ? '🏪 Boutique Pickup' : order.checkoutType;
     document.getElementById('poCardPaymentMethod').innerText = order.paymentMethod === 'offline_qr' ? '💳 Offline UPI QR Pass' : '🌐 Paid Online (RazorPay)';
@@ -1061,8 +1135,11 @@ function displayPickupOrderDetails(order) {
     itemsList.innerHTML = '';
     if (order.items && order.items.length > 0) {
         order.items.forEach(it => {
+            const qty = it.quantity || 1;
+            const unitPrice = it.priceAtQty || 0;
+            const lineTotal = unitPrice * qty;
             const li = document.createElement('li');
-            li.innerHTML = `<strong>${it.productName || it.productId}</strong> (Price: ₹${it.priceAtQty.toLocaleString('en-IN')}) &times; <strong>${it.quantity}</strong>`;
+            li.innerHTML = `<strong>${it.productName || it.productId}</strong> ${it.size ? `<span style="font-size:0.8rem; background:#fff0e9; color:#b97a66; padding:1px 5px; border-radius:3px; margin-left:4px">Size: ${it.size}</span>` : ''} &times; <strong>${qty}</strong> — <strong>₹${lineTotal.toLocaleString('en-IN')}</strong> ${qty > 1 ? `<small style="color:#888">(₹${unitPrice.toLocaleString('en-IN')} each)</small>` : ''}`;
             itemsList.appendChild(li);
         });
     } else {
