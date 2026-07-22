@@ -276,3 +276,61 @@ form input:focus {
     background: transparent;
     cursor: pointer;
 }
+
+/* Mobile Responsive Admin Layout */
+@media (max-width: 900px) {
+    body {
+        flex-direction: column;
+    }
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        padding: 1.2rem 1rem;
+    }
+    .logo {
+        margin-bottom: 1rem;
+        padding: 0 0.5rem;
+    }
+    nav ul {
+        display: flex;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        gap: 0.2rem;
+    }
+    nav li {
+        padding: 0.75rem 1.1rem;
+        border-left: none;
+        border-bottom: 3px solid transparent;
+        font-size: 0.88rem;
+    }
+    nav li:hover, nav li.active {
+        border-left-color: transparent;
+        border-bottom-color: var(--color-primary);
+    }
+    .sidebar-footer {
+        padding: 1rem 0 0;
+    }
+    .content {
+        margin-left: 0;
+        padding: 1.5rem 1rem;
+    }
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    h1 {
+        font-size: 1.8rem;
+    }
+    .modal-card {
+        width: 92%;
+        padding: 1.5rem;
+    }
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}

@@ -1091,7 +1091,7 @@ func ordersListHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		itemRows, err := db.Query(`SELECT oi.product_id, oi.quantity, oi.price_at_qty, p.name 
+		itemRows, err := db.Query(`SELECT oi.product_id, oi.quantity, oi.price_at_qty, p.name, COALESCE(oi.size, '') 
 			FROM order_items oi 
 			JOIN products p ON oi.product_id = p.id 
 			WHERE oi.order_id = $1`, o.ID)
@@ -1099,7 +1099,7 @@ func ordersListHandler(w http.ResponseWriter, r *http.Request) {
 			var items []OrderItem
 			for itemRows.Next() {
 				var it OrderItem
-				if err := itemRows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName); err == nil {
+				if err := itemRows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName, &it.Size); err == nil {
 					items = append(items, it)
 				}
 			}
@@ -2371,7 +2371,7 @@ func profileOrdersHandler(w http.ResponseWriter, r *http.Request) {
 				&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
 				&o.CheckoutType, &o.PaymentMethod)
 			if err == nil {
-				itemRows, itemErr := db.Query(`SELECT oi.product_id, oi.quantity, oi.price_at_qty, p.name 
+				itemRows, itemErr := db.Query(`SELECT oi.product_id, oi.quantity, oi.price_at_qty, p.name, COALESCE(oi.size, '') 
 					FROM order_items oi 
 					JOIN products p ON oi.product_id = p.id 
 					WHERE oi.order_id = $1`, o.ID)
@@ -2379,7 +2379,7 @@ func profileOrdersHandler(w http.ResponseWriter, r *http.Request) {
 					var items []OrderItem
 					for itemRows.Next() {
 						var it OrderItem
-						if scanErr := itemRows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName); scanErr == nil {
+						if scanErr := itemRows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName, &it.Size); scanErr == nil {
 							items = append(items, it)
 						}
 					}
@@ -2535,7 +2535,7 @@ func adminProfileDetailsHandler(w http.ResponseWriter, r *http.Request) {
 					&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode)
 				if err == nil {
 					// Fetch items for each order
-					itemRows, itemErr := db.Query(`SELECT oi.product_id, oi.quantity, oi.price_at_qty, p.name 
+					itemRows, itemErr := db.Query(`SELECT oi.product_id, oi.quantity, oi.price_at_qty, p.name, COALESCE(oi.size, '') 
 						FROM order_items oi 
 						JOIN products p ON oi.product_id = p.id 
 						WHERE oi.order_id = $1`, o.ID)
@@ -2543,7 +2543,7 @@ func adminProfileDetailsHandler(w http.ResponseWriter, r *http.Request) {
 						var items []OrderItem
 						for itemRows.Next() {
 							var it OrderItem
-							if scanErr := itemRows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName); scanErr == nil {
+							if scanErr := itemRows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName, &it.Size); scanErr == nil {
 								items = append(items, it)
 							}
 						}

@@ -26,10 +26,214 @@ const fallbackProducts = [
 
 // --- COMPONENTS ---
 
+// --- REUSABLE COPY BUTTON COMPONENT ---
+const CopyButton = ({ text, label = '', iconOnly = false, style = {}, className = '' }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = (e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (!text) return;
+        
+        const textToCopy = String(text).trim();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            }).catch(() => fallbackCopy(textToCopy));
+        } else {
+            fallbackCopy(textToCopy);
+        }
+    };
+
+    const fallbackCopy = (str) => {
+        try {
+            const el = document.createElement('textarea');
+            el.value = str;
+            el.setAttribute('readonly', '');
+            el.style.position = 'absolute';
+            el.style.left = '-9999px';
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error("Copy failed", err);
+        }
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={handleCopy}
+            title={copied ? "Copied to clipboard!" : `Copy ${text}`}
+            className={`copy-btn-component ${copied ? 'copied' : ''} ${className}`}
+            style={{ ...style }}
+        >
+            {copied ? (
+                <React.Fragment>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    {!iconOnly && <span>Copied!</span>}
+                </React.Fragment>
+            ) : (
+                <React.Fragment>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    {!iconOnly && label && <span>{label}</span>}
+                </React.Fragment>
+            )}
+        </button>
+    );
+};
+
+// --- PREMIUM MODAL ALERT COMPONENT ---
+const PremiumAlertModal = ({ isOpen, onClose, title = "Notice", message = "", type = "warning" }) => {
+    if (!isOpen) return null;
+
+    const iconColor = type === 'error' ? '#d32f2f' : type === 'success' ? '#2e7d32' : '#b97a66';
+    const iconBg = type === 'error' ? '#ffebee' : type === 'success' ? '#e8f5e9' : '#fff0e9';
+
+    return (
+        <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999999,
+            padding: '1.5rem',
+            animation: 'modalFadeIn 0.25s ease-out'
+        }} onClick={onClose}>
+            <div style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                maxWidth: '440px',
+                width: '100%',
+                padding: '2rem 1.8rem',
+                boxShadow: '0 25px 60px rgba(0,0,0,0.18)',
+                textAlign: 'center',
+                position: 'relative',
+                animation: 'modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                border: '1px solid rgba(0,0,0,0.06)'
+            }} onClick={e => e.stopPropagation()}>
+                
+                <button 
+                    onClick={onClose}
+                    aria-label="Close dialog"
+                    style={{
+                        position: 'absolute',
+                        top: '1.2rem',
+                        right: '1.2rem',
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '1.2rem',
+                        color: '#aaa',
+                        cursor: 'pointer',
+                        padding: '0.3rem',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                >
+                    ✕
+                </button>
+
+                <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    backgroundColor: iconBg,
+                    color: iconColor,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 1.2rem',
+                    boxShadow: `0 8px 20px ${iconBg}`
+                }}>
+                    {type === 'error' ? (
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                    ) : type === 'success' ? (
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                    ) : (
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                    )}
+                </div>
+
+                <h3 style={{
+                    fontFamily: 'var(--font-title, serif)',
+                    fontSize: '1.4rem',
+                    fontWeight: '600',
+                    color: '#2D2A26',
+                    margin: '0 0 0.6rem'
+                }}>
+                    {title}
+                </h3>
+
+                <p style={{
+                    fontSize: '0.96rem',
+                    color: '#6C6863',
+                    lineHeight: '1.6',
+                    margin: '0 0 1.8rem'
+                }}>
+                    {message}
+                </p>
+
+                <button 
+                    onClick={onClose}
+                    className="btn btn-primary"
+                    style={{
+                        width: '100%',
+                        padding: '0.9rem',
+                        fontSize: '1rem',
+                        borderRadius: '8px'
+                    }}
+                >
+                    Understood
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const showAlert = (message, title = "Notice", type = "warning") => {
+    if (window.customAlert) {
+        window.customAlert(message, title, type);
+    } else {
+        alert(message);
+    }
+};
+
 const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onSearchSubmit, globalSearch, setGlobalSearch }) => {
     const [animateCart, setAnimateCart] = useState(false);
     const [animateWishlist, setAnimateWishlist] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
     const overlayRef = useRef(null);
     const navigate = useNavigate();
@@ -68,6 +272,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
         addRecentSearch(q);
         setGlobalSearch(q);
         setIsFocused(false);
+        setMobileMenuOpen(false);
+        setMobileSearchOpen(false);
         onSearchSubmit(q);
     };
 
@@ -84,9 +290,25 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
     return (
         <nav className="navbar" style={{ padding: '0.8rem 5%' }}>
             <div className="nav-container" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', width: '100%' }}>
-                <Link to="/" onClick={() => setGlobalSearch('')} className="logo" style={{ flexShrink: 0 }}>The Ethnic Touch</Link>
+                {/* Mobile Hamburger Button */}
+                <button 
+                    type="button" 
+                    className="mobile-hamburger-btn" 
+                    onClick={() => setMobileMenuOpen(true)}
+                    aria-label="Open mobile menu"
+                >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+
+                <Link to="/" onClick={() => { setGlobalSearch(''); setMobileMenuOpen(false); setMobileSearchOpen(false); }} className="logo" style={{ flexShrink: 0 }}>
+                    The Ethnic Touch
+                </Link>
                 
-                {/* Search Container */}
+                {/* Desktop Search Container */}
                 <div className="search-container" ref={overlayRef} style={{ flex: 1, maxWidth: '350px', margin: '0 auto' }}>
                     <div className="search-input-wrapper">
                         <span className="search-icon">
@@ -95,7 +317,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                         <input 
                             type="text" 
                             className="search-input" 
-                            placeholder="Search wardrobe, fabrics..."
+                            placeholder="Search wardrobe..."
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
                             onFocus={() => setIsFocused(true)}
@@ -113,8 +335,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                         )}
                     </div>
 
-                    {/* Suggestions Overlay */}
-                    {isFocused && (
+                    {/* Desktop Suggestions Overlay */}
+                    {isFocused && !mobileSearchOpen && (
                         <div className="search-suggestions-overlay" style={{ left: 0, right: 0, width: '100%' }}>
                             {globalSearch.trim().length <= 1 ? (
                                 <div>
@@ -184,12 +406,42 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                     )}
                 </div>
 
+                {/* Mobile Quick Action Badges (Search, Wishlist & Cart) */}
+                <div className="mobile-header-actions">
+                    <button 
+                        type="button" 
+                        className="mobile-search-toggle-btn" 
+                        onClick={() => { setMobileSearchOpen(!mobileSearchOpen); setIsFocused(!mobileSearchOpen); }}
+                        title="Search wardrobe"
+                    >
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </button>
+
+                    <Link to="/wishlist" className="mobile-icon-badge" title="Wishlist">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill={wishlistCount > 0 ? "var(--color-primary)" : "none"}>
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                        {wishlistCount > 0 && <span className="mobile-badge-count">{wishlistCount}</span>}
+                    </Link>
+
+                    <Link to="/cart" className="mobile-icon-badge" title="Cart">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                        </svg>
+                        {cartCount > 0 && <span className="mobile-badge-count">{cartCount}</span>}
+                    </Link>
+                </div>
+
+                {/* Desktop Nav Links */}
                 <ul className="nav-links" style={{ flexShrink: 0, margin: 0, display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
                     <li><Link to="/">Home</Link></li>
                     <li><Link to="/shop">Shop</Link></li>
 
-                    
-                    {/* Wishlist Link */}
                     <li>
                         <Link to="/wishlist" className={`wishlist-btn ${animateWishlist ? 'wishlist-badge' : ''}`}>
                             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill={wishlistCount > 0 ? "var(--color-primary)" : "none"} style={{ color: wishlistCount > 0 ? "var(--color-primary)" : "currentColor", transition: 'all 0.3s ease' }}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -211,7 +463,190 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                     )}
                 </ul>
             </div>
-            {/* Click outside listener */}
+
+            {/* Mobile Expandable Search Row */}
+            {mobileSearchOpen && (
+                <div className="mobile-search-row">
+                    <div className="search-input-wrapper">
+                        <span className="search-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </span>
+                        <input 
+                            type="text" 
+                            className="search-input" 
+                            placeholder="Search wardrobe, fabrics..."
+                            value={globalSearch}
+                            onChange={(e) => setGlobalSearch(e.target.value)}
+                            onFocus={() => setIsFocused(true)}
+                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSearchSubmit(globalSearch);
+                            }}
+                        />
+                        <button 
+                            onClick={() => setMobileSearchOpen(false)} 
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '1.2rem', padding: '0 8px' }}
+                        >
+                            &times;
+                        </button>
+                    </div>
+
+                    {/* Mobile Suggestions Overlay */}
+                    {isFocused && (
+                        <div className="search-suggestions-overlay" style={{ left: 0, right: 0, width: '100%', top: '100%', position: 'absolute', zIndex: 9999 }}>
+                            {globalSearch.trim().length <= 1 ? (
+                                <div>
+                                    {recentSearches.length > 0 && (
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <div className="suggestion-section-title">Recent Searches</div>
+                                            <div className="suggestion-tags">
+                                                {recentSearches.map((s, idx) => (
+                                                    <span 
+                                                        key={idx} 
+                                                        className="suggestion-tag-chip"
+                                                        onClick={() => handleSearchSubmit(s)}
+                                                    >
+                                                        {s}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <div className="suggestion-section-title">Trending Now</div>
+                                        <div className="suggestion-tags">
+                                            {popularTags.map((tag, idx) => (
+                                                <span 
+                                                    key={idx} 
+                                                    className="suggestion-tag-chip"
+                                                    onClick={() => handleSearchSubmit(tag)}
+                                                >
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="suggestion-section-title">Suggested Products</div>
+                                    {matchingProducts.length === 0 ? (
+                                        <div style={{ fontSize: '0.85rem', color: '#999', padding: '8px 0' }}>No products matching "{globalSearch}"</div>
+                                    ) : (
+                                        <div className="matching-products-list">
+                                            {matchingProducts.map(p => (
+                                                <Link 
+                                                    key={p.id} 
+                                                    to={`/product/${p.id}`} 
+                                                    className="matching-product-item"
+                                                    onClick={() => { setIsFocused(false); setMobileSearchOpen(false); }}
+                                                >
+                                                    <img src={p.imageUrl} className="matching-product-img" alt={p.name} />
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div className="matching-product-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                                                        <div className="matching-product-price">₹{p.price.toLocaleString('en-IN')}</div>
+                                                    </div>
+                                                </Link>
+                                            ))}
+                                            <div 
+                                                onClick={() => handleSearchSubmit(globalSearch)}
+                                                style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: '600', padding: '6px 0', borderTop: '1px solid #f5f5f5', marginTop: '4px', cursor: 'pointer' }}
+                                            >
+                                                View all matches &rarr;
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Mobile Navigation Drawer (Portaled directly to document.body) */}
+            {mobileMenuOpen && ReactDOM.createPortal(
+                <React.Fragment>
+                    <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)} />
+                    <div className="mobile-drawer-content">
+                        <div className="mobile-drawer-header">
+                            <Link to="/" onClick={() => setMobileMenuOpen(false)} className="logo" style={{ fontSize: '1.35rem' }}>
+                                The Ethnic Touch
+                            </Link>
+                            <button className="mobile-drawer-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">&times;</button>
+                        </div>
+                        
+                        <div className="mobile-drawer-body">
+                            <div className="mobile-drawer-nav-group">
+                                <Link to="/" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
+                                    <div className="drawer-item-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                                    </div>
+                                    <span className="drawer-item-label">Home Collection</span>
+                                </Link>
+
+                                <Link to="/shop" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
+                                    <div className="drawer-item-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                    </div>
+                                    <span className="drawer-item-label">Explore Shop & Fabrics</span>
+                                </Link>
+
+                                <Link to="/wishlist" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
+                                    <div className="drawer-item-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill={wishlistCount > 0 ? "var(--color-primary)" : "none"} stroke={wishlistCount > 0 ? "var(--color-primary)" : "currentColor"} strokeWidth="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                                    </div>
+                                    <span className="drawer-item-label">My Wishlist</span>
+                                    {wishlistCount > 0 && <span className="drawer-badge-pill">{wishlistCount}</span>}
+                                </Link>
+
+                                <Link to="/cart" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
+                                    <div className="drawer-item-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                                    </div>
+                                    <span className="drawer-item-label">Shopping Cart</span>
+                                    {cartCount > 0 && <span className="drawer-badge-pill">{cartCount}</span>}
+                                </Link>
+
+                                {authUser ? (
+                                    <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
+                                        <div className="drawer-item-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 0 1-4-4H8a4 4 0 0 1-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                        </div>
+                                        <span className="drawer-item-label">My Profile & Orders</span>
+                                    </Link>
+                                ) : (
+                                    <a href="./login.html" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
+                                        <div className="drawer-item-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                                        </div>
+                                        <span className="drawer-item-label">Sign In / Register</span>
+                                    </a>
+                                )}
+                            </div>
+
+                            <div className="mobile-drawer-sub-group">
+                                <div className="drawer-sub-heading">Featured Silhouettes</div>
+                                <div className="drawer-sub-grid">
+                                    <Link to="/shop?category=Straight Cut" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Straight Cut</Link>
+                                    <Link to="/shop?category=Anarkali" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Anarkali Sets</Link>
+                                    <Link to="/shop?category=Tunic" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Tunic Dresses</Link>
+                                    <Link to="/shop?category=Fusion" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Fusion Wear</Link>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mobile-drawer-footer">
+                            <div className="drawer-footer-badge">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                <span>100% Handcrafted Luxury Guarantee</span>
+                            </div>
+                        </div>
+                    </div>
+                </React.Fragment>,
+                document.body
+            )}
+
+            {/* Click outside listener for search */}
             {isFocused && (
                 <div onClick={() => setIsFocused(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} />
             )}
@@ -315,7 +750,10 @@ const FilterSidebarContent = ({
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div className="filter-section">
-                <div className="filter-title">Specials</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <span>Specials</span>
+                </div>
                 <div className="filter-options">
                     <label className="filter-checkbox-label">
                         <input 
@@ -337,7 +775,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Collection</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+                    <span>Collection</span>
+                </div>
                 <div className="filter-options">
                     {collections.map(col => (
                         <label key={col} className="filter-checkbox-label">
@@ -353,7 +794,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Category</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    <span>Category</span>
+                </div>
                 <div className="filter-options">
                     {categories.map(c => (
                         <label key={c} className="filter-checkbox-label">
@@ -369,7 +813,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Sizes</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+                    <span>Sizes</span>
+                </div>
                 <div className="filter-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', maxHeight: 'none' }}>
                     {sizes.map(s => {
                         const active = selectedSizes.includes(s);
@@ -397,7 +844,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Price Range</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                    <span>Price Range</span>
+                </div>
                 <div className="filter-options">
                     {[
                         { label: 'All Prices', value: 'all' },
@@ -419,7 +869,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Fabric</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                    <span>Fabric</span>
+                </div>
                 <div className="filter-options">
                     {fabrics.map(f => (
                         <label key={f} className="filter-checkbox-label">
@@ -435,7 +888,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Color</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"></path></svg>
+                    <span>Color Palette</span>
+                </div>
                 <div className="filter-options">
                     {colors.map(col => (
                         <label key={col} className="filter-checkbox-label">
@@ -451,7 +907,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Occasion</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    <span>Occasion</span>
+                </div>
                 <div className="filter-options">
                     {occasions.map(o => (
                         <label key={o} className="filter-checkbox-label">
@@ -467,7 +926,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section">
-                <div className="filter-title">Sleeve</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"></path></svg>
+                    <span>Sleeve Type</span>
+                </div>
                 <div className="filter-options">
                     {sleeves.map(sl => (
                         <label key={sl} className="filter-checkbox-label">
@@ -483,7 +945,10 @@ const FilterSidebarContent = ({
             </div>
 
             <div className="filter-section" style={{ borderBottom: 'none', marginBottom: 0 }}>
-                <div className="filter-title">Pattern</div>
+                <div className="filter-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    <span>Pattern & Craft</span>
+                </div>
                 <div className="filter-options">
                     {patterns.map(p => (
                         <label key={p} className="filter-checkbox-label">
@@ -1011,40 +1476,78 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
                 </main>
             </div>
 
-            {/* Mobile Filter Drawer bottom sheet */}
-            <div className={`mobile-filter-drawer ${mobileFilterOpen ? 'show' : ''}`}>
-                <div className="mobile-filter-drawer-content">
-                    <div className="mobile-drawer-header">
-                        <h3 style={{ textTransform: 'uppercase', fontSize: '1rem', fontWeight: '700', letterSpacing: '0.5px' }}>Filters</h3>
-                        <button 
-                            onClick={() => setMobileFilterOpen(false)}
-                            style={{ background: 'none', border: 'none', fontSize: '1.8rem', cursor: 'pointer', color: '#999', padding: 0 }}
-                        >
-                            &times;
-                        </button>
+            {/* Mobile Filter Drawer (Portaled to document.body) */}
+            {mobileFilterOpen && ReactDOM.createPortal(
+                <div className={`mobile-filter-drawer ${mobileFilterOpen ? 'show' : ''}`}>
+                    <div className="mobile-filter-drawer-overlay" onClick={() => setMobileFilterOpen(false)} />
+                    <div className="mobile-filter-drawer-content">
+                        <div className="mobile-filter-drawer-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.25rem', fontWeight: '500', color: 'var(--color-text, #2D2A26)', letterSpacing: '0.5px' }}>Filters</span>
+                                {activeChips.length > 0 && (
+                                    <span style={{ backgroundColor: 'var(--color-peach)', color: 'var(--color-primary)', fontSize: '0.72rem', fontWeight: '700', borderRadius: '12px', padding: '2px 8px', marginLeft: '4px' }}>
+                                        {activeChips.length} active
+                                    </span>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                {activeChips.length > 0 && (
+                                    <button 
+                                        onClick={clearAllFilters} 
+                                        style={{ background: 'none', border: 'none', color: '#888', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                    >
+                                        Reset
+                                    </button>
+                                )}
+                                <button 
+                                    className="mobile-drawer-close"
+                                    onClick={() => setMobileFilterOpen(false)}
+                                    aria-label="Close filters"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="mobile-filter-drawer-body">
+                            <FilterSidebarContent 
+                                selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
+                                selectedSizes={selectedSizes} setSelectedSizes={setSelectedSizes}
+                                selectedFabrics={selectedFabrics} setSelectedFabrics={setSelectedFabrics}
+                                selectedPatterns={selectedPatterns} setSelectedPatterns={setSelectedPatterns}
+                                selectedSleeves={selectedSleeves} setSelectedSleeves={setSelectedSleeves}
+                                selectedOccasions={selectedOccasions} setSelectedOccasions={setSelectedOccasions}
+                                selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections}
+                                selectedColors={selectedColors} setSelectedColors={setSelectedColors}
+                                onlyNewArrivals={onlyNewArrivals} setOnlyNewArrivals={setOnlyNewArrivals}
+                                onlyBestSellers={onlyBestSellers} setOnlyBestSellers={setOnlyBestSellers}
+                                priceRange={priceRange} setPriceRange={setPriceRange}
+                            />
+                        </div>
+
+                        <div className="mobile-filter-drawer-footer">
+                            {activeChips.length > 0 && (
+                                <button 
+                                    className="btn btn-outline" 
+                                    onClick={clearAllFilters}
+                                    style={{ padding: '0.85rem 1rem', borderRadius: '10px', fontSize: '0.88rem', fontWeight: '600' }}
+                                >
+                                    Reset
+                                </button>
+                            )}
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={() => setMobileFilterOpen(false)}
+                                style={{ flex: 1, padding: '0.85rem 1rem', borderRadius: '10px', fontSize: '0.92rem', fontWeight: '600', letterSpacing: '0.5px' }}
+                            >
+                                Apply Filters ({totalProducts})
+                            </button>
+                        </div>
                     </div>
-                    <FilterSidebarContent 
-                        selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
-                        selectedSizes={selectedSizes} setSelectedSizes={setSelectedSizes}
-                        selectedFabrics={selectedFabrics} setSelectedFabrics={setSelectedFabrics}
-                        selectedPatterns={selectedPatterns} setSelectedPatterns={setSelectedPatterns}
-                        selectedSleeves={selectedSleeves} setSelectedSleeves={setSelectedSleeves}
-                        selectedOccasions={selectedOccasions} setSelectedOccasions={setSelectedOccasions}
-                        selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections}
-                        selectedColors={selectedColors} setSelectedColors={setSelectedColors}
-                        onlyNewArrivals={onlyNewArrivals} setOnlyNewArrivals={setOnlyNewArrivals}
-                        onlyBestSellers={onlyBestSellers} setOnlyBestSellers={setOnlyBestSellers}
-                        priceRange={priceRange} setPriceRange={setPriceRange}
-                    />
-                    <button 
-                        className="btn btn-primary" 
-                        onClick={() => setMobileFilterOpen(false)}
-                        style={{ width: '100%', marginTop: '2rem', padding: '0.8rem 0', borderRadius: '8px' }}
-                    >
-                        Apply Filters ({totalProducts})
-                    </button>
-                </div>
-            </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
@@ -1062,14 +1565,14 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
     return (
         <div>
             {/* Editorial Hero Banner */}
-            <header className="hero" style={{ minHeight: '85vh', paddingTop: '120px', paddingBottom: '60px' }}>
+            <header className="hero">
                 <div className="hero-content">
                     <span style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '3px', color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '1rem' }}>Handcrafted Luxury</span>
                     <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 'clamp(2.5rem, 5vw, 4rem)', fontWeight: '400', lineHeight: '1.1', marginBottom: '1.5rem' }}>Minimalist Indo-Western Silhouette</h1>
                     <p style={{ fontSize: '1.1rem', color: 'var(--color-text-light)', marginBottom: '2.5rem', lineHeight: '1.6' }}>A curated destination for timeless pastel aesthetics, tailored meticulously with pure breathable fabrics for the contemporary woman.</p>
                     <Link to="/shop" className="btn btn-primary" style={{ padding: '0.9rem 2.5rem', letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.8rem' }}>Browse Shop</Link>
                 </div>
-                <div className="hero-image" style={{ flex: '1.2', position: 'relative', borderRadius: '24px', overflow: 'hidden', height: '60vh', background: 'var(--color-peach)' }}>
+                <div className="hero-image">
                     <img src="./images/hero_banner.png" alt="Premium Indo-Western Pastel Kurthi Fashion Model" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
             </header>
@@ -1277,13 +1780,14 @@ const WishlistPage = ({ wishlist, toggleWishlist, addToCart }) => {
     );
 };
 
-const ProductDetails = ({ products, addToCart, authUser }) => {
+const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
     const navigate = useNavigate();
     const product = products.find(p => p.id === id);
 
     const [activeImage, setActiveImage] = useState(0);
     const [selectedSize, setSelectedSize] = useState('');
+    const [quantity, setQuantity] = useState(1);
     const [reviews, setReviews] = useState([]);
     
     const [rating, setRating] = useState(5);
@@ -1307,6 +1811,7 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
             });
             setSelectedSize(firstAvailable || '');
             setActiveImage(0); // reset image index on product change
+            setQuantity(1); // reset quantity on product change
         }
     }, [product]);
 
@@ -1322,6 +1827,8 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
     }, [product]);
 
     if (!product) return <div style={{padding: '10rem 5%', textAlign:'center'}}><h2>Product Not Found</h2></div>;
+
+    const isWished = wishlist ? wishlist.some(item => item.id === product.id) : false;
 
     const galleryImages = (product.galleryImages && product.galleryImages.length > 0) 
         ? product.galleryImages 
@@ -1341,7 +1848,7 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
     };
 
     const handleAddToCart = () => {
-        addToCart({ ...product, size: selectedSize });
+        addToCart({ ...product, size: selectedSize, quantity: quantity });
     };
 
     const submitReview = async (e) => {
@@ -1386,8 +1893,8 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
         .slice(0, 3);
 
     return (
-        <div style={{padding: '8rem 5% 4rem', maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
-            <a href="#" onClick={handleBack} style={{display:'inline-block', marginBottom:'2rem', color:'var(--color-text-light)', textDecoration:'none', transition:'color 0.2s'}}>&larr; Back to Collection</a>
+        <div className="product-details-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
+            <a href="#" onClick={handleBack} style={{display:'inline-block', marginBottom:'1.5rem', color:'var(--color-text-light)', textDecoration:'none', transition:'color 0.2s'}}>&larr; Back to Collection</a>
             
             <div style={{display: 'flex', flexWrap: 'wrap', gap: '4rem', alignItems: 'flex-start'}}>
                 
@@ -1515,14 +2022,79 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
                         </div>
                     )}
 
-                    <button 
-                        className="btn btn-primary" 
-                        onClick={handleAddToCart}
-                        disabled={!selectedSize}
-                        style={{fontSize: '1.1rem', padding: '1.2rem 3rem', width: '100%', marginBottom: '2rem', height:'55px', display:'flex', alignItems:'center', justifyContent:'center'}}
-                    >
-                        {selectedSize ? `Add to Cart - Size ${selectedSize}` : 'Out of Stock'}
-                    </button>
+                    {/* Quantity Selector */}
+                    <div style={{ marginBottom: '2rem' }}>
+                        <h4 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', fontWeight: '600', color: '#333' }}>Quantity</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#fafafa' }}>
+                                <button 
+                                    type="button"
+                                    onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
+                                    disabled={quantity <= 1}
+                                    aria-label="Decrease quantity"
+                                    style={{ width: '42px', height: '48px', border: 'none', background: 'none', cursor: quantity <= 1 ? 'not-allowed' : 'pointer', fontSize: '1.2rem', fontWeight: 'bold', color: quantity <= 1 ? '#ccc' : '#333', transition: 'all 0.2s' }}
+                                >
+                                    -
+                                </button>
+                                <span style={{ width: '45px', textAlign: 'center', fontWeight: '600', fontSize: '1.1rem', userSelect: 'none' }}>
+                                    {quantity}
+                                </span>
+                                <button 
+                                    type="button"
+                                    onClick={() => setQuantity(prev => prev + 1)}
+                                    aria-label="Increase quantity"
+                                    style={{ width: '42px', height: '48px', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem', fontWeight: 'bold', color: '#333', transition: 'all 0.2s' }}
+                                >
+                                    +
+                                </button>
+                            </div>
+
+                            {quantity > 1 && (
+                                <div style={{ fontSize: '0.95rem', color: '#666', fontWeight: '500' }}>
+                                    Subtotal: <strong style={{ color: 'var(--color-primary)' }}>₹{(product.price * quantity).toLocaleString('en-IN')}</strong>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+                        <button 
+                            className="btn btn-primary" 
+                            onClick={handleAddToCart}
+                            disabled={!selectedSize}
+                            style={{ fontSize: '1.05rem', padding: '0 1.5rem', flex: 1, minWidth: '200px', height: '55px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            {selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - Size ${selectedSize}` : 'Out of Stock'}
+                        </button>
+
+                        <button 
+                            type="button"
+                            onClick={() => toggleWishlist && toggleWishlist(product)}
+                            title={isWished ? "Remove from wishlist" : "Add to wishlist"}
+                            aria-label={isWished ? "Remove from wishlist" : "Add to wishlist"}
+                            style={{
+                                height: '55px',
+                                padding: '0 1.5rem',
+                                borderRadius: 'var(--border-radius-pill, 50px)',
+                                border: isWished ? '2px solid #e53935' : '1.5px solid #ddd',
+                                backgroundColor: isWished ? '#fff5f5' : '#fff',
+                                color: isWished ? '#e53935' : '#444',
+                                fontWeight: '600',
+                                fontSize: '0.95rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                transition: 'all 0.2s ease',
+                                flexShrink: 0
+                            }}
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill={isWished ? "#e53935" : "none"} stroke={isWished ? "#e53935" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                            </svg>
+                            <span>{isWished ? 'Wishlisted' : 'Wishlist'}</span>
+                        </button>
+                    </div>
 
                     {/* Premium Specifications Accordion Section */}
                     <div className="spec-accordion">
@@ -1675,17 +2247,41 @@ const ProductDetails = ({ products, addToCart, authUser }) => {
                 </div>
             </div>
 
+            {/* Sticky Action Bar for Mobile View */}
+            <div className="mobile-sticky-action-bar">
+                <button 
+                    type="button"
+                    onClick={() => toggleWishlist && toggleWishlist(product)}
+                    className="mobile-sticky-wish-btn"
+                    style={{
+                        border: isWished ? '2px solid #e53935' : '1.5px solid #ddd',
+                        backgroundColor: isWished ? '#fff5f5' : '#fff',
+                        color: isWished ? '#e53935' : '#444'
+                    }}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill={isWished ? "#e53935" : "none"} stroke={isWished ? "#e53935" : "currentColor"} strokeWidth="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                </button>
+                <button 
+                    className="btn btn-primary mobile-sticky-add-btn" 
+                    onClick={handleAddToCart}
+                    disabled={!selectedSize}
+                >
+                    {selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - ₹${(product.price * quantity).toLocaleString('en-IN')}` : 'Out of Stock'}
+                </button>
+            </div>
         </div>
     );
 };
 
-const Cart = ({ cart, onApplyCoupon, discount }) => {
+const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount }) => {
     const [couponCode, setCouponCode] = useState('');
     const [msg, setMsg] = useState('');
     const [tiers, setTiers] = useState([]);
     
-    const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
-    const finalTotal = subtotal - (discount?.value || 0);
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
+    const finalTotal = subtotal - (discount?.amt || discount?.value || 0);
 
     useEffect(() => {
         fetch('/api/gift-tiers')
@@ -1729,23 +2325,97 @@ const Cart = ({ cart, onApplyCoupon, discount }) => {
     const remaining = nextTier ? nextTier.threshold - subtotal : 0;
 
     return (
-        <div style={{padding: '8rem 5% 4rem', maxWidth: '800px', margin: '0 auto', minHeight: '80vh'}}>
+        <div className="cart-page-container" style={{maxWidth: '800px', margin: '0 auto', minHeight: '80vh'}}>
             <h1 style={{marginBottom: '2rem'}}>Your Cart</h1>
             {cart.length === 0 ? (
                 <p>Your cart is empty. <Link to="/">Continue shopping.</Link></p>
             ) : (
                 <div>
-                    {cart.map((item, idx) => (
-                        <div key={idx} style={{display:'flex', alignItems:'center', gap:'1.5rem', marginBottom:'1.5rem', borderBottom:'1px solid #eee', paddingBottom:'1.5rem'}}>
-                            <img src={item.imageUrl} alt={item.name} style={{width:'80px', height:'80px', borderRadius:'8px', objectFit:'cover'}} />
-                            <div style={{flex: 1}}>
-                                <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500'}}>{item.name}</h3>
-                                {item.size && <span style={{display: 'inline-block', backgroundColor: '#fff0e9', color: '#b97a66', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem', marginTop: '0.3rem', fontWeight: '500'}}>Size: {item.size}</span>}
-                                <p style={{color:'var(--color-text-light)', fontSize:'0.9rem', marginTop: '0.4rem'}}>{item.description.substring(0, 50)}...</p>
+                    {cart.map((item, idx) => {
+                        const itemQty = item.quantity || 1;
+                        const itemTotal = item.price * itemQty;
+                        return (
+                            <div key={idx} className="cart-item-row" style={{display:'flex', alignItems:'center', gap:'1.5rem', marginBottom:'1.5rem', borderBottom:'1px solid #eee', paddingBottom:'1.5rem', flexWrap:'wrap'}}>
+                                <img src={item.imageUrl} alt={item.name} style={{width:'80px', height:'80px', borderRadius:'8px', objectFit:'cover'}} />
+                                <div style={{flex: 1, minWidth: '180px'}}>
+                                    <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500', fontSize:'1.05rem', margin: 0}}>{item.name}</h3>
+                                    {item.size && (
+                                        <span style={{display: 'inline-block', backgroundColor: '#fff0e9', color: '#b97a66', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem', marginTop: '0.3rem', fontWeight: '500'}}>
+                                            Size: {item.size}
+                                        </span>
+                                    )}
+                                    <p style={{color:'var(--color-text-light)', fontSize:'0.85rem', margin: '0.4rem 0 0'}}>{item.description?.substring(0, 50)}...</p>
+                                </div>
+                                
+                                {/* Quantity Selector */}
+                                <div className="cart-quantity-selector" style={{display:'flex', alignItems:'center', gap:'0.4rem', border:'1px solid #e0e0e0', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fbfbfb'}}>
+                                    <button 
+                                        onClick={() => updateQuantity && updateQuantity(idx, itemQty - 1)}
+                                        aria-label="Decrease quantity"
+                                        title="Decrease quantity"
+                                        style={{width:'28px', height:'28px', border:'none', background:'#eee', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'1rem', display:'flex', alignItems:'center', justifyContent:'center', color:'#333', transition:'all 0.2s ease'}}
+                                        onMouseOver={e => e.currentTarget.style.background='#e0e0e0'}
+                                        onMouseOut={e => e.currentTarget.style.background='#eee'}
+                                    >
+                                        -
+                                    </button>
+                                    <span style={{minWidth:'28px', textAlign:'center', fontWeight:'600', fontSize:'0.95rem', userSelect:'none'}}>
+                                        {itemQty}
+                                    </span>
+                                    <button 
+                                        onClick={() => updateQuantity && updateQuantity(idx, itemQty + 1)}
+                                        aria-label="Increase quantity"
+                                        title="Increase quantity"
+                                        style={{width:'28px', height:'28px', border:'none', background:'#eee', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'1rem', display:'flex', alignItems:'center', justifyContent:'center', color:'#333', transition:'all 0.2s ease'}}
+                                        onMouseOver={e => e.currentTarget.style.background='#e0e0e0'}
+                                        onMouseOut={e => e.currentTarget.style.background='#eee'}
+                                    >
+                                        +
+                                    </button>
+                                </div>
+
+                                {/* Price section */}
+                                <div style={{textAlign:'right', minWidth:'100px'}}>
+                                    <div style={{fontWeight:'600', fontSize:'1.05rem', color:'var(--color-text)'}}>
+                                        ₹{itemTotal.toLocaleString('en-IN')}
+                                    </div>
+                                    {itemQty > 1 && (
+                                        <div style={{fontSize:'0.75rem', color:'#888', marginTop:'2px'}}>
+                                            (₹{item.price.toLocaleString('en-IN')} each)
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Delete button */}
+                                <button 
+                                    onClick={() => removeFromCart && removeFromCart(idx)}
+                                    aria-label="Delete item from cart"
+                                    title="Remove item"
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#d9534f',
+                                        cursor: 'pointer',
+                                        padding: '0.4rem',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseOver={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#c9302c'; }}
+                                    onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#d9534f'; }}
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                    </svg>
+                                </button>
                             </div>
-                            <div style={{fontWeight:'500'}}>₹{item.price.toLocaleString('en-IN')}</div>
-                        </div>
-                    ))}
+                        );
+                    })}
                                  {/* Beautiful, Animated Premium Tiered Reward Panel */}
                     {tiers.length > 0 && (
                         <div className="gift-system-card">
@@ -1924,7 +2594,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
         }
     }, [cart, navigate]);
 
-    const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+    const subtotal = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
     const finalTotal = subtotal - (discount?.amt || 0);
 
     const activeAddr = authUser && addresses.length > 0 ? addresses.find(a => a.id === selectedAddressID) : null;
@@ -2007,7 +2677,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     };
 
     const placeOrder = async () => {
-        if (!email) return alert('Email required');
+        if (!email) return showAlert('Please enter your email address before placing an order.', 'Email Required', 'warning');
         
         let order = {};
         if (checkoutType === 'pickup') {
@@ -2016,7 +2686,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                 couponCode: discount?.code || '',
                 items: cart.map(item => ({
                     productId: item.id,
-                    quantity: 1,
+                    quantity: item.quantity || 1,
                     size: item.size || ''
                 })),
                 checkoutType: 'pickup',
@@ -2030,16 +2700,16 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
             };
         } else {
             if (!activeAddr) {
-                return alert('Please select or add a shipping address before paying.');
+                return showAlert('Please select or add a shipping address before paying.', 'Address Required', 'warning');
             }
             if (checkoutType === 'hyderabad_instant') {
                 const city = (activeAddr.city || '').trim().toLowerCase();
                 if (city !== 'hyderabad' && city !== 'secunderabad') {
-                    return alert('Instant delivery is only available inside Hyderabad/Secunderabad.');
+                    return showAlert('Instant delivery is only available inside Hyderabad/Secunderabad.', 'Location Restriction', 'warning');
                 }
                 const zip = (activeAddr.zipCode || '').trim();
                 if (!zip.startsWith('500') || zip.length !== 6) {
-                    return alert('Instant delivery requires a local Hyderabad pincode starting with 500 (e.g., 500081).');
+                    return showAlert('Instant delivery requires a local Hyderabad pincode starting with 500 (e.g., 500081).', 'Pincode Required', 'warning');
                 }
             }
             order = {
@@ -2047,7 +2717,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                 couponCode: discount?.code || '',
                 items: cart.map(item => ({
                     productId: item.id,
-                    quantity: 1,
+                    quantity: item.quantity || 1,
                     size: item.size || ''
                 })),
                 checkoutType: checkoutType,
@@ -2072,7 +2742,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
             
             if (!res.ok) {
                 const errData = await res.json();
-                alert(errData.error || 'Failed to create order');
+                showAlert(errData.error || 'Failed to create order', 'Order Error', 'error');
                 setOrdering(false);
                 return;
             }
@@ -2133,7 +2803,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                                 } 
                             });
                         } else {
-                            alert("Payment verification check failed. Please verify with Support.");
+                            showAlert("Payment verification check failed. Please verify with Support.", "Payment Error", "error");
                         }
                     },
                     "prefill": {
@@ -2148,7 +2818,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                 setOrdering(false);
             }
         } catch (err) {
-            alert("Error placing order.");
+            showAlert("Error placing order. Please try again.", "Order Error", "error");
             setOrdering(false);
         }
     };
@@ -2283,7 +2953,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                 <h3 style={{fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.8rem', color: '#2D2A26', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Order Summary</h3>
                 <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.92rem', color: '#6C6863'}}>
                     <span>Garments in Cart:</span>
-                    <span>{cart.length} pc{cart.length !== 1 ? 's' : ''}</span>
+                    <span>{cart.reduce((sum, item) => sum + (item.quantity || 1), 0)} pc{cart.reduce((sum, item) => sum + (item.quantity || 1), 0) !== 1 ? 's' : ''}</span>
                 </div>
                 <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E6E4E0', paddingTop: '0.8rem', marginTop: '0.8rem'}}>
                     <span style={{fontWeight: 600, color: '#2D2A26'}}>Total Amount to Pay:</span>
@@ -2627,11 +3297,11 @@ const MockPayment = ({ onPaymentSuccess }) => {
                 });
             } else {
                 const errData = await res.json();
-                alert("Simulated transaction failed: " + (errData.error || 'Server error'));
+                showAlert("Simulated transaction failed: " + (errData.error || 'Server error'), "Transaction Error", "error");
                 setPaying(false);
             }
         } catch (err) {
-            alert("Server connection failed.");
+            showAlert("Server connection failed. Please check your network.", "Connection Error", "error");
             setPaying(false);
         }
     };
@@ -2806,7 +3476,12 @@ const CheckoutSuccess = () => {
                     Boutique Receipt
                 </div>
 
-                <h2 style={{color: '#2D2A26', fontSize: '1.3rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '1.2rem'}}>Order Reference: #{orderId}</h2>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', backgroundColor: '#FAF4EE', border: '1.5px dashed #D4A373', borderRadius: '50px', padding: '0.5rem 1.1rem', marginTop: '0.6rem', marginBottom: '1.6rem', boxShadow: '0 4px 15px rgba(212,163,115,0.06)', maxWidth: '100%', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#8F5E36', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Order Reference</span>
+                    <span style={{ color: '#D4A373', opacity: 0.6 }}>|</span>
+                    <strong style={{ fontSize: '1.05rem', fontFamily: 'monospace', color: '#2D2A26', letterSpacing: '0.04em' }}>#{orderId}</strong>
+                    <CopyButton text={orderId} iconOnly={true} style={{ padding: '4px 6px', borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF', flexShrink: 0 }} />
+                </div>
                 
                 <p style={{fontSize:'0.96rem', color: '#5C5854', lineHeight: '1.6', margin: '0 0 2rem'}}>
                     {isOffline 
@@ -2846,17 +3521,29 @@ const CheckoutSuccess = () => {
                                 style={{width: '200px', height: '200px', display: 'block', margin: '0 auto'}}
                             />
                         </div>
-                        <span style={{
-                            display: 'block', 
-                            marginTop: '1rem', 
-                            fontSize: '1.1rem', 
-                            fontWeight: '700',
-                            fontFamily: 'monospace',
-                            color: '#2D2A26',
-                            letterSpacing: '0.05em'
-                        }}>
-                            {orderId}
-                        </span>
+                        <div>
+                            <div style={{
+                                display: 'inline-flex', 
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.6rem',
+                                marginTop: '1rem',
+                                backgroundColor: '#FFF',
+                                border: '1px dashed #D4A373',
+                                borderRadius: '50px',
+                                padding: '0.45rem 1.2rem'
+                            }}>
+                                <strong style={{
+                                    fontSize: '1.1rem', 
+                                    fontFamily: 'monospace',
+                                    color: '#2D2A26',
+                                    letterSpacing: '0.05em'
+                                }}>
+                                    #{orderId}
+                                </strong>
+                                <CopyButton text={orderId} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8' }} />
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -2864,25 +3551,30 @@ const CheckoutSuccess = () => {
                 {!isPickup && tracking && (
                     <div style={{
                         marginTop: '1.5rem',
-                        padding: '1.2rem 2rem',
+                        padding: '0.8rem 1.4rem',
                         background: '#FAF9F6',
                         border: '1.5px dashed #D4A373',
-                        borderRadius: '12px',
-                        display: 'inline-block'
+                        borderRadius: '50px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justify: 'center',
+                        gap: '0.6rem',
+                        flexWrap: 'wrap'
                     }}>
-                        <p style={{margin: '0 0 0.4rem', fontSize: '0.88rem', color: '#6C6863'}}>Carrier Waybill ID:</p>
-                        <strong style={{fontSize: '1.25rem', color: '#8F5E36', fontFamily: 'monospace'}}>{tracking}</strong>
+                        <span style={{ fontSize: '0.85rem', color: '#6C6863', fontWeight: '500' }}>Carrier Waybill ID:</span>
+                        <strong style={{ fontSize: '1.1rem', color: '#8F5E36', fontFamily: 'monospace', letterSpacing: '0.05em' }}>{tracking}</strong>
+                        <CopyButton text={tracking} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF' }} />
                     </div>
                 )}
 
                 {displayGift && (
                     <div style={{
-                        marginTop: '2.5rem', 
-                        padding: '1.8rem', 
+                        marginTop: '2.2rem', 
+                        padding: '1.6rem', 
                         border: '1.5px solid #FFE5D9', 
                         backgroundColor: '#FAF3ED', 
                         borderRadius: '16px',
-                        boxShadow: '0 4px 12px rgba(212,163,115,0.04)'
+                        boxShadow: '0 6px 20px rgba(212,163,115,0.06)'
                     }}>
                         {isPhysical ? (
                             <div>
@@ -2906,23 +3598,28 @@ const CheckoutSuccess = () => {
                                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
                                         <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
                                     </svg>
-                                    Boutique Reward Promoted!
+                                    Reward Coupon Unlocked!
                                 </h4>
-                                <p style={{margin:'0 0 0.8rem', fontSize:'0.92rem', color: '#6C6863'}}>Apply code <strong style={{color: '#2D2A26', fontSize: '1.05rem', fontFamily: 'monospace'}}>{displayGift}</strong> on your next checkout visit.</p>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', backgroundColor: '#FFF', border: '1px dashed #D4A373', borderRadius: '50px', padding: '0.45rem 1.2rem', marginTop: '0.6rem' }}>
+                                    <strong style={{ fontSize: '1.1rem', fontFamily: 'monospace', color: '#8F5E36', letterSpacing: '0.08em' }}>{displayGift}</strong>
+                                    <CopyButton text={displayGift} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8' }} />
+                                </div>
                                 {giftExpiryDate && (
-                                    <span style={{
-                                        fontSize: '0.75rem',
-                                        color: '#B83232',
-                                        fontWeight: '700',
-                                        backgroundColor: '#FFF2F2',
-                                        padding: '4px 12px',
-                                        borderRadius: '20px',
-                                        display: 'inline-block',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.04em'
-                                    }}>
-                                        Valid Until: {new Date(giftExpiryDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
-                                    </span>
+                                    <div style={{ marginTop: '0.8rem' }}>
+                                        <span style={{
+                                            fontSize: '0.75rem',
+                                            color: '#B83232',
+                                            fontWeight: '700',
+                                            backgroundColor: '#FFF2F2',
+                                            padding: '4px 12px',
+                                            borderRadius: '20px',
+                                            display: 'inline-block',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.05em'
+                                        }}>
+                                            Valid Until: {new Date(giftExpiryDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                                        </span>
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -3756,9 +4453,10 @@ const ProfilePage = ({ authUser }) => {
                                     {orders.map(order => (
                                         <div key={order.id} style={{ border: '1px solid #eee', borderRadius: '8px', padding: '1.5rem', backgroundColor: '#fafafa' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem', marginBottom: '1rem' }}>
-                                                <div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: '0.8rem', color: '#888' }}>Order ID:</span>
-                                                    <span style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: '0.95rem', marginLeft: '0.4rem' }}>{order.id}</span>
+                                                    <span style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: '0.95rem' }}>{order.id}</span>
+                                                    <CopyButton text={order.id} label="Copy ID" />
                                                 </div>
                                                 <div>
                                                     <span style={{ fontSize: '0.85rem', color: '#b97a66', fontWeight: '500', textTransform: 'uppercase' }}>{order.status}</span>
@@ -3769,12 +4467,32 @@ const ProfilePage = ({ authUser }) => {
                                                 <div>
                                                     <h5 style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: '#888', textTransform: 'uppercase' }}>Items</h5>
                                                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                                                        {order.items && order.items.map(it => (
-                                                            <li key={it.productId} style={{ fontSize: '0.9rem', color: '#333', padding: '0.4rem 0', display: 'flex', justifyContent: 'space-between' }}>
-                                                                <span>{it.productName} <strong>x {it.quantity}</strong></span>
-                                                                <span>₹{it.priceAtQty.toLocaleString('en-IN')}</span>
-                                                            </li>
-                                                        ))}
+                                                        {order.items && order.items.map((it, idx) => {
+                                                             const qty = it.quantity || 1;
+                                                             const unitPrice = it.priceAtQty || 0;
+                                                             const lineTotal = unitPrice * qty;
+                                                             return (
+                                                                 <li key={it.productId || idx} style={{ fontSize: '0.9rem', color: '#333', padding: '0.4rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                     <div>
+                                                                         <span>{it.productName || it.productId}</span>
+                                                                         {it.size && (
+                                                                             <span style={{ fontSize: '0.75rem', background: '#fff0e9', color: '#b97a66', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '500' }}>
+                                                                                 Size: {it.size}
+                                                                             </span>
+                                                                         )}
+                                                                         <strong style={{ marginLeft: '6px', color: '#555' }}>x {qty}</strong>
+                                                                     </div>
+                                                                     <div style={{ textAlign: 'right' }}>
+                                                                         <span style={{ fontWeight: '500' }}>₹{lineTotal.toLocaleString('en-IN')}</span>
+                                                                         {qty > 1 && (
+                                                                             <span style={{ display: 'block', fontSize: '0.75rem', color: '#888' }}>
+                                                                                 (₹{unitPrice.toLocaleString('en-IN')} each)
+                                                                             </span>
+                                                                         )}
+                                                                     </div>
+                                                                 </li>
+                                                             );
+                                                         })}
                                                     </ul>
                                                 </div>
                                                 <div style={{ borderLeft: '1px solid #eee', paddingLeft: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -3790,18 +4508,20 @@ const ProfilePage = ({ authUser }) => {
                                             </div>
 
                                             {order.trackingNumber && (
-                                                <div style={{ marginTop: '1rem', background: '#eaf3fc', padding: '0.75rem 1rem', borderRadius: '6px' }}>
+                                                <div style={{ marginTop: '1rem', background: '#eaf3fc', padding: '0.75rem 1rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                     <span style={{ fontSize: '0.85rem', color: '#1a5695' }}>
                                                         Shipping Carrier Tracking Number: <strong style={{ fontFamily: 'monospace' }}>{order.trackingNumber}</strong>
                                                     </span>
+                                                    <CopyButton text={order.trackingNumber} label="Copy Tracking ID" />
                                                 </div>
                                             )}
 
                                             {order.unlockedGift && (
-                                                <div style={{ marginTop: '0.8rem', background: '#fff9e6', padding: '0.75rem 1rem', border: '1px dashed #fcd34d', borderRadius: '6px' }}>
+                                                <div style={{ marginTop: '0.8rem', background: '#fff9e6', padding: '0.75rem 1rem', border: '1px dashed #fcd34d', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                     <span style={{ fontSize: '0.85rem', color: '#854d0e' }}>
                                                         Reward Unlocked: <strong>{order.unlockedGift}</strong>
                                                     </span>
+                                                    <CopyButton text={order.unlockedGift} label="Copy Code" />
                                                 </div>
                                             )}
                                         </div>
@@ -3818,34 +4538,57 @@ const ProfilePage = ({ authUser }) => {
                             {coupons.length === 0 ? (
                                 <p style={{ color: '#888', textAlign: 'center', marginTop: '2rem' }}>No dynamic coupons issued to your email yet.</p>
                             ) : (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '1.4rem' }}>
                                     {coupons.map(c => (
                                         <div key={c.id} style={{
                                             border: '2px dashed #e4b39b',
-                                            padding: '1.5rem',
-                                            borderRadius: '10px',
+                                            padding: '1.3rem 1rem',
+                                            borderRadius: '12px',
                                             backgroundColor: '#fffcf9',
                                             textAlign: 'center',
                                             position: 'relative',
-                                            overflow: 'hidden'
+                                            overflow: 'hidden',
+                                            boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
                                         }}>
                                             <div style={{
                                                 position: 'absolute', top: 0, left: 0, right: 0, height: '4px',
                                                 background: 'linear-gradient(90deg, #e4b39b, #b97a66)'
                                             }} />
-                                            <strong style={{
-                                                display: 'block', fontSize: '1.2rem', fontFamily: 'monospace',
-                                                color: '#b97a66', letterSpacing: '1px', border: '1px dashed #e4b39b',
-                                                padding: '0.5rem', borderRadius: '4px', backgroundColor: '#fff',
-                                                margin: '0.5rem 0'
-                                            }}>{c.code}</strong>
                                             
-                                            <h4 style={{ margin: '0.8rem 0 0.2rem', fontSize: '1.2rem', fontFamily: 'var(--font-title)' }}>
+                                            {/* Code & Icon-Only Copy Button Container */}
+                                            <div style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'center', 
+                                                gap: '0.4rem',
+                                                margin: '0.4rem 0 0.8rem',
+                                                backgroundColor: '#ffffff',
+                                                border: '1px dashed #e4b39b',
+                                                borderRadius: '8px',
+                                                padding: '0.4rem 0.6rem'
+                                            }}>
+                                                <strong style={{
+                                                    fontSize: '1.05rem',
+                                                    fontFamily: 'monospace',
+                                                    color: '#b97a66',
+                                                    letterSpacing: '1px',
+                                                    whiteSpace: 'nowrap'
+                                                }}>
+                                                    {c.code}
+                                                </strong>
+                                                <CopyButton text={c.code} iconOnly={true} style={{ padding: '4px 6px', borderRadius: '4px' }} />
+                                            </div>
+                                            
+                                            {/* Offer Amount */}
+                                            <h4 style={{ margin: '0.5rem 0 0.2rem', fontSize: '1.35rem', fontFamily: 'var(--font-title)', color: '#2D2A26', fontWeight: '700' }}>
                                                 {c.type === 'percentage' ? `${c.value}% OFF` : `₹${c.value} OFF`}
                                             </h4>
-                                            <p style={{ margin: 0, fontSize: '0.75rem', color: '#888' }}>
-                                                Min order of ₹{c.minOrder}
+                                            
+                                            <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#777' }}>
+                                                Min order of ₹{c.minOrder.toLocaleString('en-IN')}
                                             </p>
+
+                                            {/* Expiry Badge */}
                                             {(() => {
                                                 if (!c.expiryDate) return null;
                                                 const expiryDate = new Date(c.expiryDate);
@@ -3878,9 +4621,9 @@ const ProfilePage = ({ authUser }) => {
                                                 
                                                 return (
                                                     <div style={{ 
-                                                        marginTop: '0.5rem', 
+                                                        margin: '0.3rem auto 0', 
                                                         fontSize: '0.72rem', 
-                                                        padding: '4px 8px', 
+                                                        padding: '3px 8px', 
                                                         borderRadius: '4px',
                                                         backgroundColor: badgeColor + '10',
                                                         color: badgeColor,
@@ -3891,12 +4634,17 @@ const ProfilePage = ({ authUser }) => {
                                                     </div>
                                                 );
                                             })()}
+
+                                            {/* Status & Usage Bar */}
                                             <div style={{
-                                                marginTop: '1rem', fontSize: '0.8rem', color: '#555',
-                                                borderTop: '1px dashed #eee', paddingTop: '0.8rem'
+                                                marginTop: '0.8rem',
+                                                paddingTop: '0.6rem',
+                                                borderTop: '1px dashed #eee',
+                                                fontSize: '0.78rem',
+                                                color: '#555'
                                             }}>
-                                                Status: <strong style={{ color: c.isActive ? '#15803d' : '#b91c1c' }}>{c.isActive ? 'Active' : 'Redeemed'}</strong>
-                                                <div style={{ fontSize: '0.75rem', color: '#777', marginTop: '0.2rem' }}>
+                                                <div>Status: <strong style={{ color: c.isActive ? '#15803d' : '#b91c1c' }}>{c.isActive ? 'Active' : 'Redeemed'}</strong></div>
+                                                <div style={{ fontSize: '0.74rem', color: '#777', marginTop: '0.15rem' }}>
                                                     Used: {c.usedCount} / {c.usageLimit} times
                                                 </div>
                                             </div>
@@ -3935,6 +4683,20 @@ const App = () => {
 
     const [wishlist, setWishlist] = useState([]);
     const [globalSearch, setGlobalSearch] = useState('');
+
+    const [alertState, setAlertState] = useState({ isOpen: false, title: '', message: '', type: 'warning' });
+
+    const triggerAlert = (message, title = "Notice", type = "warning") => {
+        setAlertState({ isOpen: true, title, message, type });
+    };
+
+    const closeAlert = () => {
+        setAlertState(prev => ({ ...prev, isOpen: false }));
+    };
+
+    useEffect(() => {
+        window.customAlert = triggerAlert;
+    }, []);
 
     useEffect(() => {
         fetch('/api/products')
@@ -4058,7 +4820,24 @@ const App = () => {
     };
 
     const addToCart = (product) => {
-        setCart(prev => [...prev, product]);
+        const prodQty = product.quantity || 1;
+        const targetSize = product.size || '';
+
+        setCart(prev => {
+            const existingIndex = prev.findIndex(item => item.id === product.id && (item.size || '') === targetSize);
+            if (existingIndex > -1) {
+                const updated = [...prev];
+                const currentItem = updated[existingIndex];
+                updated[existingIndex] = {
+                    ...currentItem,
+                    quantity: (currentItem.quantity || 1) + prodQty
+                };
+                return updated;
+            } else {
+                return [...prev, { ...product, quantity: prodQty }];
+            }
+        });
+
         triggerLocalConfetti();
 
         if (toastTimerRef.current) {
@@ -4068,6 +4847,24 @@ const App = () => {
         toastTimerRef.current = window.setTimeout(() => {
             setToastProduct(null);
         }, 5500);
+    };
+
+    const updateQuantity = (index, newQty) => {
+        if (newQty <= 0) {
+            removeFromCart(index);
+            return;
+        }
+        setCart(prev => {
+            const updated = [...prev];
+            if (updated[index]) {
+                updated[index] = { ...updated[index], quantity: newQty };
+            }
+            return updated;
+        });
+    };
+
+    const removeFromCart = (index) => {
+        setCart(prev => prev.filter((_, idx) => idx !== index));
     };
 
     const clearCart = () => {
@@ -4082,13 +4879,14 @@ const App = () => {
         }
     };
 
+    const cartCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
 
     return (
         <HashRouter>
             <ScrollToTop />
             <Navbar 
                 products={products}
-                cartCount={cart.length} 
+                cartCount={cartCount} 
                 wishlistCount={wishlist.length} 
                 authUser={authUser} 
                 authLoading={authLoading} 
@@ -4120,8 +4918,8 @@ const App = () => {
                     } 
                 />
 
-                <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} authUser={authUser} />} />
-                <Route path="/cart" element={<Cart cart={cart} onApplyCoupon={setDiscount} discount={discount} />} />
+                <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} wishlist={wishlist} toggleWishlist={toggleWishlist} authUser={authUser} />} />
+                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} />} />
                 <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} />} />
                 <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={clearCart} />} />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
@@ -4183,6 +4981,14 @@ const App = () => {
                     </div>
                 </div>
             )}
+
+            <PremiumAlertModal 
+                isOpen={alertState.isOpen} 
+                onClose={closeAlert} 
+                title={alertState.title} 
+                message={alertState.message} 
+                type={alertState.type} 
+            />
         </HashRouter>
     );
 };
