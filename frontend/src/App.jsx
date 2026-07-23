@@ -17,6 +17,12 @@ import WishlistPage from './pages/WishlistPage';
 import { fallbackProducts } from './data/config';
 import { auth } from './data/config';
 
+const AppFooterWrapper = () => {
+    const location = useLocation();
+    if (location.pathname === '/auth') return null;
+    return <Footer />;
+};
+
 const App = () => {
     console.log('🎯 [DEBUG] App component is rendering!');
     const [products, setProducts] = useState([]);
@@ -73,9 +79,9 @@ const App = () => {
         return unsubscribe;
     }, []);
 
-    // Sync wishlist from Database or Guest Local Storage
+    // Sync wishlist & cart from Database or Guest Local Storage
     useEffect(() => {
-        const syncWishlist = async () => {
+        const syncUserData = async () => {
             if (authUser) {
                 // Merge guest wishlist
                 const local = localStorage.getItem('tet_guest_wishlist');
@@ -100,7 +106,7 @@ const App = () => {
                     }
                 }
 
-                // Load from database persist layer
+                // Load wishlist from database persist layer
                 try {
                     const res = await fetch('/api/wishlist', {
                         headers: { 'X-User-Id': authUser.uid }
@@ -112,22 +118,72 @@ const App = () => {
                 } catch (e) {
                     console.error("Fetch wishlist error:", e);
                 }
-            } else {
-                const local = localStorage.getItem('tet_guest_wishlist');
-                if (local) {
+
+                // Load & merge cart from database persist layer
+                const localGuestCart = localStorage.getItem('tet_guest_cart');
+                if (localGuestCart) {
                     try {
-                        setWishlist(JSON.parse(local) || []);
+                        const parsed = JSON.parse(localGuestCart);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            await fetch('/api/cart/merge', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-User-Id': authUser.uid
+                                },
+                                body: JSON.stringify({
+                                    items: parsed.map(item => ({
+                                        productId: item.id,
+                                        quantity: item.quantity || 1,
+                                        size: item.size || ''
+                                    }))
+                                })
+                            });
+                            localStorage.removeItem('tet_guest_cart');
+                        }
+                    } catch (e) {
+                        console.error("Cart merge error:", e);
+                    }
+                }
+
+                try {
+                    const res = await fetch('/api/cart', {
+                        headers: { 'X-User-Id': authUser.uid }
+                    });
+                    if (res.ok) {
+                        const items = await res.json();
+                        setCart(items || []);
+                    }
+                } catch (e) {
+                    console.error("Fetch cart error:", e);
+                }
+            } else {
+                const localW = localStorage.getItem('tet_guest_wishlist');
+                if (localW) {
+                    try {
+                        setWishlist(JSON.parse(localW) || []);
                     } catch (e) {
                         setWishlist([]);
                     }
                 } else {
                     setWishlist([]);
                 }
+
+                const localC = localStorage.getItem('tet_guest_cart');
+                if (localC) {
+                    try {
+                        setCart(JSON.parse(localC) || []);
+                    } catch (e) {
+                        setCart([]);
+                    }
+                } else {
+                    setCart([]);
+                }
             }
         };
 
         if (!authLoading) {
-            syncWishlist();
+            syncUserData();
         }
     }, [authUser, authLoading]);
 
@@ -169,20 +225,41 @@ const App = () => {
     const addToCart = (product) => {
         const prodQty = product.quantity || 1;
         const targetSize = product.size || '';
+        let calcQty = prodQty;
 
         setCart(prev => {
             const existingIndex = prev.findIndex(item => item.id === product.id && (item.size || '') === targetSize);
+            let updated;
             if (existingIndex > -1) {
-                const updated = [...prev];
+                updated = [...prev];
                 const currentItem = updated[existingIndex];
+                calcQty = (currentItem.quantity || 1) + prodQty;
                 updated[existingIndex] = {
                     ...currentItem,
-                    quantity: (currentItem.quantity || 1) + prodQty
+                    quantity: calcQty
                 };
-                return updated;
             } else {
-                return [...prev, { ...product, quantity: prodQty }];
+                updated = [...prev, { ...product, quantity: prodQty }];
             }
+
+            if (authUser) {
+                fetch('/api/cart', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': authUser.uid
+                    },
+                    body: JSON.stringify({
+                        productId: product.id,
+                        quantity: calcQty,
+                        size: targetSize
+                    })
+                }).catch(e => console.error("DB cart add error:", e));
+            } else {
+                localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+            }
+
+            return updated;
         });
 
         triggerLocalConfetti();
@@ -204,19 +281,60 @@ const App = () => {
         setCart(prev => {
             const updated = [...prev];
             if (updated[index]) {
-                updated[index] = { ...updated[index], quantity: newQty };
+                const targetItem = updated[index];
+                updated[index] = { ...targetItem, quantity: newQty };
+
+                if (authUser) {
+                    fetch('/api/cart', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-User-Id': authUser.uid
+                        },
+                        body: JSON.stringify({
+                            productId: targetItem.id,
+                            quantity: newQty,
+                            size: targetItem.size || ''
+                        })
+                    }).catch(e => console.error("DB cart update error:", e));
+                } else {
+                    localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+                }
             }
             return updated;
         });
     };
 
     const removeFromCart = (index) => {
-        setCart(prev => prev.filter((_, idx) => idx !== index));
+        setCart(prev => {
+            const targetItem = prev[index];
+            const updated = prev.filter((_, idx) => idx !== index);
+
+            if (targetItem) {
+                if (authUser) {
+                    fetch(`/api/cart?productId=${targetItem.id}&size=${encodeURIComponent(targetItem.size || '')}`, {
+                        method: 'DELETE',
+                        headers: { 'X-User-Id': authUser.uid }
+                    }).catch(e => console.error("DB cart remove error:", e));
+                } else {
+                    localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+                }
+            }
+            return updated;
+        });
     };
 
     const clearCart = () => {
         setCart([]);
         setDiscount(null);
+        if (authUser) {
+            fetch('/api/cart?clearAll=true', {
+                method: 'DELETE',
+                headers: { 'X-User-Id': authUser.uid }
+            }).catch(e => console.error("DB cart clear error:", e));
+        } else {
+            localStorage.removeItem('tet_guest_cart');
+        }
     };
 
     const handleSearchSubmit = (q) => {
@@ -283,7 +401,7 @@ const App = () => {
                     } 
                 />
             </Routes>
-            <Footer />
+            <AppFooterWrapper />
 
             {/* Premium Toast Drawer Notification */}
             {toastProduct && (

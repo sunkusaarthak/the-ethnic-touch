@@ -116,9 +116,9 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
     return (
         <div className="product-details-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
-            <a href="#" onClick={handleBack} style={{display:'inline-block', marginBottom:'1.5rem', color:'var(--color-text-light)', textDecoration:'none', transition:'color 0.2s'}}>&larr; Back to Collection</a>
+            <a href="#" onClick={handleBack} className="product-details-back-link" style={{display:'inline-block', marginBottom:'1.5rem', color:'var(--color-text-light)', textDecoration:'none', transition:'color 0.2s'}}>&larr; Back to Collection</a>
             
-            <div style={{display: 'flex', flexWrap: 'wrap', gap: '4rem', alignItems: 'flex-start'}}>
+            <div className="desktop-split-layout product-details-layout" style={{gap: '3rem', alignItems: 'flex-start'}}>
                 
                 {/* Image Slider Gallery */}
                 <div className="product-gallery-layout sticky-on-desktop">
@@ -180,7 +180,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                 </div>
 
                 {/* Product Summary & Actions Sidebar */}
-                <div style={{flex: 1, minWidth: '300px'}}>
+                <div className="product-summary-pane" style={{flex: 1, minWidth: '300px'}}>
                     <h1 style={{fontSize: '2.2rem', margin: '0 0 0.5rem', fontFamily: 'var(--font-title)'}}>{product.name}</h1>
                     
                     {reviews.length > 0 ? (
@@ -195,7 +195,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     )}
 
                     <div style={{fontSize: '1.8rem', fontWeight: '600', marginBottom: '1.5rem', color: 'var(--color-primary)'}}>
-                        ₹{product.price.toLocaleString('en-IN')}
+                        ₹{product.price.toLocaleString('en-IN')} <span style={{fontSize: '0.8rem', color: '#888', fontWeight: '400'}}>(Inclusive of all taxes)</span>
                     </div>
                     
                     {/* Size Selector */}
@@ -215,7 +215,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                     </span>
                                 )}
                             </div>
-                            <div style={{display: 'flex', gap: '0.8rem', flexWrap: 'wrap'}}>
+                            <div style={{display: 'flex', gap: '0.6rem', flexWrap: 'wrap'}}>
                                 {product.sizes.map((size) => {
                                     const stockQty = (product.sizesStock && product.sizesStock[size] !== undefined) ? product.sizesStock[size] : -1;
                                     const isDisabled = stockQty === 0;
@@ -227,14 +227,16 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                             className={`size-pill ${selectedSize === size ? 'active' : ''}`}
                                             title={isDisabled ? 'Out of stock' : ''}
                                             style={{
-                                                padding: '0.8rem 1.5rem',
-                                                borderRadius: '6px',
-                                                border: '1px solid #ddd',
+                                                padding: '0.45rem 1rem',
+                                                minWidth: '42px',
+                                                height: '38px',
+                                                borderRadius: '8px',
+                                                border: '1.5px solid #ddd',
                                                 backgroundColor: '#fff',
                                                 color: '#555',
                                                 fontWeight: '600',
                                                 cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                                fontSize: '1rem'
+                                                fontSize: '0.88rem'
                                             }}
                                         >
                                             {size}
@@ -246,46 +248,46 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     )}
 
                     {/* Quantity Selector */}
-                    <div style={{ marginBottom: '2rem' }}>
-                        <h4 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', fontWeight: '600', color: '#333' }}>Quantity</h4>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#fafafa' }}>
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>Quantity</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#fafafa', height: '36px' }}>
                                 <button 
                                     type="button"
                                     onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
                                     disabled={quantity <= 1}
                                     aria-label="Decrease quantity"
-                                    style={{ width: '42px', height: '48px', border: 'none', background: 'none', cursor: quantity <= 1 ? 'not-allowed' : 'pointer', fontSize: '1.2rem', fontWeight: 'bold', color: quantity <= 1 ? '#ccc' : '#333', transition: 'all 0.2s' }}
+                                    style={{ width: '34px', height: '100%', border: 'none', background: 'none', cursor: quantity <= 1 ? 'not-allowed' : 'pointer', fontSize: '1rem', fontWeight: 'bold', color: quantity <= 1 ? '#ccc' : '#333', transition: 'all 0.2s' }}
                                 >
                                     -
                                 </button>
-                                <span style={{ width: '45px', textAlign: 'center', fontWeight: '600', fontSize: '1.1rem', userSelect: 'none' }}>
+                                <span style={{ width: '36px', textAlign: 'center', fontWeight: '600', fontSize: '0.9rem', userSelect: 'none' }}>
                                     {quantity}
                                 </span>
                                 <button 
                                     type="button"
                                     onClick={() => setQuantity(prev => prev + 1)}
                                     aria-label="Increase quantity"
-                                    style={{ width: '42px', height: '48px', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem', fontWeight: 'bold', color: '#333', transition: 'all 0.2s' }}
+                                    style={{ width: '34px', height: '100%', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold', color: '#333', transition: 'all 0.2s' }}
                                 >
                                     +
                                 </button>
                             </div>
 
                             {quantity > 1 && (
-                                <div style={{ fontSize: '0.95rem', color: '#666', fontWeight: '500' }}>
+                                <div style={{ fontSize: '0.88rem', color: '#666', fontWeight: '500' }}>
                                     Subtotal: <strong style={{ color: 'var(--color-primary)' }}>₹{(product.price * quantity).toLocaleString('en-IN')}</strong>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+                    <div className="desktop-only-cta" style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
                         <button 
                             className="btn btn-primary" 
                             onClick={handleAddToCart}
                             disabled={!selectedSize}
-                            style={{ fontSize: '1.05rem', padding: '0 1.5rem', flex: 1, minWidth: '200px', height: '55px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            style={{ fontSize: '0.92rem', padding: '0 1.25rem', flex: 1, minWidth: '180px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >
                             {selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - Size ${selectedSize}` : 'Out of Stock'}
                         </button>
@@ -296,23 +298,23 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                             title={isWished ? "Remove from wishlist" : "Add to wishlist"}
                             aria-label={isWished ? "Remove from wishlist" : "Add to wishlist"}
                             style={{
-                                height: '55px',
-                                padding: '0 1.5rem',
+                                height: '44px',
+                                padding: '0 1.25rem',
                                 borderRadius: 'var(--border-radius-pill, 50px)',
                                 border: isWished ? '2px solid #e53935' : '1.5px solid #ddd',
                                 backgroundColor: isWished ? '#fff5f5' : '#fff',
                                 color: isWished ? '#e53935' : '#444',
                                 fontWeight: '600',
-                                fontSize: '0.95rem',
+                                fontSize: '0.9rem',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '8px',
+                                gap: '6px',
                                 transition: 'all 0.2s ease',
                                 flexShrink: 0
                             }}
                         >
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill={isWished ? "#e53935" : "none"} stroke={isWished ? "#e53935" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill={isWished ? "#e53935" : "none"} stroke={isWished ? "#e53935" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                             </svg>
                             <span>{isWished ? 'Wishlisted' : 'Wishlist'}</span>
@@ -376,12 +378,17 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                         {recommendedList.map(item => (
                             <Link to={`/product/${item.id}`} key={item.id} className="recommended-card" onClick={() => window.scrollTo(0, 0)}>
                                 <div className="recommended-image-wrapper">
-                                    <img className="recommended-img" src={item.imageUrl} alt={item.name} />
+                                    <img 
+                                        className="recommended-img" 
+                                        src={item.imageUrl} 
+                                        alt={item.name} 
+                                        onError={(e) => { e.target.src = './images/kurthi_peach.png'; }}
+                                    />
                                     <span className="recommended-badge">{item.category}</span>
                                 </div>
-                                <div style={{padding: '1.2rem'}}>
-                                    <h3 style={{fontSize: '1.15rem', fontWeight: '500', marginBottom: '0.4rem', fontFamily: 'var(--font-body)'}}>{item.name}</h3>
-                                    <span style={{fontSize: '1.15rem', color: 'var(--color-primary)', fontWeight: '600'}}>₹{item.price.toLocaleString('en-IN')}</span>
+                                <div style={{padding: '0.8rem 0.9rem'}}>
+                                    <h3 style={{fontSize: '0.95rem', fontWeight: '500', marginBottom: '0.3rem', fontFamily: 'var(--font-heading)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{item.name}</h3>
+                                    <span style={{fontSize: '0.95rem', color: 'var(--color-primary)', fontWeight: '600'}}>₹{item.price.toLocaleString('en-IN')}</span>
                                 </div>
                             </Link>
                         ))}
