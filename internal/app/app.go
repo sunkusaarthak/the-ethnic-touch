@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"ethnictouch/internal/config"
 	"ethnictouch/internal/handlers"
@@ -64,8 +65,16 @@ func (a *App) setupRoutes() {
 	})
 
 	// Add file server for frontend
-	fs := http.FileServer(http.Dir("./static"))
-	a.Router.Handle("/", fs)
+	frontendDist := "./frontend/dist"
+	fs := http.FileServer(http.Dir(frontendDist))
+	a.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if _, err := os.Stat(frontendDist + path); os.IsNotExist(err) && path != "/" {
+			http.ServeFile(w, r, frontendDist+"/index.html")
+			return
+		}
+		fs.ServeHTTP(w, r)
+	})
 }
 
 func (a *App) Run(port string) error {
