@@ -60,33 +60,22 @@
             }
         });
     </script>
-    <div id="root"></div>
-    <!-- Modular Application Scripts -->
-    <!-- Data & Config -->
-    <script type="text/babel" src="./js/data/config.js"></script>
-    
-    <!-- Components -->
-    <script type="text/babel" src="./js/components/CopyButton.js"></script>
-    <script type="text/babel" src="./js/components/PremiumAlertModal.js"></script>
-    <script type="text/babel" src="./js/components/Navbar.js"></script>
-    <script type="text/babel" src="./js/components/Footer.js"></script>
-    <script type="text/babel" src="./js/components/ProductCard.js"></script>
-    <script type="text/babel" src="./js/components/FilterSidebarContent.js"></script>
-    <script type="text/babel" src="./js/components/CustomSelect.js"></script>
-    <script type="text/babel" src="./js/components/ScrollToTop.js"></script>
-    
-    <!-- Pages -->
-    <script type="text/babel" src="./js/pages/Shop.js"></script>
-    <script type="text/babel" src="./js/pages/Home.js"></script>
-    <script type="text/babel" src="./js/pages/WishlistPage.js"></script>
-    <script type="text/babel" src="./js/pages/ProductDetails.js"></script>
-    <script type="text/babel" src="./js/pages/Cart.js"></script>
-    <script type="text/babel" src="./js/pages/Checkout.js"></script>
-    <script type="text/babel" src="./js/pages/MockPayment.js"></script>
-    <script type="text/babel" src="./js/pages/CheckoutSuccess.js"></script>
-    <script type="text/babel" src="./js/pages/ProfilePage.js"></script>
-
-    <!-- Main Entry -->
-    <script type="text/babel" src="./app.js"></script>
+    <div id="root">
+        <div style="font-family: system-ui, sans-serif; text-align: center; padding: 4rem 1rem; color: #2D2A26;">
+            <h2 style="font-size: 1.5rem; font-weight: 500;">The Ethnic Touch - Storefront Backend Active</h2>
+            <p style="color: #6C6863; margin-top: 0.5rem;">The Go REST API is running on port <strong>8080</strong>.</p>
+            <p style="margin-top: 1.5rem;">
+                <a href="http://localhost:5173" style="display: inline-block; background: linear-gradient(135deg, #D4A373 0%, #C49363 100%); color: #fff; padding: 0.75rem 1.75rem; border-radius: 50px; text-decoration: none; font-weight: 600; box-shadow: 0 4px 15px rgba(212,163,115,0.25);">
+                    Open Storefront App (http://localhost:5173) &rarr;
+                </a>
+            </p>
+        </div>
+    </div>
+    <script>
+        // Automatic redirect to Vite dev server if port 8080 root is accessed
+        if (window.location.port === '8080' && window.location.pathname === '/') {
+            window.location.href = 'http://localhost:5173';
+        }
+    </script>
 </body>
 </html>

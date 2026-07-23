@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
 
@@ -20,8 +20,10 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     const [addressMessage, setAddressMessage] = useState('');
     const [ordering, setOrdering] = useState(false);
     const navigate = useNavigate();
+    const paymentCompleteRef = useRef(false);
 
     useEffect(() => {
+        if (paymentCompleteRef.current) return;
         if (!cart || cart.length === 0) {
             navigate('/cart');
         }
@@ -183,6 +185,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
             const data = await res.json();
 
             if (data.paymentMethod === 'offline_qr') {
+                paymentCompleteRef.current = true;
                 clearCart();
                 navigate('/checkout-success', {
                     state: {
@@ -193,6 +196,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                     }
                 });
             } else if (data.checkoutUrl !== "razorpay") {
+                paymentCompleteRef.current = true;
                 clearCart();
                 let targetUrl = data.checkoutUrl;
                 if (targetUrl.startsWith('/#')) {
@@ -222,6 +226,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
 
                         if (verifyRes.ok) {
                             const verifyData = await verifyRes.json();
+                            paymentCompleteRef.current = true;
                             clearCart();
                             navigate('/checkout-success', { 
                                 state: { 
@@ -243,7 +248,7 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                         "email": email
                     },
                     "theme": {
-                        "color": "#FFE5D9"
+                        "color": "#D4A373"
                     }
                 };
                 const rzp = new window.Razorpay(options);
@@ -257,15 +262,19 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     };
 
     return (
-        <div style={{padding: '8rem 5% 4rem', maxWidth: '680px', margin: '0 auto', minHeight: '80vh'}}>
-            <h1 style={{fontFamily: 'var(--font-title)', color: 'var(--color-peach)', marginBottom: '1.5rem'}}>Checkout</h1>
+        <div className="checkout-page-container" style={{padding: '1.25rem 5% 3rem', maxWidth: '1150px', margin: '0 auto', minHeight: '75vh'}}>
+            <h1 style={{marginBottom: '1rem', fontSize: '1.35rem', fontFamily: 'var(--font-heading)', color: 'var(--color-text)', fontWeight: '400'}}>Checkout</h1>
+            
+            <div className="desktop-split-layout checkout-layout" style={{ gap: '1.25rem' }}>
+                {/* Left Column: Delivery & Shipping Forms */}
+                <div style={{flex: 1, minWidth: '280px'}}>
             
             {/* Delivery Methods Selector */}
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr 1fr',
-                gap: '12px',
-                marginBottom: '2.5rem',
+                gap: '8px',
+                marginBottom: '1.25rem',
             }}>
                 <button
                     onClick={() => {
@@ -273,25 +282,25 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                         setPaymentMethod('online');
                     }}
                     style={{
-                        padding: '16px 10px',
-                        borderRadius: '12px',
+                        padding: '8px 6px',
+                        borderRadius: '8px',
                         border: '1.5px solid',
                         borderColor: checkoutType === 'delivery' ? '#D4A373' : '#E6E4E0',
                         background: checkoutType === 'delivery' ? '#FAF3ED' : '#fff',
                         color: checkoutType === 'delivery' ? '#8F5E36' : '#5C5854',
                         fontWeight: '600',
-                        fontSize: '0.88rem',
+                        fontSize: '0.78rem',
                         cursor: 'pointer',
                         transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        gap: '8px',
-                        boxShadow: checkoutType === 'delivery' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
+                        gap: '4px',
+                        boxShadow: checkoutType === 'delivery' ? '0 4px 10px rgba(212,163,115,0.12)' : 'none',
                         outline: 'none'
                     }}
                 >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{transition: 'transform 0.3s ease'}}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="1" y="3" width="15" height="13" rx="2" ry="2" />
                         <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
                         <circle cx="5.5" cy="18.5" r="2.5" />
@@ -306,25 +315,25 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                         setPaymentMethod('online');
                     }}
                     style={{
-                        padding: '16px 10px',
-                        borderRadius: '12px',
+                        padding: '8px 6px',
+                        borderRadius: '8px',
                         border: '1.5px solid',
                         borderColor: checkoutType === 'pickup' ? '#D4A373' : '#E6E4E0',
                         background: checkoutType === 'pickup' ? '#FAF3ED' : '#fff',
                         color: checkoutType === 'pickup' ? '#8F5E36' : '#5C5854',
                         fontWeight: '600',
-                        fontSize: '0.88rem',
+                        fontSize: '0.78rem',
                         cursor: 'pointer',
                         transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        gap: '8px',
-                        boxShadow: checkoutType === 'pickup' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
+                        gap: '4px',
+                        boxShadow: checkoutType === 'pickup' ? '0 4px 10px rgba(212,163,115,0.12)' : 'none',
                         outline: 'none'
                     }}
                 >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                         <polyline points="9 22 9 12 15 12 15 22" />
                     </svg>
@@ -337,61 +346,43 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                         setPaymentMethod('online');
                     }}
                     style={{
-                        padding: '16px 10px',
-                        borderRadius: '12px',
+                        padding: '8px 6px',
+                        borderRadius: '8px',
                         border: '1.5px solid',
                         borderColor: checkoutType === 'hyderabad_instant' ? '#D4A373' : '#E6E4E0',
                         background: checkoutType === 'hyderabad_instant' ? '#FAF3ED' : '#fff',
                         color: checkoutType === 'hyderabad_instant' ? '#8F5E36' : '#5C5854',
                         fontWeight: '600',
-                        fontSize: '0.88rem',
+                        fontSize: '0.78rem',
                         cursor: 'pointer',
                         transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        gap: '8px',
+                        gap: '4px',
                         boxShadow: checkoutType === 'hyderabad_instant' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
                         outline: 'none'
                     }}
                 >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                     </svg>
                     <span style={{fontFamily: 'Inter, sans-serif', letterSpacing: '-0.01em'}}>Hyderabad Instant</span>
                 </button>
             </div>
 
-            <div style={{marginBottom: '2rem'}}>
-                <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#333'}}>Confirm Email *</label>
+            <div style={{marginBottom: '1.25rem'}}>
+                <label style={{display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.78rem', color: '#555'}}>Confirm Email *</label>
                 <input 
                     type="email" 
+                    className="checkout-email-input"
                     value={email} 
                     onChange={e => setEmail(e.target.value)} 
                     placeholder="you@example.com"
-                    style={{padding: '1rem', border: '1px solid #ddd', borderRadius: '8px', width: '100%', fontSize: '0.95rem'}}
+                    style={{border: '1px solid #ddd', borderRadius: '8px', width: '100%', fontSize: '0.75rem', height: '34px', padding: '0.35rem 0.65rem'}}
                     disabled={ordering}
                     required
                 />
-            </div>
-
-            <div style={{
-                padding: '2rem', 
-                border: '1.5px solid #E6E4E0', 
-                borderRadius: '12px', 
-                background: '#FAF9F6', 
-                marginBottom: '2.5rem', 
-                boxShadow: '0 4px 15px rgba(0,0,0,0.015)'
-            }}>
-                <h3 style={{fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.8rem', color: '#2D2A26', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Order Summary</h3>
-                <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.92rem', color: '#6C6863'}}>
-                    <span>Garments in Cart:</span>
-                    <span>{cart.reduce((sum, item) => sum + (item.quantity || 1), 0)} pc{cart.reduce((sum, item) => sum + (item.quantity || 1), 0) !== 1 ? 's' : ''}</span>
-                </div>
-                <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E6E4E0', paddingTop: '0.8rem', marginTop: '0.8rem'}}>
-                    <span style={{fontWeight: 600, color: '#2D2A26'}}>Total Amount to Pay:</span>
-                    <strong style={{fontSize: '1.25rem', color: '#8F5E36'}}>₹{finalTotal.toLocaleString('en-IN')}</strong>
-                </div>
             </div>
 
             {/* Store Pickup Details UI */}
@@ -663,28 +654,110 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                 </div>
             )}
 
-            <button 
-                className="btn btn-primary" 
-                onClick={placeOrder} 
-                style={{
-                    marginTop: '2rem', 
-                    width: '100%', 
-                    padding: '1.2rem', 
-                    fontSize: '1.05rem', 
-                    fontWeight: '600', 
-                    borderRadius: '50px',
-                    letterSpacing: '0.02em',
-                    boxShadow: '0 8px 25px rgba(45,42,38,0.15)'
-                }}
-                disabled={ordering || (checkoutType !== 'pickup' && addresses.length === 0) || isInstantDeliveryBlocked}
-            >
-                {ordering ? "Verifying Stock & Routing..." : 
-                 checkoutType === 'pickup' && paymentMethod === 'offline_qr' ? "Book Store Pickup Pass" : 
-                 "Secure Checkout & Prepay"}
-            </button>
+                </div>
+
+                {/* Right Column: Sticky Order Summary Box */}
+                <div className="sticky-summary-box" style={{
+                    width: '310px', 
+                    flexShrink: 0, 
+                    padding: '1.25rem', 
+                    backgroundColor: '#FFFdfc', 
+                    borderRadius: '16px', 
+                    border: '1.5px solid rgba(212, 163, 115, 0.35)', 
+                    boxShadow: '0 8px 30px rgba(212, 163, 115, 0.08)'
+                }}>
+                    <h3 style={{
+                        fontFamily: 'var(--font-heading)', 
+                        fontSize: '1.05rem', 
+                        fontWeight: '500', 
+                        marginBottom: '0.85rem', 
+                        color: '#2D2A26', 
+                        letterSpacing: '0.03em', 
+                        borderBottom: '1px solid rgba(212, 163, 115, 0.25)', 
+                        paddingBottom: '0.45rem'
+                    }}>
+                        Order Summary
+                    </h3>
+                    
+                    {/* Item list mini preview */}
+                    <div style={{
+                        maxHeight: '180px', 
+                        overflowY: 'auto', 
+                        marginBottom: '1rem', 
+                        padding: '0.5rem 0.6rem', 
+                        backgroundColor: '#FAF7F4', 
+                        borderRadius: '10px', 
+                        border: '1px solid rgba(212, 163, 115, 0.18)', 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '0.5rem'
+                    }}>
+                        {cart.map((item, idx) => (
+                            <div key={idx} style={{display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.78rem'}}>
+                                <img src={item.imageUrl} alt={item.name} style={{width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1px solid rgba(212, 163, 115, 0.25)'}} />
+                                <div style={{flex: 1, minWidth: 0}}>
+                                    <div style={{fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#2D2A26'}}>{item.name}</div>
+                                    <div style={{color: '#8C8883', fontSize: '0.72rem'}}>Qty: {item.quantity || 1} {item.size ? `| Size: ${item.size}` : ''}</div>
+                                </div>
+                                <div style={{fontWeight: '600', color: '#8F5E36'}}>₹{(item.price * (item.quantity || 1)).toLocaleString('en-IN')}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={{borderTop: '1px solid rgba(212, 163, 115, 0.2)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.82rem'}}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', color: '#6C6863'}}>
+                            <span>Subtotal ({cart.reduce((sum, item) => sum + (item.quantity || 1), 0)} items):</span>
+                            <span style={{fontWeight: '600', color: '#2D2A26'}}>₹{subtotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        {discount && (
+                            <div style={{display: 'flex', justifyContent: 'space-between', color: '#2E7D32', fontWeight: '500'}}>
+                                <span>Discount ({discount.code}):</span>
+                                <span>-₹{discount.amt.toLocaleString('en-IN')}</span>
+                            </div>
+                        )}
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#6C6863'}}>
+                            <span>Delivery Mode:</span>
+                            <span style={{backgroundColor: '#FAF3ED', color: '#8F5E36', padding: '2px 8px', borderRadius: '20px', fontWeight: '600', fontSize: '0.75rem', border: '1px solid rgba(212,163,115,0.25)', textTransform: 'capitalize'}}>
+                                {checkoutType.replace('_', ' ')}
+                            </span>
+                        </div>
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(212, 163, 115, 0.35)', paddingTop: '0.65rem', marginTop: '0.3rem'}}>
+                            <span style={{fontWeight: 600, color: '#2D2A26', fontSize: '0.92rem'}}>Total Amount:</span>
+                            <strong style={{fontSize: '1.1rem', color: '#8F5E36', fontFamily: 'var(--font-body)'}}>₹{finalTotal.toLocaleString('en-IN')}</strong>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={placeOrder} 
+                        style={{
+                            marginTop: '0.9rem', 
+                            width: '100%', 
+                            height: '38px',
+                            padding: '0', 
+                            fontSize: '0.85rem', 
+                            fontWeight: '600', 
+                            borderRadius: '50px',
+                            letterSpacing: '0.02em',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)',
+                            color: '#FFF',
+                            border: 'none',
+                            cursor: ordering ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 4px 15px rgba(212, 163, 115, 0.25)',
+                            transition: 'all 0.3s ease'
+                        }}
+                        disabled={ordering || (checkoutType !== 'pickup' && addresses.length === 0) || isInstantDeliveryBlocked}
+                    >
+                        {ordering ? "Verifying Stock..." : 
+                         checkoutType === 'pickup' && paymentMethod === 'offline_qr' ? "Book Store Pickup Pass" : 
+                         "Secure Checkout & Prepay"}
+                    </button>
+                </div>
+            </div>
         </div>
     );
-};;
-
+};
 
 export default Checkout;

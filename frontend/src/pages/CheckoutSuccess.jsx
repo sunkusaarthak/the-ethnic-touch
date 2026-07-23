@@ -54,38 +54,38 @@ const CheckoutSuccess = () => {
     const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=2c2c2c&data=${encodeURIComponent(qrUrl)}`;
 
     return (
-        <div style={{padding: '9rem 5% 4rem', maxWidth: '680px', margin: '0 auto', minHeight: '80vh', textAlign:'center'}}>
+        <div style={{padding: '1.5rem 5% 3rem', maxWidth: '620px', margin: '0 auto', minHeight: '75vh', textAlign:'center'}}>
             {/* Celebration Icon */}
             {isOffline ? (
                 <div style={{
-                    width: '100px',
-                    height: '100px',
+                    width: '76px',
+                    height: '76px',
                     borderRadius: '50%',
                     background: '#FAF3ED',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    margin: '0 auto 1.5rem',
-                    boxShadow: '0 10px 25px rgba(208,136,59,0.12)'
+                    margin: '0 auto 1rem',
+                    boxShadow: '0 8px 20px rgba(208,136,59,0.12)'
                 }}>
-                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#8F5E36" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8F5E36" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
                         <polyline points="12 6 12 12 16 14" />
                     </svg>
                 </div>
             ) : (
                 <div style={{
-                    width: '100px',
-                    height: '100px',
+                    width: '76px',
+                    height: '76px',
                     borderRadius: '50%',
                     background: '#E8F5E9',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    margin: '0 auto 1.5rem',
-                    boxShadow: '0 10px 25px rgba(46,125,50,0.12)'
+                    margin: '0 auto 1rem',
+                    boxShadow: '0 8px 20px rgba(46,125,50,0.12)'
                 }}>
-                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                     </svg>
                 </div>
@@ -93,21 +93,21 @@ const CheckoutSuccess = () => {
             
             <h1 style={{
                 fontFamily:'var(--font-heading)', 
-                fontSize: '2.5rem',
-                marginBottom: '0.8rem', 
+                fontSize: '1.6rem',
+                marginBottom: '0.4rem', 
                 color: '#2D2A26',
                 letterSpacing: '-0.01em'
             }}>
                 {isOffline ? "Boutique Order Reserved!" : "Order Placed Successfully!"}
             </h1>
-            <p style={{fontSize: '1rem', color: '#6C6863', marginBottom: '2rem'}}>Thank you for choosing luxury, custom Indo-Western aesthetics.</p>
+            <p style={{fontSize: '0.88rem', color: '#6C6863', marginBottom: '1.25rem'}}>Thank you for choosing luxury, custom Indo-Western aesthetics.</p>
             
             <div style={{
-                padding: '2.5rem 2rem', 
+                padding: '1.5rem 1.25rem', 
                 backgroundColor: '#fff', 
                 border: '1.5px solid #E6E4E0', 
                 borderRadius: '16px', 
-                margin: '2rem 0',
+                margin: '1.25rem 0',
                 boxShadow: '0 8px 30px rgba(0,0,0,0.025)',
                 position: 'relative'
             }}>

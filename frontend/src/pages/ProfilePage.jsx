@@ -312,81 +312,84 @@ const ProfilePage = ({ authUser }) => {
 
     return (
         <div style={{
-            maxWidth: '1200px',
-            margin: '8rem auto 4rem',
-            padding: '0 1.5rem',
-            minHeight: '80vh',
+            maxWidth: '1100px',
+            margin: '2.5rem auto 3rem',
+            padding: '0 1.25rem',
+            minHeight: '75vh',
             fontFamily: 'var(--font-body)'
         }}>
             {/* Header Section */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '1.5rem',
-                marginBottom: '2rem',
+                gap: '1.25rem',
+                marginBottom: '1.25rem',
                 background: '#fff',
-                padding: '2rem',
+                padding: '1.25rem 1.5rem',
                 borderRadius: '12px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
+                boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
+                border: '1px solid rgba(0,0,0,0.04)'
             }}>
                 <div style={{
-                    width: '70px',
-                    height: '70px',
+                    width: '52px',
+                    height: '52px',
                     borderRadius: '50px',
                     background: 'linear-gradient(135deg, #e4b39b, #b97a66)',
                     color: '#fff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '1.8rem',
+                    fontSize: '1.4rem',
                     fontWeight: 'bold',
-                    boxShadow: '0 4px 10px rgba(185, 122, 102, 0.3)'
+                    boxShadow: '0 4px 10px rgba(185, 122, 102, 0.25)'
                 }}>
                     {form.fullName ? form.fullName.trim().charAt(0).toUpperCase() : 'U'}
                 </div>
                 <div>
                     <h1 style={{
-                        fontSize: '1.8rem',
+                        fontSize: '1.4rem',
                         fontFamily: 'var(--font-title)',
                         margin: 0,
                         color: '#333'
                     }}>
                         {form.fullName || 'Welcome to The Ethnic Touch'}
                     </h1>
-                    <p style={{ margin: '0.2rem 0 0', color: '#666', fontSize: '0.95rem' }}>{authUser.email}</p>
+                    <p style={{ margin: '0.15rem 0 0', color: '#666', fontSize: '0.85rem' }}>{authUser.email}</p>
                 </div>
             </div>
 
             {/* Main Content Layout */}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: '260px 1fr',
-                gap: '2rem'
+                gridTemplateColumns: '220px 1fr',
+                gap: '1.25rem'
             }} className="profile-dashboard-grid">
                 
                 {/* Sidemenu Panel */}
                 <div style={{
                     background: '#fff',
-                    padding: '1.5rem',
+                    padding: '1rem',
                     borderRadius: '12px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
+                    border: '1px solid rgba(0,0,0,0.04)',
                     height: 'fit-content'
                 }}>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                         <li 
                             onClick={() => { setActiveTab('profile'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
                             style={{
-                                padding: '1rem',
+                                padding: '0.65rem 0.9rem',
                                 borderRadius: '8px',
                                 cursor: 'pointer',
+                                fontSize: '0.88rem',
                                 fontWeight: activeTab === 'profile' ? '600' : 'normal',
                                 backgroundColor: activeTab === 'profile' ? '#fff0e9' : 'transparent',
                                 color: activeTab === 'profile' ? '#b97a66' : '#555',
                                 transition: 'all 0.2s',
-                                marginBottom: '0.5rem',
+                                marginBottom: '0.35rem',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.8rem'
+                                gap: '0.6rem'
                             }}
                         >
                             My Profile
@@ -394,17 +397,18 @@ const ProfilePage = ({ authUser }) => {
                         <li 
                             onClick={() => { setActiveTab('addresses'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
                             style={{
-                                padding: '1rem',
+                                padding: '0.65rem 0.9rem',
                                 borderRadius: '8px',
                                 cursor: 'pointer',
+                                fontSize: '0.88rem',
                                 fontWeight: activeTab === 'addresses' ? '600' : 'normal',
                                 backgroundColor: activeTab === 'addresses' ? '#fff0e9' : 'transparent',
                                 color: activeTab === 'addresses' ? '#b97a66' : '#555',
                                 transition: 'all 0.2s',
-                                marginBottom: '0.5rem',
+                                marginBottom: '0.35rem',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.8rem'
+                                gap: '0.6rem'
                             }}
                         >
                             Shipping Addresses
@@ -412,17 +416,18 @@ const ProfilePage = ({ authUser }) => {
                         <li 
                             onClick={() => { setActiveTab('orders'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
                             style={{
-                                padding: '1rem',
+                                padding: '0.65rem 0.9rem',
                                 borderRadius: '8px',
                                 cursor: 'pointer',
+                                fontSize: '0.88rem',
                                 fontWeight: activeTab === 'orders' ? '600' : 'normal',
                                 backgroundColor: activeTab === 'orders' ? '#fff0e9' : 'transparent',
                                 color: activeTab === 'orders' ? '#b97a66' : '#555',
                                 transition: 'all 0.2s',
-                                marginBottom: '0.5rem',
+                                marginBottom: '0.35rem',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.8rem'
+                                gap: '0.6rem'
                             }}
                         >
                             Order History
@@ -430,16 +435,17 @@ const ProfilePage = ({ authUser }) => {
                         <li 
                             onClick={() => { setActiveTab('coupons'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
                             style={{
-                                padding: '1rem',
+                                padding: '0.65rem 0.9rem',
                                 borderRadius: '8px',
                                 cursor: 'pointer',
+                                fontSize: '0.88rem',
                                 fontWeight: activeTab === 'coupons' ? '600' : 'normal',
                                 backgroundColor: activeTab === 'coupons' ? '#fff0e9' : 'transparent',
                                 color: activeTab === 'coupons' ? '#b97a66' : '#555',
                                 transition: 'all 0.2s',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.8rem'
+                                gap: '0.6rem'
                             }}
                         >
                             My Coupons
@@ -453,18 +459,19 @@ const ProfilePage = ({ authUser }) => {
                                 }
                             }}
                             style={{
-                                padding: '1rem',
+                                padding: '0.65rem 0.9rem',
                                 borderRadius: '8px',
                                 cursor: 'pointer',
+                                fontSize: '0.88rem',
                                 fontWeight: '500',
                                 backgroundColor: 'transparent',
                                 color: '#d32f2f',
                                 transition: 'all 0.2s',
-                                marginTop: '1rem',
+                                marginTop: '0.75rem',
                                 borderTop: '1px solid #f5f5f5',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.8rem'
+                                gap: '0.6rem'
                             }}
                             onMouseEnter={e => { e.target.style.backgroundColor = '#fdf2f2'; }}
                             onMouseLeave={e => { e.target.style.backgroundColor = 'transparent'; }}
@@ -477,10 +484,11 @@ const ProfilePage = ({ authUser }) => {
                 {/* Content Panel */}
                 <div style={{
                     background: '#fff',
-                    padding: '2.5rem',
+                    padding: '1.5rem',
                     borderRadius: '12px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-                    minHeight: '400px'
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
+                    border: '1px solid rgba(0,0,0,0.04)',
+                    minHeight: '380px'
                 }}>
                     
                     {/* TAB: PROFILE */}

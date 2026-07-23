@@ -54,42 +54,61 @@ const MockPayment = ({ onPaymentSuccess }) => {
     };
 
     return (
-        <div style={{padding: '8rem 5% 4rem', maxWidth: '500px', margin: '0 auto', minHeight: '80vh'}}>
+        <div style={{padding: '2rem 1rem 3rem', maxWidth: '400px', margin: '0 auto', minHeight: '65vh', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
             <div style={{
-                padding: '3rem 2rem',
-                backgroundColor: 'white',
-                borderRadius: 'var(--border-radius-lg)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
-                border: '1px solid #f0f0f0',
+                width: '100%',
+                padding: '1.5rem 1.25rem',
+                backgroundColor: '#FFFdfc',
+                borderRadius: '16px',
+                boxShadow: '0 12px 35px rgba(212, 163, 115, 0.12)',
+                border: '1.5px solid rgba(212, 163, 115, 0.35)',
                 textAlign: 'center'
             }}>
-                <h2 style={{fontFamily: 'var(--font-title)', color: 'var(--color-peach)', marginBottom: '1rem'}}>
+                <h2 style={{fontFamily: 'var(--font-heading)', color: '#2D2A26', fontSize: '1.3rem', marginBottom: '0.3rem'}}>
                     Razorpay Simulator
                 </h2>
-                <p style={{color: 'gray', marginBottom: '2rem'}}>Confirming details for order ref: <strong>{orderId}</strong></p>
+                <p style={{color: '#6C6863', fontSize: '0.82rem', marginBottom: '1.25rem'}}>
+                    Confirming details for order ref: <strong style={{color: '#8F5E36', fontFamily: 'monospace'}}>#{orderId}</strong>
+                </p>
                 
                 <div style={{
-                    backgroundColor: '#fffcf9',
-                    padding: '1.5rem',
-                    borderRadius: '8px',
-                    marginBottom: '2rem',
-                    border: '1px dashed var(--color-peach)'
+                    backgroundColor: '#FAF4EE',
+                    padding: '0.85rem 1rem',
+                    borderRadius: '10px',
+                    marginBottom: '1.25rem',
+                    border: '1px dashed #D4A373'
                 }}>
-                    <p style={{fontSize: '0.9rem', color: '#886050', margin: 0}}>
-                        <strong>Dev Sandbox Environment</strong>
+                    <p style={{fontSize: '0.82rem', color: '#8F5E36', margin: 0, fontWeight: '600'}}>
+                        Dev Sandbox Environment
                     </p>
-                    <p style={{fontSize: '0.85rem', color: '#906858', margin: '0.5rem 0 0', lineHeight: '1.5'}}>
-                        This screen simulates RazorPay's secure transaction screen. Clicking below fires the signature webhook checking.
+                    <p style={{fontSize: '0.78rem', color: '#6C6863', margin: '0.35rem 0 0', lineHeight: '1.4'}}>
+                        Simulates Razorpay's payment verification. Click below to verify transaction signature.
                     </p>
                 </div>
 
                 <button 
-                    className="btn btn-primary" 
                     onClick={handlePay} 
                     disabled={paying}
-                    style={{width: '100%', padding: '1.2rem', fontSize: '1.1rem'}}
+                    style={{
+                        width: '100%', 
+                        height: '38px',
+                        padding: '0', 
+                        fontSize: '0.85rem', 
+                        fontWeight: '600', 
+                        borderRadius: '50px',
+                        letterSpacing: '0.02em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)',
+                        color: '#FFF',
+                        border: 'none',
+                        cursor: paying ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 4px 15px rgba(212, 163, 115, 0.25)',
+                        transition: 'all 0.3s ease'
+                    }}
                 >
-                    {paying ? "Verifying signature credentials..." : "Simulate Payment Success"}
+                    {paying ? "Verifying signature..." : "Simulate Payment Success"}
                 </button>
             </div>
         </div>

@@ -15,6 +15,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -337,6 +338,15 @@ func initDB() {
 			created_at TEXT NOT NULL,
 			UNIQUE(user_id, product_id)
 		);`,
+		`CREATE TABLE IF NOT EXISTS cart_items (
+			id SERIAL PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			quantity INT NOT NULL DEFAULT 1,
+			size TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			UNIQUE(user_id, product_id, size)
+		);`,
 	}
 
 	for _, q := range queries {
@@ -398,6 +408,7 @@ func initDB() {
 		`CREATE INDEX IF NOT EXISTS idx_products_is_best_seller ON products(is_best_seller);`,
 		`CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured);`,
 		`CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist(user_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_product_reviews_pid_rating ON product_reviews(product_id, rating);`,
 	}
 	for _, q := range alterQueries {
@@ -2996,6 +3007,229 @@ func wishlistMergeHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "wishlist merged"})
 }
 
+func cartHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-User-Id")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	userID := getAuthenticatedUserID(r)
+	if userID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "authentication required"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query(`
+			SELECT 
+				p.id, p.name, p.description, p.price, p.image_url, p.stock, p.category, 
+				COALESCE(p.sizes, ''), COALESCE(p.sizes_stock, '{}'),
+				COALESCE(p.collection, ''), COALESCE(p.fabric, ''), COALESCE(p.color, ''), 
+				COALESCE(p.sleeve_type, ''), COALESCE(p.neck_type, ''), COALESCE(p.pattern, ''), 
+				COALESCE(p.occasion, ''), COALESCE(p.sku, ''), COALESCE(p.tags, ''), 
+				COALESCE(p.original_price, 0), p.is_new_arrival, p.is_best_seller, p.is_featured, 
+				COALESCE(p.created_at, ''),
+				COALESCE(r.avg_rating, 0.0) as avg_rating,
+				COALESCE(r.review_count, 0) as review_count,
+				c.quantity, COALESCE(c.size, '')
+			FROM cart_items c
+			JOIN products p ON c.product_id = p.id
+			LEFT JOIN (
+				SELECT product_id, AVG(rating) as avg_rating, COUNT(*) as review_count 
+				FROM product_reviews GROUP BY product_id
+			) r ON p.id = r.product_id
+			WHERE c.user_id = $1
+			ORDER BY c.created_at ASC`, userID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		type CartItem struct {
+			Product
+			Quantity int    `json:"quantity"`
+			Size     string `json:"size"`
+		}
+
+		items := []CartItem{}
+		for rows.Next() {
+			var item CartItem
+			var sizesStr string
+			var sizesStockStr string
+			if err := rows.Scan(
+				&item.ID, &item.Name, &item.Description, &item.Price, &item.ImageURL, &item.Stock, &item.Category, 
+				&sizesStr, &sizesStockStr,
+				&item.Collection, &item.Fabric, &item.Color, &item.SleeveType, &item.NeckType, &item.Pattern, 
+				&item.Occasion, &item.SKU, &item.Tags, &item.OriginalPrice, &item.IsNewArrival, &item.IsBestSeller, 
+				&item.IsFeatured, &item.CreatedAt, &item.AvgRating, &item.ReviewCount,
+				&item.Quantity, &item.Size,
+			); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if sizesStr != "" {
+				item.Sizes = strings.Split(sizesStr, ",")
+			} else {
+				item.Sizes = []string{}
+			}
+			item.SizesStock = map[string]int{}
+			if sizesStockStr != "" {
+				json.Unmarshal([]byte(sizesStockStr), &item.SizesStock)
+			}
+			if item.ImageURL != "" {
+				item.GalleryImages = append(item.GalleryImages, item.ImageURL)
+			}
+			items = append(items, item)
+		}
+		json.NewEncoder(w).Encode(items)
+
+	case http.MethodPost:
+		var req struct {
+			ProductID string `json:"productId"`
+			Quantity  int    `json:"quantity"`
+			Size      string `json:"size"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+			return
+		}
+		if req.ProductID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "productId is required"})
+			return
+		}
+
+		if req.Quantity <= 0 {
+			_, err := db.Exec("DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2 AND size = $3", userID, req.ProductID, req.Size)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "item removed from cart"})
+			return
+		}
+
+		var dummy string
+		if checkErr := db.QueryRow("SELECT id FROM products WHERE id = $1", req.ProductID).Scan(&dummy); checkErr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "product not found"})
+			return
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, err := db.Exec(`
+			INSERT INTO cart_items (user_id, product_id, quantity, size, created_at)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (user_id, product_id, size) 
+			DO UPDATE SET quantity = EXCLUDED.quantity`, userID, req.ProductID, req.Quantity, req.Size, now)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "cart updated"})
+
+	case http.MethodDelete:
+		pid := r.URL.Query().Get("productId")
+		size := r.URL.Query().Get("size")
+		clearAll := r.URL.Query().Get("clearAll") == "true"
+
+		if clearAll {
+			_, err := db.Exec("DELETE FROM cart_items WHERE user_id = $1", userID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "cart cleared"})
+			return
+		}
+
+		if pid == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "productId parameter is required"})
+			return
+		}
+
+		_, err := db.Exec("DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2 AND size = $3", userID, pid, size)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "item removed from cart"})
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func cartMergeHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-User-Id")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := getAuthenticatedUserID(r)
+	if userID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "authentication required"})
+		return
+	}
+
+	type MergeItem struct {
+		ProductID string `json:"productId"`
+		Quantity  int    `json:"quantity"`
+		Size      string `json:"size"`
+	}
+	var req struct {
+		Items []MergeItem `json:"items"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, item := range req.Items {
+		if item.ProductID == "" || item.Quantity <= 0 {
+			continue
+		}
+		var dummy string
+		if checkErr := db.QueryRow("SELECT id FROM products WHERE id = $1", item.ProductID).Scan(&dummy); checkErr == nil {
+			_, _ = db.Exec(`
+				INSERT INTO cart_items (user_id, product_id, quantity, size, created_at)
+				VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT (user_id, product_id, size) 
+				DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity`, userID, item.ProductID, item.Quantity, item.Size, now)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "cart merged"})
+}
+
 func confirmPickupHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -3067,10 +3301,16 @@ func confirmPickupHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	_ = mime.AddExtensionType(".css", "text/css; charset=utf-8")
+	_ = mime.AddExtensionType(".js", "application/javascript; charset=utf-8")
+	_ = mime.AddExtensionType(".json", "application/json; charset=utf-8")
+
 	initDB()
 	defer db.Close()
 
 	// Storefront routes
+	http.HandleFunc("/api/cart", cartHandler)
+	http.HandleFunc("/api/cart/merge", cartMergeHandler)
 	http.HandleFunc("/api/wishlist", wishlistHandler)
 	http.HandleFunc("/api/wishlist/merge", wishlistMergeHandler)
 	http.HandleFunc("/api/products", productsHandler)
@@ -3097,9 +3337,17 @@ func main() {
 	// Health endpoint
 	http.HandleFunc("/health", healthHandler)
 
-	// File server
+	// File server with strict MIME override middleware for Windows registry fixes
 	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/", fs)
+	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, ".css") || strings.Contains(path, ".css?") {
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		} else if strings.HasSuffix(path, ".js") || strings.Contains(path, ".js?") {
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		}
+		fs.ServeHTTP(w, r)
+	}))
 
 	port := os.Getenv("PORT")
 	if port == "" {
