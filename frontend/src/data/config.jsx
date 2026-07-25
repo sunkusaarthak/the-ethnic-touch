@@ -29,6 +29,7 @@ const fallbackProducts = [
     { id: "4", name: "Powder Blue Elegance", description: "A sophisticated powder blue kurthi with minimal floral embroidery.", price: 12499, imageUrl: "./images/kurthi_blue.png" }
 ];
 
-// --- COMPONENTS ---
+// --- API BASE URL ---
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : 'https://the-ethnic-touch.onrender.com');
 
 export { fallbackProducts, auth, firebaseConfig };

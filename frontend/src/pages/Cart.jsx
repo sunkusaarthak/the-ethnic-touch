@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Checkout from './Checkout';
 import AuthRequiredModal from '../components/AuthRequiredModal';
+import { API_BASE_URL } from '../data/config';
 
 const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser }) => {
     const navigate = useNavigate();
@@ -15,7 +16,7 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
     const finalTotal = subtotal - (discount?.amt || discount?.value || 0);
 
     useEffect(() => {
-        fetch('/api/gift-tiers')
+        fetch(`${API_BASE_URL}/api/gift-tiers`)
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data)) {
@@ -27,7 +28,7 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
 
     const handleCoupon = async () => {
         try {
-            const res = await fetch('/api/coupons/validate', {
+            const res = await fetch(`${API_BASE_URL}/api/coupons/validate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: couponCode, total: subtotal })

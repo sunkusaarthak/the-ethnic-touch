@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import CopyButton from '../components/CopyButton';
-import { auth } from '../data/config';
+import { auth, API_BASE_URL } from '../data/config';
 
 const ProfilePage = ({ authUser }) => {
     const navigate = useNavigate();
@@ -62,7 +62,7 @@ const ProfilePage = ({ authUser }) => {
     const loadAddresses = async () => {
         if (!authUser) return;
         try {
-            const response = await fetch('/api/profile/addresses', {
+            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
                 headers: { 'X-User-Id': authUser.uid }
             });
             if (response.ok) {
@@ -77,7 +77,7 @@ const ProfilePage = ({ authUser }) => {
     const loadOrdersAndCoupons = async () => {
         if (!authUser) return;
         try {
-            const ordResponse = await fetch('/api/profile/orders', {
+            const ordResponse = await fetch(`${API_BASE_URL}/api/profile/orders`, {
                 headers: { 'X-User-Id': authUser.uid }
             });
             if (ordResponse.ok) {
@@ -85,7 +85,7 @@ const ProfilePage = ({ authUser }) => {
                 setOrders(data);
             }
             
-            const copResponse = await fetch('/api/profile/coupons', {
+            const copResponse = await fetch(`${API_BASE_URL}/api/profile/coupons`, {
                 headers: { 'X-User-Id': authUser.uid }
             });
             if (copResponse.ok) {
@@ -101,7 +101,7 @@ const ProfilePage = ({ authUser }) => {
         e.preventDefault();
         setAddressMessage('');
         try {
-            const response = await fetch('/api/profile/addresses', {
+            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -124,7 +124,7 @@ const ProfilePage = ({ authUser }) => {
     const handleDeleteAddress = async (id) => {
         if (!confirm('Are you sure you want to delete this address?')) return;
         try {
-            const response = await fetch(`/api/profile/addresses?id=${id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/profile/addresses?id=${id}`, {
                 method: 'DELETE',
                 headers: { 'X-User-Id': authUser.uid }
             });
@@ -138,14 +138,14 @@ const ProfilePage = ({ authUser }) => {
 
     const handleSetDefaultAddress = async (id) => {
         try {
-            const response = await fetch(`/api/profile/addresses?id=${id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/profile/addresses?id=${id}`, {
                 method: 'PATCH',
                 headers: { 'X-User-Id': authUser.uid }
             });
             if (response.ok) {
                 loadAddresses();
                 // Also reload profile details since primary profile address is bidirectionally synced
-                const profileRes = await fetch('/api/profile/me', {
+                const profileRes = await fetch(`${API_BASE_URL}/api/profile/me`, {
                     headers: { 'X-User-Id': authUser.uid }
                 });
                 if (profileRes.ok) {
@@ -173,7 +173,7 @@ const ProfilePage = ({ authUser }) => {
 
         const loadProfile = async () => {
             try {
-                const response = await fetch('/api/profile/me', {
+                const response = await fetch(`${API_BASE_URL}/api/profile/me`, {
                     headers: { 'X-User-Id': authUser.uid }
                 });
                 if (response.status === 404) {
@@ -248,7 +248,7 @@ const ProfilePage = ({ authUser }) => {
         setMessage({ type: '', text: '' });
 
         try {
-            const response = await fetch('/api/profile/me', {
+            const response = await fetch(`${API_BASE_URL}/api/profile/me`, {
                 method: mode === 'create' ? 'POST' : 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',

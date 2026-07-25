@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
+import { API_BASE_URL } from '../data/config';
 
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
@@ -40,7 +41,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
     useEffect(() => {
         if (product) {
-            fetch(`/api/products/${product.id}/reviews`)
+            fetch(`${API_BASE_URL}/api/products/${product.id}/reviews`)
                 .then(res => res.json())
                 .then(data => {
                     if(Array.isArray(data)) setReviews(data);
@@ -124,7 +125,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         const email = authUser?.email || "guest@ethnictouch.com";
 
         try {
-            const res = await fetch(`/api/products/${product.id}/reviews`, {
+            const res = await fetch(`${API_BASE_URL}/api/products/${product.id}/reviews`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userName: name, userEmail: email, rating: parseInt(rating), comment })
