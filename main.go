@@ -545,7 +545,7 @@ func adminAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // Handlers
 func productsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 	if r.Method == "OPTIONS" {
@@ -886,7 +886,7 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			json.NewEncoder(w).Encode(products)
 		}
-	} else if r.Method == "POST" {
+	} else if r.Method == "POST" || r.Method == "PUT" {
 		authHeader := r.Header.Get("Authorization")
 		expectedKey := os.Getenv("ADMIN_API_KEY")
 		if expectedKey == "" {
@@ -909,13 +909,6 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		uniqueSuffix := fmt.Sprint(time.Now().UnixNano() % 100000)
-		prefix := "p_prod"
-		if len(p.Name) >= 2 {
-			prefix = "p_" + p.Name[:2]
-		}
-		p.ID = prefix + "_" + uniqueSuffix
-
 		sizesStr := strings.Join(p.Sizes, ",")
 		sizesStockBytes, _ := json.Marshal(p.SizesStock)
 		sizesStockStr := string(sizesStockBytes)
@@ -932,6 +925,51 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		now := time.Now().UTC().Format(time.RFC3339)
+
+		// Check if updating existing product
+		if p.ID != "" {
+			_, err := db.Exec(`
+				UPDATE products SET 
+					name = $1, description = $2, price = $3, image_url = $4, sizes = $5, 
+					sizes_stock = $6, stock = $7, category = $8, collection = $9, fabric = $10, 
+					color = $11, sleeve_type = $12, neck_type = $13, pattern = $14, occasion = $15, 
+					sku = $16, tags = $17, original_price = $18, is_new_arrival = $19, 
+					is_best_seller = $20, is_featured = $21
+				WHERE id = $22`,
+				p.Name, p.Description, p.Price, p.ImageURL, sizesStr, sizesStockStr, p.Stock, p.Category,
+				p.Collection, p.Fabric, p.Color, p.SleeveType, p.NeckType, p.Pattern, p.Occasion,
+				p.SKU, p.Tags, p.OriginalPrice, p.IsNewArrival, p.IsBestSeller, p.IsFeatured, p.ID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// Clear & refresh extra gallery images
+			db.Exec("DELETE FROM product_images WHERE product_id = $1", p.ID)
+			for i, imgURL := range p.GalleryImages {
+				if i == 0 && imgURL == p.ImageURL {
+					continue
+				}
+				trimmed := strings.TrimSpace(imgURL)
+				if trimmed == "" || trimmed == p.ImageURL {
+					continue
+				}
+				db.Exec("INSERT INTO product_images (product_id, image_url) VALUES ($1, $2)", p.ID, trimmed)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(p)
+			return
+		}
+
+		// Create New Product
+		uniqueSuffix := fmt.Sprint(time.Now().UnixNano() % 100000)
+		prefix := "p_prod"
+		if len(p.Name) >= 2 {
+			prefix = "p_" + p.Name[:2]
+		}
+		p.ID = prefix + "_" + uniqueSuffix
 		p.CreatedAt = now
 
 		_, err := db.Exec(`
