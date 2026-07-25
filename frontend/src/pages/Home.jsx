@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import RenderProductCard from '../components/ProductCard';
+import ProductSkeletonGrid from '../components/ProductSkeletonGrid';
 import Shop from './Shop';
 
 const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
@@ -60,9 +61,7 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
                     <p>Highly sought-after silhouettes curated by our boutique designers for timeless appeal</p>
                 </div>
                 {bestSellers.length === 0 ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '20vh' }}>
-                        <p style={{ color: '#8c8883', fontStyle: 'italic' }}>Curating our best sellers...</p>
-                    </div>
+                    <ProductSkeletonGrid count={4} />
                 ) : (
                     <div>
                         <div className="product-grid">

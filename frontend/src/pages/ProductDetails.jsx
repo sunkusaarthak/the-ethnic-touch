@@ -19,6 +19,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
     // Collapsible Accordion Tabs state
     const [openTabs, setOpenTabs] = useState({ specs: true, shipping: false, sizeGuide: false });
+    const carouselRef = useRef(null);
     
     const toggleTab = (tabKey) => {
         setOpenTabs(prev => ({ ...prev, [tabKey]: !prev[tabKey] }));
@@ -56,17 +57,54 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         ? product.galleryImages 
         : [product.imageUrl];
 
+    const handleCarouselScroll = () => {
+        if (!carouselRef.current) return;
+        const container = carouselRef.current;
+        const slideWidth = container.clientWidth;
+        if (slideWidth > 0) {
+            const newIndex = Math.round(container.scrollLeft / slideWidth);
+            if (newIndex !== activeImage && newIndex >= 0 && newIndex < galleryImages.length) {
+                setActiveImage(newIndex);
+            }
+        }
+    };
+
+    const scrollToSlide = (index) => {
+        setActiveImage(index);
+        if (carouselRef.current) {
+            const container = carouselRef.current;
+            const slideWidth = container.clientWidth;
+            container.scrollTo({
+                left: index * slideWidth,
+                behavior: 'smooth'
+            });
+        }
+    };
+
     const nextImage = () => {
-        setActiveImage(prev => (prev + 1) % galleryImages.length);
+        const nextIdx = (activeImage + 1) % galleryImages.length;
+        scrollToSlide(nextIdx);
     };
 
     const prevImage = () => {
-        setActiveImage(prev => (prev - 1 + galleryImages.length) % galleryImages.length);
+        const prevIdx = (activeImage - 1 + galleryImages.length) % galleryImages.length;
+        scrollToSlide(prevIdx);
     };
 
     const handleBack = (e) => {
         e.preventDefault();
-        navigate('/');
+        if (window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+        } else {
+            navigate('/shop');
+        }
+    };
+
+    const scrollToReviews = () => {
+        const el = document.getElementById('customer-reviews-section');
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth' });
+        }
     };
 
     const handleAddToCart = () => {
@@ -109,10 +147,10 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) 
         : 0;
 
-    // Find up to 3 recommended products (excluding current one)
+    // Find up to 4 recommended products (excluding current one)
     const recommendedList = products
         .filter(p => p.id !== product.id)
-        .slice(0, 3);
+        .slice(0, 4);
 
     return (
         <div className="product-details-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
@@ -128,7 +166,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                             {galleryImages.map((imgUrl, idx) => (
                                 <div 
                                     key={idx} 
-                                    onClick={() => setActiveImage(idx)}
+                                    onClick={() => scrollToSlide(idx)}
                                     className={`gallery-thumbnail ${activeImage === idx ? 'active' : ''}`}
                                     style={{
                                         width: '70px', 
@@ -146,20 +184,37 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                         </div>
                     )}
 
-                    <div className="gallery-main-container" style={{
-                        flex: 1,
-                        borderRadius: 'var(--border-radius-lg)', 
-                        overflow: 'hidden', 
-                        boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
-                        marginBottom: '1rem',
-                        aspectRatio: '3/4',
-                        maxHeight: '65vh',
-                        backgroundColor: '#fafafa',
-                        position: 'relative',
-                        minWidth: 0
-                    }}>
-                        <img className="gallery-main-img" src={galleryImages[activeImage]} alt={product.name} style={{width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block'}} />
-                        
+                    <div 
+                        className="gallery-main-container" 
+                        style={{
+                            flex: 1,
+                            borderRadius: 'var(--border-radius-lg)', 
+                            overflow: 'hidden', 
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
+                            marginBottom: '1rem',
+                            aspectRatio: '3/4',
+                            maxHeight: '65vh',
+                            backgroundColor: '#fafafa',
+                            position: 'relative',
+                            minWidth: 0
+                        }}
+                    >
+                        <div 
+                            ref={carouselRef} 
+                            className="gallery-carousel-track" 
+                            onScroll={handleCarouselScroll}
+                        >
+                            {galleryImages.map((imgUrl, idx) => (
+                                <div key={idx} className="gallery-carousel-slide">
+                                    <img 
+                                        src={imgUrl} 
+                                        alt={`${product.name} - View ${idx + 1}`} 
+                                        className="gallery-slide-img" 
+                                    />
+                                </div>
+                            ))}
+                        </div>
+
                         {galleryImages.length > 1 && (
                             <React.Fragment>
                                 <button className="slider-nav-btn prev" onClick={prevImage} aria-label="Previous image">&lsaquo;</button>
@@ -170,7 +225,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                         <div 
                                             key={idx} 
                                             className={`slider-dot ${activeImage === idx ? 'active' : ''}`}
-                                            onClick={() => setActiveImage(idx)}
+                                            onClick={() => scrollToSlide(idx)}
                                         />
                                     ))}
                                 </div>
@@ -183,16 +238,26 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                 <div className="product-summary-pane" style={{flex: 1, minWidth: '300px'}}>
                     <h1 style={{fontSize: '2.2rem', margin: '0 0 0.5rem', fontFamily: 'var(--font-title)'}}>{product.name}</h1>
                     
-                    {reviews.length > 0 ? (
-                        <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem'}}>
-                            <div style={{color: '#d4af37', fontSize: '1.1rem', letterSpacing: '1px'}}>
-                                {'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}
-                            </div>
-                            <span style={{color: 'var(--color-text-light)', fontSize: '0.85rem'}}>{avgRating} ({reviews.length} reviews)</span>
-                        </div>
-                    ) : (
-                        <div style={{color: '#bbb', fontSize: '0.85rem', marginBottom: '1rem'}}>No reviews yet</div>
-                    )}
+                    <div 
+                        onClick={scrollToReviews} 
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', cursor: 'pointer' }}
+                        title="Click to view customer reviews"
+                    >
+                        {reviews.length > 0 ? (
+                            <React.Fragment>
+                                <div style={{ color: '#d4af37', fontSize: '1.1rem', letterSpacing: '1px' }}>
+                                    {'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}
+                                </div>
+                                <span style={{ color: 'var(--color-primary)', fontSize: '0.85rem', textDecoration: 'underline', fontWeight: '500' }}>
+                                    {avgRating} ({reviews.length} reviews) &darr;
+                                </span>
+                            </React.Fragment>
+                        ) : (
+                            <span style={{ color: 'var(--color-primary)', fontSize: '0.85rem', textDecoration: 'underline', fontWeight: '500' }}>
+                                No reviews yet &mdash; Be the first to review! &darr;
+                            </span>
+                        )}
+                    </div>
 
                     <div style={{fontSize: '1.8rem', fontWeight: '600', marginBottom: '1.5rem', color: 'var(--color-primary)'}}>
                         ₹{product.price.toLocaleString('en-IN')} <span style={{fontSize: '0.8rem', color: '#888', fontWeight: '400'}}>(Inclusive of all taxes)</span>
@@ -397,33 +462,33 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
             )}
 
             {/* Customer Reviews Section */}
-            <div style={{marginTop: '5rem', borderTop: '1px solid #eee', paddingTop: '4rem'}}>
-                <div style={{display: 'flex', flexWrap: 'wrap', gap: '4rem', alignItems: 'flex-start'}}>
+            <div id="customer-reviews-section" style={{marginTop: '3.5rem', borderTop: '1px solid #eee', paddingTop: '2.5rem'}}>
+                <div style={{display: 'flex', flexWrap: 'wrap', gap: '2rem', alignItems: 'flex-start'}}>
                     
-                    <div style={{flex: 1, minWidth: '300px'}}>
-                        <h2 style={{fontFamily: 'var(--font-title)', fontSize: '2rem', marginBottom: '1.5rem'}}>Customer Reviews</h2>
+                    <div style={{flex: '1 1 280px', minWidth: 0, width: '100%'}}>
+                        <h2 style={{fontFamily: 'var(--font-title)', fontSize: '1.75rem', marginBottom: '1.2rem'}}>Customer Reviews</h2>
                         {reviews.length === 0 ? (
                             <p style={{color: '#888'}}>Be the first to review this product!</p>
                         ) : (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '1.2rem'}}>
                                 {reviews.map((rev) => (
-                                    <div key={rev.id} className="review-card" style={{padding: '1.5rem', backgroundColor: '#fafafa', borderRadius: '8px', border: '1px solid #f0f0f0'}}>
-                                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem'}}>
-                                            <strong style={{fontSize: '1.05rem'}}>{rev.userName}</strong>
-                                            <span style={{color: '#999', fontSize: '0.85rem'}}>{new Date(rev.createdAt).toLocaleDateString()}</span>
+                                    <div key={rev.id} className="review-card" style={{padding: '1.2rem', backgroundColor: '#fafafa', borderRadius: '12px', border: '1px solid #f0f0f0'}}>
+                                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem'}}>
+                                            <strong style={{fontSize: '1rem'}}>{rev.userName}</strong>
+                                            <span style={{color: '#999', fontSize: '0.8rem'}}>{new Date(rev.createdAt).toLocaleDateString()}</span>
                                         </div>
-                                        <div style={{color: '#d4af37', marginBottom: '0.8rem', letterSpacing: '1px'}}>
+                                        <div style={{color: '#d4af37', marginBottom: '0.6rem', letterSpacing: '1px'}}>
                                             {'★'.repeat(rev.rating)}{'☆'.repeat(5 - rev.rating)}
                                         </div>
-                                        <p style={{margin: 0, color: '#555', lineHeight: '1.6'}}>{rev.comment}</p>
+                                        <p style={{margin: 0, color: '#555', lineHeight: '1.5', fontSize: '0.9rem'}}>{rev.comment}</p>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
 
-                    <div style={{flex: 1, minWidth: '300px', backgroundColor: '#fffcf9', padding: '2.5rem', borderRadius: '12px', border: '1px solid #faeedd'}}>
-                        <h3 style={{fontFamily: 'var(--font-title)', marginBottom: '1.5rem', color: '#b97a66'}}>Write a Review</h3>
+                    <div className="write-review-card" style={{flex: '0 0 380px', maxWidth: '100%', minWidth: 0, backgroundColor: '#fffcf9', padding: '1.5rem', borderRadius: '16px', border: '1px solid #faeedd', boxSizing: 'border-box'}}>
+                        <h3 style={{fontFamily: 'var(--font-title)', marginBottom: '1.2rem', color: '#b97a66', fontSize: '1.4rem'}}>Write a Review</h3>
                         <form onSubmit={submitReview}>
                             {reviewFormError && (
                                 <div style={{backgroundColor: '#ffebee', color: '#c62828', padding: '1rem', borderRadius: '6px', marginBottom: '1.5rem', fontSize:'0.9rem'}}>
@@ -431,20 +496,14 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                 </div>
                             )}
                             
-                            <div style={{marginBottom: '1.5rem'}}>
-                                <label style={{display: 'block', marginBottom: '0.5rem', fontSize: '0.95rem', color: '#555'}}>Rating</label>
-                                <div style={{display: 'flex', gap: '5px'}}>
+                            <div style={{marginBottom: '1.25rem'}}>
+                                <label style={{display: 'block', marginBottom: '0.4rem', fontSize: '0.88rem', color: '#555', fontWeight: '500'}}>Rating</label>
+                                <div className="review-star-rating">
                                     {[1, 2, 3, 4, 5].map(star => (
                                         <span 
                                             key={star} 
                                             onClick={() => setRating(star)}
-                                            className="interactive-star"
-                                            style={{
-                                                cursor: 'pointer', 
-                                                fontSize: '1.5rem',
-                                                color: star <= rating ? '#d4af37' : '#ddd',
-                                                transition: 'color 0.2s'
-                                            }}
+                                            className={`review-star-btn ${star <= rating ? 'active' : ''}`}
                                         >
                                             ★
                                         </span>
@@ -452,12 +511,12 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                 </div>
                             </div>
 
-                            <div style={{marginBottom: '1.5rem'}}>
-                                <label style={{display: 'block', marginBottom: '0.5rem', fontSize: '0.95rem', color: '#555'}}>Your Review</label>
+                            <div style={{marginBottom: '1.25rem'}}>
+                                <label style={{display: 'block', marginBottom: '0.4rem', fontSize: '0.88rem', color: '#555', fontWeight: '500'}}>Your Review</label>
                                 <textarea 
                                     rows="4" 
-                                    style={{width: '100%', padding: '1rem', borderRadius: '6px', border: '1px solid #e0e0e0', resize: 'vertical', fontFamily: 'inherit'}}
-                                    placeholder="What did you like about this product?"
+                                    className="review-textarea"
+                                    placeholder="What did you like about this product? Share your experience with fit, fabric & style..."
                                     value={comment}
                                     onChange={(e) => setComment(e.target.value)}
                                     required
@@ -466,11 +525,10 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
                             <button 
                                 type="submit" 
-                                className="btn btn-primary" 
-                                style={{width: '100%', padding: '1rem'}}
+                                className="review-submit-btn" 
                                 disabled={reviewLoading}
                             >
-                                {reviewLoading ? 'Submitting...' : 'Submit Review'}
+                                {reviewLoading ? 'Submitting Review...' : 'Submit Review'}
                             </button>
                             {!authUser && (
                                 <p style={{fontSize: '0.8rem', color: '#888', marginTop: '1rem', textAlign: 'center'}}>
