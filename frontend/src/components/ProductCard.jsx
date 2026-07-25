@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
+import React from 'react';
+import { Link } from 'react-router-dom';
+import ImageWithSkeleton from './ImageWithSkeleton';
 
 const RenderProductCard = ({ product, wishlist, toggleWishlist }) => {
     const isWished = wishlist.some(item => item.id === product.id);
@@ -8,7 +9,7 @@ const RenderProductCard = ({ product, wishlist, toggleWishlist }) => {
         <div style={{ position: 'relative' }}>
             <Link to={`/product/${product.id}`} className="product-card" style={{ display: 'block' }}>
                 <div className="product-image-container">
-                    <img src={product.imageUrl} alt={product.name} className="product-image" />
+                    <ImageWithSkeleton src={product.imageUrl} alt={product.name} className="product-image" />
                 </div>
                 <div className="product-info">
                     <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>

@@ -304,8 +304,15 @@ const ProfilePage = ({ authUser }) => {
 
     if (loading) {
         return (
-            <div style={{ padding: '10rem 5%', textAlign:'center', minHeight:'50vh', color: '#666' }}>
-                <p>Loading your profile dashboard...</p>
+            <div style={{ maxWidth: '1100px', margin: '2.5rem auto 3rem', padding: '0 1.25rem', minHeight: '75vh' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div className="skeleton-box" style={{ height: '42px', width: '220px', borderRadius: '8px' }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                        <div className="skeleton-box" style={{ height: '240px', borderRadius: '16px' }} />
+                        <div className="skeleton-box" style={{ height: '240px', borderRadius: '16px' }} />
+                        <div className="skeleton-box" style={{ height: '240px', borderRadius: '16px' }} />
+                    </div>
+                </div>
             </div>
         );
     }

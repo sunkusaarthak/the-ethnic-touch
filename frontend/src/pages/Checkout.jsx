@@ -313,20 +313,11 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
 
     if (authLoading) {
         return (
-            <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{
-                        width: '40px',
-                        height: '40px',
-                        border: '3px solid rgba(212, 163, 115, 0.25)',
-                        borderTopColor: '#8F5E36',
-                        borderRadius: '50%',
-                        margin: '0 auto 1rem',
-                        animation: 'spin 0.8s linear infinite'
-                    }} />
-                    <p style={{ fontSize: '0.88rem', color: '#6C6863', fontWeight: '500', margin: 0 }}>
-                        Verifying your session...
-                    </p>
+            <div style={{ padding: '1.25rem 5% 3rem', maxWidth: '1150px', margin: '0 auto', minHeight: '75vh' }}>
+                <div className="skeleton-box" style={{ height: '36px', width: '180px', borderRadius: '8px', marginBottom: '1.5rem' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                    <div className="skeleton-box" style={{ height: '380px', borderRadius: '16px' }} />
+                    <div className="skeleton-box" style={{ height: '380px', borderRadius: '16px' }} />
                 </div>
             </div>
         );

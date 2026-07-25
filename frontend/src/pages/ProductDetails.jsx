@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
+import ImageWithSkeleton from '../components/ImageWithSkeleton';
 import { API_BASE_URL } from '../data/config';
 
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
@@ -179,7 +180,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                         flexShrink: 0
                                     }}
                                 >
-                                    <img src={imgUrl} alt={`Thumbnail ${idx+1}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                                    <ImageWithSkeleton src={imgUrl} alt={`Thumbnail ${idx+1}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
                                 </div>
                             ))}
                         </div>
@@ -207,7 +208,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                         >
                             {galleryImages.map((imgUrl, idx) => (
                                 <div key={idx} className="gallery-carousel-slide">
-                                    <img 
+                                    <ImageWithSkeleton 
                                         src={imgUrl} 
                                         alt={`${product.name} - View ${idx + 1}`} 
                                         className="gallery-slide-img" 
