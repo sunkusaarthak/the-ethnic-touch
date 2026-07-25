@@ -3375,17 +3375,18 @@ func main() {
 	// Health endpoint
 	http.HandleFunc("/health", healthHandler)
 
-	// File server with strict MIME override middleware for Windows registry fixes
-	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasSuffix(path, ".css") || strings.Contains(path, ".css?") {
-			w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		} else if strings.HasSuffix(path, ".js") || strings.Contains(path, ".js?") {
-			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	// Clean API Root Handler
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/" {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":"Endpoint not found"}`))
+			return
 		}
-		fs.ServeHTTP(w, r)
-	}))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"online","service":"The Ethnic Touch Go API Server","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
