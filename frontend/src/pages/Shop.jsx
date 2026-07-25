@@ -5,6 +5,7 @@ import CustomSelect from '../components/CustomSelect';
 import FilterSidebarContent from '../components/FilterSidebarContent';
 import RenderProductCard from '../components/ProductCard';
 import ProductSkeletonGrid from '../components/ProductSkeletonGrid';
+import { API_BASE_URL } from '../data/config';
 
 const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGlobalSearch }) => {
     const [products, setProducts] = useState([]);
@@ -183,7 +184,7 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
             }
 
             try {
-                const res = await fetch(`/api/products?${params.toString()}`);
+                const res = await fetch(`${API_BASE_URL}/api/products?${params.toString()}`);
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 const data = await res.json();
                 

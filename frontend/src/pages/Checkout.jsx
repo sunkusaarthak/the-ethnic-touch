@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
+import { API_BASE_URL } from '../data/config';
 
 const showAlert = (message, title = "Notice", type = "warning") => {
     if (window.customAlert) {
@@ -71,7 +72,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
         if (authUser) {
             setEmail(authUser.email || '');
 
-            fetch('/api/profile/me', {
+            fetch(`${API_BASE_URL}/api/profile/me`, {
                 headers: { 'X-User-Id': authUser.uid }
             }).then(r => r.json()).then(data => {
                 if (data.email) setEmail(data.email);
@@ -84,7 +85,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
     const loadAddresses = async () => {
         if (!authUser) return;
         try {
-            const response = await fetch('/api/profile/addresses', {
+            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
                 headers: { 'X-User-Id': authUser.uid }
             });
             if (response.ok) {
@@ -108,7 +109,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
         setAddressMessage('');
         if (!authUser) return;
         try {
-            const response = await fetch('/api/profile/addresses', {
+            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -124,7 +125,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
             setShippingForm({ fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
             setShowNewAddressForm(false);
             
-            const loadRes = await fetch('/api/profile/addresses', {
+            const loadRes = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
                 headers: { 'X-User-Id': authUser.uid }
             });
             if (loadRes.ok) {
@@ -201,7 +202,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
         setOrdering(true);
 
         try {
-            const res = await fetch('/api/orders', {
+            const res = await fetch(`${API_BASE_URL}/api/orders`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(order)
@@ -244,7 +245,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                     "description": "Premium Kurthi E-Commerce Checkout",
                     "order_id": data.razorpayOrderId,
                     "handler": async function (response) {
-                        const verifyRes = await fetch('/api/orders/verify', {
+                        const verifyRes = await fetch(`${API_BASE_URL}/api/orders/verify`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({

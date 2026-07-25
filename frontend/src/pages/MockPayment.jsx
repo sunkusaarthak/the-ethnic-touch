@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 
+import { API_BASE_URL } from '../data/config';
+
 const MockPayment = ({ onPaymentSuccess }) => {
     const [searchParams] = useState(() => {
         const hash = window.location.hash;
@@ -21,7 +23,7 @@ const MockPayment = ({ onPaymentSuccess }) => {
     const handlePay = async () => {
         setPaying(true);
         try {
-            const res = await fetch('/api/orders/verify', {
+            const res = await fetch(`${API_BASE_URL}/api/orders/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

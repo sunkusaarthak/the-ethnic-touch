@@ -14,8 +14,7 @@ import ProductDetails from './pages/ProductDetails';
 import ProfilePage from './pages/ProfilePage';
 import Shop from './pages/Shop';
 import WishlistPage from './pages/WishlistPage';
-import { fallbackProducts } from './data/config';
-import { auth } from './data/config';
+import { fallbackProducts, auth, API_BASE_URL } from './data/config';
 
 const AppFooterWrapper = () => {
     const location = useLocation();
@@ -52,7 +51,7 @@ const App = () => {
     }, []);
 
     useEffect(() => {
-        fetch('/api/products')
+        fetch(`${API_BASE_URL}/api/products`)
             .then(res => res.json())
             .then(data => {
                 setProducts(data);
@@ -90,7 +89,7 @@ const App = () => {
                         const parsed = JSON.parse(local);
                         if (Array.isArray(parsed) && parsed.length > 0) {
                             const ids = parsed.map(p => p.id);
-                            await fetch('/api/wishlist/merge', {
+                            await fetch(`${API_BASE_URL}/api/wishlist/merge`, {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -108,7 +107,7 @@ const App = () => {
 
                 // Load wishlist from database persist layer
                 try {
-                    const res = await fetch('/api/wishlist', {
+                    const res = await fetch(`${API_BASE_URL}/api/wishlist`, {
                         headers: { 'X-User-Id': authUser.uid }
                     });
                     if (res.ok) {
@@ -125,7 +124,7 @@ const App = () => {
                     try {
                         const parsed = JSON.parse(localGuestCart);
                         if (Array.isArray(parsed) && parsed.length > 0) {
-                            await fetch('/api/cart/merge', {
+                            await fetch(`${API_BASE_URL}/api/cart/merge`, {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -147,7 +146,7 @@ const App = () => {
                 }
 
                 try {
-                    const res = await fetch('/api/cart', {
+                    const res = await fetch(`${API_BASE_URL}/api/cart`, {
                         headers: { 'X-User-Id': authUser.uid }
                     });
                     if (res.ok) {
@@ -200,12 +199,12 @@ const App = () => {
         if (authUser) {
             try {
                 if (isWished) {
-                    await fetch(`/api/wishlist?productId=${product.id}`, {
+                    await fetch(`${API_BASE_URL}/api/wishlist?productId=${product.id}`, {
                         method: 'DELETE',
                         headers: { 'X-User-Id': authUser.uid }
                     });
                 } else {
-                    await fetch('/api/wishlist', {
+                    await fetch(`${API_BASE_URL}/api/wishlist`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -243,7 +242,7 @@ const App = () => {
             }
 
             if (authUser) {
-                fetch('/api/cart', {
+                fetch(`${API_BASE_URL}/api/cart`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -285,7 +284,7 @@ const App = () => {
                 updated[index] = { ...targetItem, quantity: newQty };
 
                 if (authUser) {
-                    fetch('/api/cart', {
+                    fetch(`${API_BASE_URL}/api/cart`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -312,7 +311,7 @@ const App = () => {
 
             if (targetItem) {
                 if (authUser) {
-                    fetch(`/api/cart?productId=${targetItem.id}&size=${encodeURIComponent(targetItem.size || '')}`, {
+                    fetch(`${API_BASE_URL}/api/cart?productId=${targetItem.id}&size=${encodeURIComponent(targetItem.size || '')}`, {
                         method: 'DELETE',
                         headers: { 'X-User-Id': authUser.uid }
                     }).catch(e => console.error("DB cart remove error:", e));
@@ -328,7 +327,7 @@ const App = () => {
         setCart([]);
         setDiscount(null);
         if (authUser) {
-            fetch('/api/cart?clearAll=true', {
+            fetch(`${API_BASE_URL}/api/cart?clearAll=true`, {
                 method: 'DELETE',
                 headers: { 'X-User-Id': authUser.uid }
             }).catch(e => console.error("DB cart clear error:", e));
