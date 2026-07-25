@@ -7,13 +7,13 @@ import 'firebase/compat/auth';
 
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8",
-    authDomain: "the-ethnic-touch.firebaseapp.com",
-    projectId: "the-ethnic-touch",
-    storageBucket: "the-ethnic-touch.firebasestorage.app",
-    messagingSenderId: "***REMOVED***",
-    appId: "***REMOVED***",
-    measurementId: "***REMOVED***"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "the-ethnic-touch.firebaseapp.com",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "the-ethnic-touch",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "the-ethnic-touch.firebasestorage.app",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "***REMOVED***",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "***REMOVED***",
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "***REMOVED***"
 };
 
 if (!firebase.apps.length) {
