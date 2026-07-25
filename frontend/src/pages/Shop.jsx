@@ -4,6 +4,7 @@ import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, Bro
 import CustomSelect from '../components/CustomSelect';
 import FilterSidebarContent from '../components/FilterSidebarContent';
 import RenderProductCard from '../components/ProductCard';
+import ProductSkeletonGrid from '../components/ProductSkeletonGrid';
 
 const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGlobalSearch }) => {
     const [products, setProducts] = useState([]);
@@ -417,9 +418,7 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
 
                     {/* Product Grid */}
                     {loading ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '30vh' }}>
-                            <p style={{ color: '#8c8883', fontSize: '1rem', fontStyle: 'italic' }}>Curating products...</p>
-                        </div>
+                        <ProductSkeletonGrid count={8} />
                     ) : products.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '5rem 0', background: '#fff', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.02)' }}>
                             <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: '400', marginBottom: '0.5rem' }}>No products found</h3>

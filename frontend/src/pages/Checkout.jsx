@@ -2,7 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
 
-const Checkout = ({ cart, discount, clearCart, authUser }) => {
+const showAlert = (message, title = "Notice", type = "warning") => {
+    if (window.customAlert) {
+        window.customAlert(message, title, type);
+    } else {
+        alert(`${title}: ${message}`);
+    }
+};
+
+const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
     const [email, setEmail] = useState('');
     const [addresses, setAddresses] = useState([]);
     const [selectedAddressID, setSelectedAddressID] = useState(null);
@@ -19,15 +27,35 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     const [showNewAddressForm, setShowNewAddressForm] = useState(false);
     const [addressMessage, setAddressMessage] = useState('');
     const [ordering, setOrdering] = useState(false);
+    const [showLeaveModal, setShowLeaveModal] = useState(false);
     const navigate = useNavigate();
     const paymentCompleteRef = useRef(false);
 
+    const handleBackClick = (e) => {
+        if (e) e.preventDefault();
+        setShowLeaveModal(true);
+    };
+
+    const confirmLeaveCheckout = () => {
+        setShowLeaveModal(false);
+        if (window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+        } else {
+            navigate('/cart');
+        }
+    };
+
     useEffect(() => {
         if (paymentCompleteRef.current) return;
+        if (authLoading) return; // Wait for Firebase session restoration on page refresh
+        if (!authUser) {
+            navigate('/auth?redirect=/checkout');
+            return;
+        }
         if (!cart || cart.length === 0) {
             navigate('/cart');
         }
-    }, [cart, navigate]);
+    }, [cart, authUser, authLoading, navigate]);
 
     const subtotal = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
     const finalTotal = subtotal - (discount?.amt || 0);
@@ -112,6 +140,10 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
     };
 
     const placeOrder = async () => {
+        if (!authUser) {
+            navigate('/auth?redirect=/checkout');
+            return;
+        }
         if (!email) return showAlert('Please enter your email address before placing an order.', 'Email Required', 'warning');
         
         let order = {};
@@ -261,8 +293,37 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
         }
     };
 
+    if (authLoading) {
+        return (
+            <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: '40px',
+                        height: '40px',
+                        border: '3px solid rgba(212, 163, 115, 0.25)',
+                        borderTopColor: '#8F5E36',
+                        borderRadius: '50%',
+                        margin: '0 auto 1rem',
+                        animation: 'spin 0.8s linear infinite'
+                    }} />
+                    <p style={{ fontSize: '0.88rem', color: '#6C6863', fontWeight: '500', margin: 0 }}>
+                        Verifying your session...
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="checkout-page-container" style={{padding: '1.25rem 5% 3rem', maxWidth: '1150px', margin: '0 auto', minHeight: '75vh'}}>
+            <a 
+                href="#" 
+                onClick={handleBackClick} 
+                className="checkout-back-link" 
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1rem', color: 'var(--color-text-light)', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '500' }}
+            >
+                &larr; Back
+            </a>
             <h1 style={{marginBottom: '1rem', fontSize: '1.35rem', fontFamily: 'var(--font-heading)', color: 'var(--color-text)', fontWeight: '400'}}>Checkout</h1>
             
             <div className="desktop-split-layout checkout-layout" style={{ gap: '1.25rem' }}>
@@ -756,6 +817,93 @@ const Checkout = ({ cart, discount, clearCart, authUser }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Leave Checkout Confirmation Modal */}
+            {showLeaveModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(45, 42, 38, 0.45)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    zIndex: 99999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '1.25rem'
+                }}>
+                    <div style={{
+                        background: '#FFF',
+                        borderRadius: '20px',
+                        padding: '1.75rem 1.5rem',
+                        maxWidth: '380px',
+                        width: '100%',
+                        boxShadow: '0 25px 50px rgba(0,0,0,0.18)',
+                        border: '1px solid rgba(212, 163, 115, 0.3)'
+                    }}>
+                        <div style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '50%',
+                            backgroundColor: '#FAF7F4',
+                            border: '1.5px solid rgba(212, 163, 115, 0.35)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 0.85rem auto',
+                            color: '#B97A66'
+                        }}>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z" />
+                            </svg>
+                        </div>
+                        <h3 style={{ margin: '0 0 0.5rem 0', fontFamily: 'var(--font-heading)', fontSize: '1.25rem', color: '#2D2A26' }}>
+                            Leave Checkout?
+                        </h3>
+                        <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.88rem', color: '#686461', lineHeight: '1.55' }}>
+                            Are you sure you want to leave checkout? Your items and cart selections are safely saved.
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                            <button 
+                                onClick={() => setShowLeaveModal(false)} 
+                                style={{
+                                    flex: 1,
+                                    height: '42px',
+                                    borderRadius: '50px',
+                                    border: '1px solid rgba(212, 163, 115, 0.35)',
+                                    background: '#FAF7F4',
+                                    color: '#5C5853',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '500',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Stay Here
+                            </button>
+                            <button 
+                                onClick={confirmLeaveCheckout} 
+                                style={{
+                                    flex: 1,
+                                    height: '42px',
+                                    borderRadius: '50px',
+                                    border: 'none',
+                                    background: 'linear-gradient(135deg, #B97A66 0%, #A46855 100%)',
+                                    color: '#FFF',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 12px rgba(185, 122, 102, 0.25)'
+                                }}
+                            >
+                                Leave Checkout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

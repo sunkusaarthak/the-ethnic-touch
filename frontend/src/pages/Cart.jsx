@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Checkout from './Checkout';
+import AuthRequiredModal from '../components/AuthRequiredModal';
 
-const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount }) => {
+const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser }) => {
+    const navigate = useNavigate();
     const [couponCode, setCouponCode] = useState('');
     const [msg, setMsg] = useState('');
     const [tiers, setTiers] = useState([]);
+    const [showAuthModal, setShowAuthModal] = useState(false);
     
     // Added a safety check (cart || []) just in case cart is ever undefined
     const subtotal = (cart || []).reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
@@ -52,8 +55,25 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount })
     const activeUnlocked = unlockedTiers.length > 0 ? unlockedTiers[unlockedTiers.length - 1] : null;
     const remaining = nextTier ? nextTier.threshold - subtotal : 0;
 
+    const handleBack = (e) => {
+        e.preventDefault();
+        if (window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+        } else {
+            navigate('/shop');
+        }
+    };
+
     return (
         <div className="cart-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '75vh', padding: '1.25rem 5% 3rem'}}>
+            <a 
+                href="#" 
+                onClick={handleBack} 
+                className="cart-back-link" 
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1rem', color: 'var(--color-text-light)', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '500' }}
+            >
+                &larr; Back
+            </a>
             <h1 style={{marginBottom: '1rem', fontSize: '1.35rem', fontFamily: 'var(--font-heading)', color: 'var(--color-text)', fontWeight: '400'}}>
                 Your Cart ({(cart || []).reduce((s, i) => s + (i.quantity || 1), 0)})
             </h1>
@@ -359,8 +379,15 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount })
                                 <span style={{fontSize: '1.1rem', fontWeight: 700, color: '#8F5E36', fontFamily: 'var(--font-body)'}}>₹{finalTotal.toLocaleString('en-IN')}</span>
                             </div>
 
-                            <Link 
-                                to="/checkout" 
+                            <button 
+                                type="button"
+                                onClick={() => {
+                                    if (!authUser) {
+                                        setShowAuthModal(true);
+                                    } else {
+                                        navigate('/checkout');
+                                    }
+                                }}
                                 style={{
                                     width: '100%', 
                                     height: '38px', 
@@ -372,7 +399,8 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount })
                                     borderRadius: '50px', 
                                     fontSize: '0.85rem', 
                                     fontWeight: '600', 
-                                    textDecoration: 'none',
+                                    cursor: 'pointer',
+                                    border: 'none',
                                     background: 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)',
                                     color: '#FFF',
                                     boxShadow: '0 4px 15px rgba(212, 163, 115, 0.25)',
@@ -380,11 +408,18 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount })
                                 }}
                             >
                                 Proceed to Checkout &rarr;
-                            </Link>
+                            </button>
                         </div>
                     </div>
                 </div>
             )}
+
+            {/* Handcrafted Sign In / Sign Up Modal Prompt */}
+            <AuthRequiredModal 
+                isOpen={showAuthModal}
+                onClose={() => setShowAuthModal(false)}
+                redirectPath="/checkout"
+            />
         </div>
     );
 };

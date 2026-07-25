@@ -384,8 +384,11 @@ const App = () => {
                 />
 
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} wishlist={wishlist} toggleWishlist={toggleWishlist} authUser={authUser} />} />
-                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} />} />
-                <Route path="/checkout" element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} />} />
+                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} />} />
+                <Route 
+                    path="/checkout" 
+                    element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} authLoading={authLoading} />} 
+                />
                 <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={clearCart} />} />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
                 <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
@@ -428,21 +431,52 @@ const App = () => {
                         </button>
                     </div>
                     
-                    <div style={{ display: 'flex', gap: '0.8rem' }}>
+                    <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
                         <button 
                             onClick={() => setToastProduct(null)} 
-                            className="btn" 
-                            style={{ flex: 1, padding: '0.75rem', fontSize: '0.85rem', background: '#fafafa', color: '#555', border: '1px solid #e0e0e0', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}
+                            style={{ 
+                                flex: 1, 
+                                height: '40px',
+                                padding: '0 0.85rem', 
+                                fontSize: '0.8rem', 
+                                background: '#FAF7F4', 
+                                color: '#5C5853', 
+                                border: '1px solid rgba(212, 163, 115, 0.35)', 
+                                borderRadius: '50px', 
+                                cursor: 'pointer', 
+                                fontWeight: '500',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                whiteSpace: 'nowrap',
+                                boxSizing: 'border-box'
+                            }}
                         >
                             Continue Shopping
                         </button>
                         <a 
                             href="#/cart" 
                             onClick={() => setToastProduct(null)} 
-                            className="btn btn-primary" 
-                            style={{ flex: 1, padding: '0.75rem', fontSize: '0.85rem', textAlign: 'center', textDecoration: 'none', borderRadius: '6px', fontWeight: '600', display: 'block', boxSizing: 'border-box' }}
+                            style={{ 
+                                flex: 1, 
+                                height: '40px',
+                                padding: '0 0.85rem', 
+                                fontSize: '0.82rem', 
+                                background: 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)',
+                                color: '#FFF', 
+                                border: 'none',
+                                borderRadius: '50px', 
+                                fontWeight: '600', 
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                textDecoration: 'none',
+                                boxShadow: '0 4px 12px rgba(212, 163, 115, 0.25)',
+                                whiteSpace: 'nowrap',
+                                boxSizing: 'border-box'
+                            }}
                         >
-                            Checkout
+                            Checkout &rarr;
                         </a>
                     </div>
                 </div>

@@ -363,7 +363,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                     <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)} />
                     <div className="mobile-drawer-content">
                         <div className="mobile-drawer-header">
-                            <Link to="/" onClick={() => setMobileMenuOpen(false)} className="logo" style={{ fontSize: '1.35rem' }}>
+                            <Link to="/" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-logo">
                                 The Ethnic Touch
                             </Link>
                             <button className="mobile-drawer-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">&times;</button>
@@ -373,21 +373,21 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                             <div className="mobile-drawer-nav-group">
                                 <Link to="/" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
                                     <div className="drawer-item-icon">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
                                     </div>
                                     <span className="drawer-item-label">Home Collection</span>
                                 </Link>
 
                                 <Link to="/shop" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
                                     <div className="drawer-item-icon">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                                     </div>
                                     <span className="drawer-item-label">Explore Shop & Fabrics</span>
                                 </Link>
 
                                 <Link to="/wishlist" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
                                     <div className="drawer-item-icon">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill={wishlistCount > 0 ? "var(--color-primary)" : "none"} stroke={wishlistCount > 0 ? "var(--color-primary)" : "currentColor"} strokeWidth="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill={wishlistCount > 0 ? "var(--color-primary)" : "none"} stroke={wishlistCount > 0 ? "var(--color-primary)" : "currentColor"} strokeWidth="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                                     </div>
                                     <span className="drawer-item-label">My Wishlist</span>
                                     {wishlistCount > 0 && <span className="drawer-badge-pill">{wishlistCount}</span>}
@@ -395,7 +395,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
 
                                 <Link to="/cart" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
                                     <div className="drawer-item-icon">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                                     </div>
                                     <span className="drawer-item-label">Shopping Cart</span>
                                     {cartCount > 0 && <span className="drawer-badge-pill">{cartCount}</span>}
@@ -404,14 +404,14 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                 {authUser ? (
                                     <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
                                         <div className="drawer-item-icon">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                                         </div>
                                         <span className="drawer-item-label">My Profile & Orders</span>
                                     </Link>
                                 ) : (
                                     <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
                                         <div className="drawer-item-icon">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
                                         </div>
                                         <span className="drawer-item-label">Sign In / Register</span>
                                     </Link>

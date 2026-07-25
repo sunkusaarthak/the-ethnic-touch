@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../data/config';
 import firebase from 'firebase/compat/app';
 
@@ -14,6 +14,10 @@ const Auth = () => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    const searchParams = new URLSearchParams(location.search);
+    const redirectPath = searchParams.get('redirect') || location.state?.from || '/';
 
     // Interactive Handcrafted Silk Textile & Gemini-style Shimmer Waves Canvas Animation
     useEffect(() => {
@@ -166,7 +170,7 @@ const Auth = () => {
         try {
             const provider = new firebase.auth.GoogleAuthProvider();
             await auth.signInWithPopup(provider);
-            navigate('/');
+            navigate(redirectPath);
         } catch (err) {
             setError(err.message || 'Failed to sign in with Google');
         } finally {
@@ -188,7 +192,7 @@ const Auth = () => {
             } else {
                 await auth.signInWithEmailAndPassword(email, password);
             }
-            navigate('/');
+            navigate(redirectPath);
         } catch (err) {
             setError(err.message || 'Failed to authenticate');
         } finally {
@@ -333,6 +337,29 @@ const Auth = () => {
                                 {isSignUp ? 'Join The Ethnic Touch to enjoy personalized royal rewards.' : 'Sign in to access your handcrafted Jaipur collection, wishlist, & orders.'}
                             </p>
                         </div>
+
+                        {redirectPath.includes('checkout') && (
+                            <div style={{
+                                background: '#FAF7F2',
+                                border: '1px solid rgba(212, 163, 115, 0.4)',
+                                color: '#8F5E36',
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '12px',
+                                marginBottom: '1rem',
+                                fontSize: '0.78rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.55rem',
+                                fontWeight: '500',
+                                lineHeight: '1.35'
+                            }}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8F5E36" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                                <span>Please <strong>Sign In</strong> or <strong>Register</strong> to place your order. You will return to checkout automatically!</span>
+                            </div>
+                        )}
 
                         {error && (
                             <div style={{ background: '#FDF1F0', color: 'var(--color-error)', padding: '0.55rem', borderRadius: '10px', marginBottom: '1rem', fontSize: '0.78rem', textAlign: 'center', border: '1px solid rgba(217, 83, 79, 0.2)' }}>
