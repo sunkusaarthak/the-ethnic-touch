@@ -1280,7 +1280,7 @@ func orderCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 		var p Product
 		var sizesStockStr string
-		err := tx.QueryRow("SELECT id, name, price, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1", it.ProductID).
+		err := tx.QueryRow("SELECT id, name, price, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", it.ProductID).
 			Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &sizesStockStr)
 		if err == sql.ErrNoRows {
 			w.Header().Set("Content-Type", "application/json")

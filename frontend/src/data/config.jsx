@@ -7,13 +7,13 @@ import 'firebase/compat/auth';
 
 
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "the-ethnic-touch.firebaseapp.com",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "the-ethnic-touch",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "the-ethnic-touch.firebasestorage.app",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "***REMOVED***",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || "***REMOVED***",
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "***REMOVED***"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ""
 };
 
 if (!firebase.apps.length) {
@@ -30,6 +30,7 @@ const fallbackProducts = [
 ];
 
 // --- API BASE URL ---
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : 'https://the-ethnic-touch.onrender.com');
+const rawApiUrl = import.meta.env.VITE_API_BASE_URL || '';
+export const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
 export { fallbackProducts, auth, firebaseConfig };

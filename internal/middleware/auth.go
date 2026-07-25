@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 )
@@ -16,7 +17,7 @@ func AdminAuthMiddleware(expectedKey string) func(http.Handler) http.Handler {
 				token = authHeader[7:]
 			}
 
-			if token != expectedKey {
+			if subtle.ConstantTimeCompare([]byte(token), []byte(expectedKey)) != 1 {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized access to admin API"})
