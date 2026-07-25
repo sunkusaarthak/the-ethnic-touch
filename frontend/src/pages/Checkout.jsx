@@ -29,6 +29,8 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
     const [addressMessage, setAddressMessage] = useState('');
     const [ordering, setOrdering] = useState(false);
     const [showLeaveModal, setShowLeaveModal] = useState(false);
+    const [pendingPaymentOrder, setPendingPaymentOrder] = useState(null);
+    const [verifyingPayment, setVerifyingPayment] = useState(false);
     const navigate = useNavigate();
     const paymentCompleteRef = useRef(false);
 
@@ -217,6 +219,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
 
             const data = await res.json();
 
+            // Handle Offline Store Pickup QR Code
             if (data.paymentMethod === 'offline_qr') {
                 paymentCompleteRef.current = true;
                 clearCart();
@@ -228,65 +231,79 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         amount: data.amount
                     }
                 });
-            } else if (data.checkoutUrl !== "razorpay") {
-                paymentCompleteRef.current = true;
-                clearCart();
-                let targetUrl = data.checkoutUrl;
+                return;
+            }
+
+            // Handle Official Razorpay Gateway Modal vs Sandbox Payment
+            if (data.checkoutUrl === "razorpay" || data.razorpayKey) {
+                if (window.Razorpay) {
+                    const options = {
+                        key: data.razorpayKey || "rzp_test_mock",
+                        amount: Math.round(data.amount * 100),
+                        currency: "INR",
+                        name: "The Ethnic Touch",
+                        description: `Boutique Order #${data.orderId}`,
+                        order_id: data.razorpayOrderId,
+                        prefill: { email: email },
+                        theme: { color: "#B97A66" },
+                        handler: async function (response) {
+                            try {
+                                const verifyRes = await fetch(`${API_BASE_URL}/api/orders/verify`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        orderId: data.orderId,
+                                        razorpayOrderId: response.razorpay_order_id,
+                                        razorpayPaymentId: response.razorpay_payment_id,
+                                        razorpaySignature: response.razorpay_signature,
+                                        mock: false
+                                    })
+                                });
+
+                                if (verifyRes.ok) {
+                                    const verifyData = await verifyRes.json();
+                                    paymentCompleteRef.current = true;
+                                    clearCart();
+                                    navigate('/checkout-success', { 
+                                        state: { 
+                                            orderId: data.orderId, 
+                                            gift: verifyData.giftCode, 
+                                            unlockedGift: verifyData.unlockedGift,
+                                            giftType: verifyData.giftType,
+                                            giftExpiryDate: verifyData.giftExpiryDate,
+                                            tracking: verifyData.trackingNumber,
+                                            checkoutType: checkoutType,
+                                            paymentMethod: 'online'
+                                        } 
+                                    });
+                                } else {
+                                    showAlert("Payment verification failed. Please contact boutique support.", "Payment Error", "error");
+                                    setOrdering(false);
+                                }
+                            } catch (e) {
+                                showAlert("Network error verifying payment.", "Connection Error", "error");
+                                setOrdering(false);
+                            }
+                        },
+                        modal: {
+                            ondismiss: function() {
+                                setOrdering(false);
+                            }
+                        }
+                    };
+                    const rzp = new window.Razorpay(options);
+                    rzp.open();
+                    setOrdering(false);
+                } else {
+                    showAlert("Razorpay SDK is loading. Please try again in a moment.", "SDK Error", "notice");
+                    setOrdering(false);
+                }
+            } else {
+                let targetUrl = data.checkoutUrl || `/mock-payment?orderId=${data.orderId}`;
                 if (targetUrl.startsWith('/#')) {
                     targetUrl = targetUrl.substring(2);
                 }
                 navigate(targetUrl);
-            } else {
-                const options = {
-                    "key": data.razorpayKey,
-                    "amount": data.amount * 100,
-                    "currency": "INR",
-                    "name": "The Ethnic Touch",
-                    "description": "Premium Kurthi E-Commerce Checkout",
-                    "order_id": data.razorpayOrderId,
-                    "handler": async function (response) {
-                        const verifyRes = await fetch(`${API_BASE_URL}/api/orders/verify`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                orderId: data.orderId,
-                                razorpayOrderId: response.razorpay_order_id,
-                                razorpayPaymentId: response.razorpay_payment_id,
-                                razorpaySignature: response.razorpay_signature,
-                                mock: false
-                            })
-                        });
-
-                        if (verifyRes.ok) {
-                            const verifyData = await verifyRes.json();
-                            paymentCompleteRef.current = true;
-                            clearCart();
-                            navigate('/checkout-success', { 
-                                state: { 
-                                    orderId: data.orderId, 
-                                    gift: verifyData.giftCode, 
-                                    unlockedGift: verifyData.unlockedGift,
-                                    giftType: verifyData.giftType,
-                                    giftExpiryDate: verifyData.giftExpiryDate,
-                                    tracking: verifyData.trackingNumber,
-                                    checkoutType: checkoutType,
-                                    paymentMethod: 'online'
-                                } 
-                            });
-                        } else {
-                            showAlert("Payment verification check failed. Please verify with Support.", "Payment Error", "error");
-                        }
-                    },
-                    "prefill": {
-                        "email": email
-                    },
-                    "theme": {
-                        "color": "#D4A373"
-                    }
-                };
-                const rzp = new window.Razorpay(options);
-                rzp.open();
-                setOrdering(false);
             }
         } catch (err) {
             showAlert("Error placing order. Please try again.", "Order Error", "error");
