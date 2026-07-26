@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../data/config';
-import firebase from 'firebase/compat/app';
+import { GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 
 const Auth = () => {
     const [isSignUp, setIsSignUp] = useState(false);
@@ -168,10 +168,11 @@ const Auth = () => {
         setError('');
         setLoading(true);
         try {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            await auth.signInWithPopup(provider);
+            const provider = new GoogleAuthProvider();
+            await signInWithPopup(auth, provider);
             navigate(redirectPath);
         } catch (err) {
+            console.error('[AUTH ERROR] Google Sign-In failed:', err);
             setError(err.message || 'Failed to sign in with Google');
         } finally {
             setLoading(false);
@@ -185,15 +186,18 @@ const Auth = () => {
 
         try {
             if (isSignUp) {
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                await userCredential.user.updateProfile({
-                    displayName: fullName
-                });
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                if (userCredential.user) {
+                    await updateProfile(userCredential.user, {
+                        displayName: fullName
+                    });
+                }
             } else {
-                await auth.signInWithEmailAndPassword(email, password);
+                await signInWithEmailAndPassword(auth, email, password);
             }
             navigate(redirectPath);
         } catch (err) {
+            console.error('[AUTH ERROR] Email Authentication failed:', err);
             setError(err.message || 'Failed to authenticate');
         } finally {
             setLoading(false);

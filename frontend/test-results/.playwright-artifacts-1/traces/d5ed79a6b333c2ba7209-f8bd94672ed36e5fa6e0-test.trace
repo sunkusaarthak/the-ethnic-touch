@@ -1,0 +1,47 @@
+{"version":8,"type":"context-options","origin":"testRunner","browserName":"","playwrightVersion":"1.62.0","options":{},"platform":"win32","wallTime":1785071900651,"monotonicTime":179213.131,"sdkLanguage":"javascript"}
+{"type":"before","callId":"hook@1","stepId":"hook@1","startTime":179221.309,"class":"Test","method":"hook","title":"Before Hooks","params":{},"stack":[]}
+{"type":"before","callId":"fixture@22","stepId":"fixture@22","parentId":"hook@1","startTime":179254.605,"class":"Test","method":"fixture","title":"Fixture \"context\"","params":{},"stack":[]}
+{"type":"before","callId":"pw:api@23","stepId":"pw:api@23","parentId":"fixture@22","startTime":179259.121,"class":"Test","method":"pw:api","title":"Create context","params":{"recordVideo":"Object","selectorEngines":"[]","testIdAttributeName":"data-testid","acceptDownloads":"accept","bypassCSP":"false","colorScheme":"light","deviceScaleFactor":"1","hasTouch":"false","ignoreHTTPSErrors":"false","isMobile":"false","javaScriptEnabled":"true","locale":"en-US","offline":"false","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36","viewport":"Object","baseURL":"http://localhost:5173","serviceWorkers":"allow","noDefaultViewport":"false","extraHTTPHeaders":"undefined","storageState":"undefined","reducedMotion":"undefined","forcedColors":"undefined","contrast":"undefined","clientCertificates":"undefined"},"stack":[]}
+{"type":"after","callId":"pw:api@23","endTime":179283.308,"annotations":[]}
+{"type":"after","callId":"fixture@22","endTime":179297.223,"annotations":[]}
+{"type":"before","callId":"fixture@24","stepId":"fixture@24","parentId":"hook@1","startTime":179299.066,"class":"Test","method":"fixture","title":"Fixture \"page\"","params":{},"stack":[]}
+{"type":"before","callId":"pw:api@25","stepId":"pw:api@25","parentId":"fixture@24","startTime":179304.584,"class":"Test","method":"pw:api","title":"Create page","params":{},"stack":[]}
+{"type":"after","callId":"pw:api@25","endTime":179629.333,"annotations":[]}
+{"type":"after","callId":"fixture@24","endTime":179629.814,"annotations":[]}
+{"type":"after","callId":"hook@1","endTime":179629.977,"annotations":[]}
+{"type":"before","callId":"pw:api@26","stepId":"pw:api@26","startTime":179633.099,"class":"Test","method":"pw:api","title":"Navigate to \"/#/auth\"","params":{"url":"/#/auth","waitUntil":"load"},"stack":[{"file":"D:\\The Ethnic Touch\\frontend\\e2e\\auth.spec.js","line":12,"column":16}]}
+{"type":"after","callId":"pw:api@26","endTime":181792.097,"annotations":[]}
+{"type":"before","callId":"pw:api@27","stepId":"pw:api@27","startTime":181795.502,"class":"Test","method":"pw:api","title":"Fill \"invalid_test_user_99@ethnictouch.com\" locator('input[type=\"email\"]')","params":{"selector":"input[type=\"email\"]","value":"invalid_test_user_99@ethnictouch.com"},"stack":[{"file":"D:\\The Ethnic Touch\\frontend\\e2e\\auth.spec.js","line":13,"column":16}]}
+{"type":"after","callId":"pw:api@27","endTime":182076.412,"annotations":[]}
+{"type":"before","callId":"pw:api@28","stepId":"pw:api@28","startTime":182080.18,"class":"Test","method":"pw:api","title":"Fill \"WrongPassword123!\" locator('input[type=\"password\"]')","params":{"selector":"input[type=\"password\"]","value":"WrongPassword123!"},"stack":[{"file":"D:\\The Ethnic Touch\\frontend\\e2e\\auth.spec.js","line":14,"column":16}]}
+{"type":"after","callId":"pw:api@28","endTime":182135.821,"annotations":[]}
+{"type":"before","callId":"pw:api@29","stepId":"pw:api@29","startTime":182139.618,"class":"Test","method":"pw:api","title":"Click locator('button[type=\"submit\"]')","params":{"selector":"button[type=\"submit\"]"},"stack":[{"file":"D:\\The Ethnic Touch\\frontend\\e2e\\auth.spec.js","line":15,"column":16}]}
+{"type":"after","callId":"pw:api@29","endTime":182636.827,"annotations":[]}
+{"type":"before","callId":"pw:api@30","stepId":"pw:api@30","startTime":182641.63,"class":"Test","method":"pw:api","title":"Wait for timeout","params":{"waitTimeout":"1500"},"stack":[{"file":"D:\\The Ethnic Touch\\frontend\\e2e\\auth.spec.js","line":17,"column":16}]}
+{"type":"after","callId":"pw:api@30","endTime":184173.646,"annotations":[]}
+{"type":"before","callId":"pw:api@31","stepId":"pw:api@31","startTime":184177.291,"class":"Test","method":"pw:api","title":"Query count locator('div:has-text(\"Firebase\"), div:has-text(\"invalid\"), div:has-text(\"Failed\")').first()","params":{"selector":"div:has-text(\"Firebase\"), div:has-text(\"invalid\"), div:has-text(\"Failed\") >> nth=0"},"stack":[{"file":"D:\\The Ethnic Touch\\frontend\\e2e\\auth.spec.js","line":19,"column":30}]}
+{"type":"after","callId":"pw:api@31","endTime":184200.251,"annotations":[]}
+{"type":"before","callId":"expect@32","stepId":"expect@32","startTime":184205.323,"class":"Test","method":"expect","title":"Expect \"toBeVisible\"","params":{},"stack":[{"file":"D:\\The Ethnic Touch\\frontend\\e2e\\auth.spec.js","line":20,"column":36}]}
+{"type":"after","callId":"expect@32","endTime":184291.505,"annotations":[]}
+{"type":"before","callId":"hook@33","stepId":"hook@33","startTime":184292.389,"class":"Test","method":"hook","title":"After Hooks","params":{},"stack":[]}
+{"type":"before","callId":"fixture@34","stepId":"fixture@34","parentId":"hook@33","startTime":184293.953,"class":"Test","method":"fixture","title":"Fixture \"page\"","params":{},"stack":[]}
+{"type":"after","callId":"fixture@34","endTime":184294.287,"annotations":[]}
+{"type":"before","callId":"fixture@35","stepId":"fixture@35","parentId":"hook@33","startTime":184295.173,"class":"Test","method":"fixture","title":"Fixture \"context\"","params":{},"stack":[]}
+{"type":"before","callId":"pw:api@36","stepId":"pw:api@36","parentId":"fixture@35","startTime":186372.991,"class":"Test","method":"pw:api","title":"Close context","params":{"reason":"Test ended."},"stack":[]}
+{"type":"after","callId":"pw:api@36","endTime":186731.382,"annotations":[]}
+{"type":"after","callId":"fixture@35","endTime":186731.591,"annotations":[]}
+{"type":"before","callId":"fixture@45","stepId":"fixture@45","parentId":"hook@33","startTime":186742.415,"class":"Test","method":"fixture","title":"Fixture \"baseURL\"","params":{},"stack":[{"file":"project#chromium","line":1,"column":1}],"group":"configuration"}
+{"type":"after","callId":"fixture@45","endTime":186742.535,"annotations":[]}
+{"type":"before","callId":"fixture@46","stepId":"fixture@46","parentId":"hook@33","startTime":186742.967,"class":"Test","method":"fixture","title":"Fixture \"userAgent\"","params":{},"stack":[{"file":"project#chromium","line":1,"column":1}],"group":"configuration"}
+{"type":"after","callId":"fixture@46","endTime":186743.047,"annotations":[]}
+{"type":"before","callId":"fixture@48","stepId":"fixture@48","parentId":"hook@33","startTime":186744.076,"class":"Test","method":"fixture","title":"Fixture \"viewport\"","params":{},"stack":[{"file":"project#chromium","line":1,"column":1}],"group":"configuration"}
+{"type":"after","callId":"fixture@48","endTime":186744.155,"annotations":[]}
+{"type":"before","callId":"fixture@55","stepId":"fixture@55","parentId":"hook@33","startTime":186747.486,"class":"Test","method":"fixture","title":"Fixture \"isMobile\"","params":{},"stack":[{"file":"project#chromium","line":1,"column":1}],"group":"configuration"}
+{"type":"after","callId":"fixture@55","endTime":186747.551,"annotations":[]}
+{"type":"before","callId":"fixture@59","stepId":"fixture@59","parentId":"hook@33","startTime":186749.243,"class":"Test","method":"fixture","title":"Fixture \"hasTouch\"","params":{},"stack":[{"file":"project#chromium","line":1,"column":1}],"group":"configuration"}
+{"type":"after","callId":"fixture@59","endTime":186749.295,"annotations":[]}
+{"type":"before","callId":"fixture@61","stepId":"fixture@61","parentId":"hook@33","startTime":186749.906,"class":"Test","method":"fixture","title":"Fixture \"deviceScaleFactor\"","params":{},"stack":[{"file":"project#chromium","line":1,"column":1}],"group":"configuration"}
+{"type":"after","callId":"fixture@61","endTime":186749.976,"annotations":[]}
+{"type":"after","callId":"hook@33","endTime":186754.1,"annotations":[]}
+{"type":"before","callId":"attach@ab2ff348e6424b4f08070c6033da02c0","stepId":"attach@ab2ff348e6424b4f08070c6033da02c0","startTime":188145.987,"class":"Test","method":"test.attach","title":"Attach \"trace\"","params":{},"stack":[]}
+{"type":"after","callId":"attach@ab2ff348e6424b4f08070c6033da02c0","endTime":188146.487,"attachments":[]}

@@ -27,6 +27,7 @@ func NewProductRepository(db *sql.DB) ProductRepository {
 }
 
 func (r *postgresProductRepo) GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error) {
+	idParam := filters["id"]
 	q := filters["q"]
 	categoryParam := filters["category"]
 	sizesParam := filters["sizes"]
@@ -57,11 +58,17 @@ func (r *postgresProductRepo) GetProducts(filters map[string]string) ([]models.P
 	var args []interface{}
 	argIndex := 1
 
+	if idParam != "" {
+		conditions = append(conditions, fmt.Sprintf("p.id = $%d", argIndex))
+		args = append(args, idParam)
+		argIndex++
+	}
+
 	if q != "" {
 		tokens := strings.Fields(strings.ToLower(q))
 		var tokenConds []string
 		for _, token := range tokens {
-			tokenConds = append(tokenConds, fmt.Sprintf("(LOWER(p.name) LIKE $%d OR LOWER(p.category) LIKE $%d OR LOWER(p.collection) LIKE $%d OR LOWER(p.fabric) LIKE $%d OR LOWER(p.color) LIKE $%d OR LOWER(p.sleeve_type) LIKE $%d OR LOWER(p.neck_type) LIKE $%d OR LOWER(p.pattern) LIKE $%d OR LOWER(p.occasion) LIKE $%d OR LOWER(p.sku) LIKE $%d OR LOWER(p.description) LIKE $%d OR LOWER(p.tags) LIKE $%d)", argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex))
+			tokenConds = append(tokenConds, fmt.Sprintf("(LOWER(p.id) LIKE $%d OR LOWER(p.name) LIKE $%d OR LOWER(p.category) LIKE $%d OR LOWER(p.collection) LIKE $%d OR LOWER(p.fabric) LIKE $%d OR LOWER(p.color) LIKE $%d OR LOWER(p.sleeve_type) LIKE $%d OR LOWER(p.neck_type) LIKE $%d OR LOWER(p.pattern) LIKE $%d OR LOWER(p.occasion) LIKE $%d OR LOWER(p.sku) LIKE $%d OR LOWER(p.description) LIKE $%d OR LOWER(p.tags) LIKE $%d)", argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex, argIndex))
 			args = append(args, "%"+token+"%")
 			argIndex++
 		}
@@ -336,18 +343,22 @@ func (r *postgresProductRepo) GetProducts(filters map[string]string) ([]models.P
 		if p.ImageURL != "" {
 			p.GalleryImages = append(p.GalleryImages, p.ImageURL)
 		}
+		products = append(products, p)
+	}
+	rows.Close()
 
-		imgRows, err := r.db.Query("SELECT image_url FROM product_images WHERE product_id = $1", p.ID)
+	// Safely populate gallery images after main rows are closed
+	for i := range products {
+		imgRows, err := r.db.Query("SELECT image_url FROM product_images WHERE product_id = $1", products[i].ID)
 		if err == nil {
 			for imgRows.Next() {
 				var url string
 				if err := imgRows.Scan(&url); err == nil {
-					p.GalleryImages = append(p.GalleryImages, url)
+					products[i].GalleryImages = append(products[i].GalleryImages, url)
 				}
 			}
 			imgRows.Close()
 		}
-		products = append(products, p)
 	}
 
 	var meta map[string]interface{}

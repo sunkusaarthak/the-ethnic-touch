@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import CopyButton from '../components/CopyButton';
+import { signOut } from 'firebase/auth';
 import { auth, API_BASE_URL } from '../data/config';
+import apiClient from '../utils/apiClient';
 
 const ProfilePage = ({ authUser }) => {
     const navigate = useNavigate();
@@ -62,38 +64,29 @@ const ProfilePage = ({ authUser }) => {
     const loadAddresses = async () => {
         if (!authUser) return;
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
-                headers: { 'X-User-Id': authUser.uid }
-            });
-            if (response.ok) {
-                const data = await response.json();
+            const data = await apiClient.get('/api/profile/addresses');
+            if (Array.isArray(data)) {
                 setAddresses(data);
             }
         } catch (err) {
-            console.error(err);
+            console.error("[ProfilePage] loadAddresses error:", err);
         }
     };
 
     const loadOrdersAndCoupons = async () => {
         if (!authUser) return;
         try {
-            const ordResponse = await fetch(`${API_BASE_URL}/api/profile/orders`, {
-                headers: { 'X-User-Id': authUser.uid }
-            });
-            if (ordResponse.ok) {
-                const data = await ordResponse.json();
+            const data = await apiClient.get('/api/profile/orders');
+            if (Array.isArray(data)) {
                 setOrders(data);
             }
             
-            const copResponse = await fetch(`${API_BASE_URL}/api/profile/coupons`, {
-                headers: { 'X-User-Id': authUser.uid }
-            });
-            if (copResponse.ok) {
-                const data = await copResponse.json();
-                setCoupons(data);
+            const cData = await apiClient.get('/api/profile/coupons');
+            if (Array.isArray(cData)) {
+                setCoupons(cData);
             }
         } catch (err) {
-            console.error(err);
+            console.error("[ProfilePage] loadOrdersAndCoupons error:", err);
         }
     };
 
@@ -460,7 +453,7 @@ const ProfilePage = ({ authUser }) => {
                         <li 
                             onClick={() => {
                                 if (auth) {
-                                    auth.signOut().then(() => {
+                                    signOut(auth).then(() => {
                                         window.location.hash = "#/";
                                     });
                                 }

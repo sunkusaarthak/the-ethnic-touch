@@ -1,15 +1,21 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"ethnictouch/internal/app"
 	"ethnictouch/internal/config"
 )
 
 func main() {
-	// Initialize structured logger
+	// Initialize structured JSON logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -32,8 +38,27 @@ func main() {
 		port = "8080"
 	}
 
-	if err := application.Run(port); err != nil {
-		logger.Error("Server crashed", "error", err)
-		os.Exit(1)
+	// Listen for interrupt / termination signals for graceful shutdown
+	stopChannel := make(chan os.Signal, 1)
+	signal.Notify(stopChannel, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		if err := application.Run(port); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("Server crashed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	logger.Info("Server listening for incoming connections", slog.String("port", port))
+	<-stopChannel
+
+	logger.Info("Shutting down server gracefully...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := application.Shutdown(ctx); err != nil {
+		logger.Error("Error during server shutdown", "error", err)
 	}
+
+	logger.Info("Server shutdown complete.")
 }

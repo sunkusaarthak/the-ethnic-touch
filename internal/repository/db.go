@@ -24,6 +24,7 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(25)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(3 * time.Minute)
 
 	// Verify connection
 	err = db.Ping()
@@ -135,8 +136,16 @@ func runMigrations(db *sql.DB) error {
 			id SERIAL PRIMARY KEY,
 			user_id TEXT NOT NULL,
 			product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-			created_at TEXT NOT NULL,
+			created_at TEXT DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(user_id, product_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS cart_items (
+			id SERIAL PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			quantity INT DEFAULT 1,
+			size TEXT DEFAULT '',
+			UNIQUE(user_id, product_id, size)
 		);`,
 	}
 
@@ -250,7 +259,12 @@ func seedData(db *sql.DB) error {
 	var couponCount int
 	db.QueryRow("SELECT COUNT(*) FROM coupons").Scan(&couponCount)
 	if couponCount == 0 {
-		db.Exec("INSERT INTO coupons (id, code, type, value, min_order, usage_limit) VALUES ('c1', 'WELCOME10', 'percentage', 10, 1000, 100)")
+		db.Exec(`INSERT INTO coupons (id, code, type, value, min_order, usage_limit, is_active) VALUES 
+			('c1', 'WELCOME10', 'percentage', 10.0, 500.0, 1000, TRUE),
+			('c2', 'ETHNIC10', 'percentage', 10.0, 500.0, 1000, TRUE),
+			('c3', 'FESTIVE20', 'percentage', 20.0, 2000.0, 1000, TRUE),
+			('c4', 'SAVE500', 'fixed', 500.0, 3000.0, 1000, TRUE)
+			ON CONFLICT DO NOTHING`)
 	}
 
 	var tierCount int

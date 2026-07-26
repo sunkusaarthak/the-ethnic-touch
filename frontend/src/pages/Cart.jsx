@@ -8,7 +8,14 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
     const navigate = useNavigate();
     const [couponCode, setCouponCode] = useState('');
     const [msg, setMsg] = useState('');
-    const [tiers, setTiers] = useState([]);
+    const defaultGiftTiers = [
+        { id: 1, name: 'Bronze Gift', threshold: 3000, rewardType: 'physical', physicalName: 'Premium Leather Keychain' },
+        { id: 2, name: 'Silver Gift', threshold: 5000, rewardType: 'coupon', discountType: 'percentage', discountValue: 15, couponFormat: 'GFT-SLVR-[RAND]' },
+        { id: 3, name: 'Gold Gift', threshold: 10000, rewardType: 'coupon', discountType: 'fixed', discountValue: 2000, couponFormat: 'GFT-GOLD-[RAND]' },
+        { id: 4, name: 'Platinum Gift', threshold: 15000, rewardType: 'coupon', discountType: 'percentage', discountValue: 25, couponFormat: 'GFT-PLAT-[RAND]' }
+    ];
+
+    const [tiers, setTiers] = useState(defaultGiftTiers);
     const [showAuthModal, setShowAuthModal] = useState(false);
     
     // Added a safety check (cart || []) just in case cart is ever undefined
@@ -17,34 +24,44 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
 
     useEffect(() => {
         fetch(`${API_BASE_URL}/api/gift-tiers`)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch gift tiers');
+                return res.json();
+            })
             .then(data => {
-                if (Array.isArray(data)) {
+                if (Array.isArray(data) && data.length > 0) {
                     setTiers(data.sort((a, b) => a.threshold - b.threshold));
                 }
             })
-            .catch(err => console.error("Error fetching tiers:", err));
+            .catch(err => {
+                console.warn("Using default gift tiers:", err);
+            });
     }, []);
 
     const handleCoupon = async () => {
+        const cleanCode = (couponCode || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+        if (!cleanCode) {
+            setMsg('Please enter a coupon code');
+            return;
+        }
+
         try {
             const res = await fetch(`${API_BASE_URL}/api/coupons/validate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: couponCode, total: subtotal })
+                body: JSON.stringify({ code: cleanCode, total: subtotal })
             });
             if (!res.ok) {
                 const err = await res.json();
                 setMsg(err.error || 'Invalid code');
                 return;
             }
-            const coupon = await res.json();
-            let amt = 0;
-            if (coupon.type === 'fixed') amt = coupon.value;
-            else amt = (subtotal * coupon.value) / 100;
+            const data = await res.json();
+            const coupon = data.coupon || data;
+            const discountAmount = data.discountAmount !== undefined ? data.discountAmount : (coupon.type === 'fixed' ? coupon.value : (subtotal * coupon.value) / 100);
             
-            onApplyCoupon({ code: coupon.code, amt });
-            setMsg(`Applied: ₹${amt} off!`);
+            onApplyCoupon({ code: coupon.code, amt: discountAmount });
+            setMsg(`Applied: ₹${discountAmount} off!`);
         } catch (err) {
             setMsg('Validation failed');
         }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
 import { API_BASE_URL } from '../data/config';
+import { fetchWithAuth } from '../utils/apiClient';
 
 const showAlert = (message, title = "Notice", type = "warning") => {
     if (window.customAlert) {
@@ -204,9 +205,8 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
         setOrdering(true);
 
         try {
-            const res = await fetch(`${API_BASE_URL}/api/orders`, {
+            const res = await fetchWithAuth('/api/orders', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(order)
             });
             
@@ -234,8 +234,10 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                 return;
             }
 
-            // Handle Official Razorpay Gateway Modal vs Sandbox Payment
-            if (data.checkoutUrl === "razorpay" || data.razorpayKey) {
+            // Handle Official Razorpay Gateway Modal
+            const isRazorpay = data.checkoutUrl === "razorpay" || Boolean(data.razorpayKey) || data.paymentMethod === "online";
+
+            if (isRazorpay) {
                 if (window.Razorpay) {
                     const options = {
                         key: data.razorpayKey || "rzp_test_mock",
@@ -243,7 +245,6 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         currency: "INR",
                         name: "The Ethnic Touch",
                         description: `Boutique Order #${data.orderId}`,
-                        order_id: data.razorpayOrderId,
                         prefill: { email: email },
                         theme: { color: "#B97A66" },
                         handler: async function (response) {
@@ -291,6 +292,11 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                             }
                         }
                     };
+
+                    if (data.razorpayOrderId && !data.razorpayOrderId.startsWith("MOCK_")) {
+                        options.order_id = data.razorpayOrderId;
+                    }
+
                     const rzp = new window.Razorpay(options);
                     rzp.open();
                     setOrdering(false);

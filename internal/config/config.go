@@ -53,6 +53,7 @@ func LoadConfig() *Config {
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	if adminKey == "" {
 		adminKey = "admin_secret_token_123"
+		log.Println("WARNING [SECURITY]: ADMIN_API_KEY environment variable is not set! Using default key.")
 	}
 
 	paymentProvider := os.Getenv("PAYMENT_PROVIDER")

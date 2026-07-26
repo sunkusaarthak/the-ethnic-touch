@@ -41,14 +41,20 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     }, [product]);
 
     useEffect(() => {
+        const controller = new AbortController();
         if (product) {
-            fetch(`${API_BASE_URL}/api/products/${product.id}/reviews`)
+            fetch(`${API_BASE_URL}/api/products/${product.id}/reviews`, { signal: controller.signal })
                 .then(res => res.json())
                 .then(data => {
-                    if(Array.isArray(data)) setReviews(data);
+                    if (Array.isArray(data)) setReviews(data);
                 })
-                .catch(err => console.error("Error fetching reviews:", err));
+                .catch(err => {
+                    if (err.name !== 'AbortError') {
+                        console.error("Error fetching reviews:", err);
+                    }
+                });
         }
+        return () => controller.abort();
     }, [product]);
 
     if (!product) return <div style={{padding: '10rem 5%', textAlign:'center'}}><h2>Product Not Found</h2></div>;
@@ -71,13 +77,12 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         }
     };
 
-    const scrollToSlide = (index) => {
+    const handleThumbnailClick = (index) => {
         setActiveImage(index);
         if (carouselRef.current) {
             const container = carouselRef.current;
-            const slideWidth = container.clientWidth;
             container.scrollTo({
-                left: index * slideWidth,
+                left: index * container.clientWidth,
                 behavior: 'smooth'
             });
         }
@@ -85,12 +90,12 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
     const nextImage = () => {
         const nextIdx = (activeImage + 1) % galleryImages.length;
-        scrollToSlide(nextIdx);
+        handleThumbnailClick(nextIdx);
     };
 
     const prevImage = () => {
         const prevIdx = (activeImage - 1 + galleryImages.length) % galleryImages.length;
-        scrollToSlide(prevIdx);
+        handleThumbnailClick(prevIdx);
     };
 
     const handleBack = (e) => {
@@ -116,7 +121,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     const submitReview = async (e) => {
         e.preventDefault();
         setReviewFormError('');
-        if (!comment.trim()) {
+        const trimmedComment = comment.trim();
+        if (!trimmedComment) {
             setReviewFormError('Please write a comment.');
             return;
         }
@@ -124,18 +130,19 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         setReviewLoading(true);
         const name = authUser?.displayName || authUser?.email?.split('@')[0] || "Guest Reviewer";
         const email = authUser?.email || "guest@ethnictouch.com";
+        const cleanComment = trimmedComment.replace(/<[^>]*>?/gm, '').slice(0, 1000);
 
         try {
             const res = await fetch(`${API_BASE_URL}/api/products/${product.id}/reviews`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userName: name, userEmail: email, rating: parseInt(rating), comment })
+                body: JSON.stringify({ userName: name, userEmail: email, rating: parseInt(rating), comment: cleanComment })
             });
 
             if (!res.ok) throw new Error("Failed to post review");
 
             const newReview = await res.json();
-            setReviews([newReview, ...reviews]);
+            setReviews(prev => [newReview, ...prev]);
             setComment('');
             setRating(5);
         } catch (err) {
