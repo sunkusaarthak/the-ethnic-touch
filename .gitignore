@@ -13,11 +13,10 @@ main
 *.out
 coverage.out
 coverage.html
-**/coverage/
 
 # Dependency directories
-node_modules/
-**/node_modules/
+node_modules
+dist
 
 # Environment files
 .env
@@ -41,15 +40,15 @@ Thumbs.db
 # Secrets & Replacement temporary files
 secret-replace.*
 
-# Playwright & E2E Test Results (Matches root and frontend subdirectories)
-**/playwright-report/
-**/test-results/
-**/.playwright/
-**/blob-report/
-playwright-report/
-test-results/
-.playwright/
-blob-report/
+# Playwright & E2E Test Results
+playwright-report
+test-results
+.playwright
+blob-report
+frontend/playwright-report
+frontend/test-results
+frontend/.playwright
+frontend/blob-report
 
 # MD files
 *.md

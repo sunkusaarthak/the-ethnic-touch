@@ -14,13 +14,11 @@ dist-ssr
 *.local
 
 # Playwright & E2E Test Results
-playwright-report/
-test-results/
-.playwright/
-blob-report/
-**/playwright-report/
-**/test-results/
-**/coverage/
+playwright-report
+test-results
+.playwright
+blob-report
+coverage
 
 # Editor directories and files
 .vscode/*
