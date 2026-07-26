@@ -7,10 +7,20 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Build & Dependency Directories
 node_modules
 dist
 dist-ssr
 *.local
+
+# Playwright & E2E Test Results
+playwright-report/
+test-results/
+.playwright/
+blob-report/
+**/playwright-report/
+**/test-results/
+**/coverage/
 
 # Editor directories and files
 .vscode/*
