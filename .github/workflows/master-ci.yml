@@ -1,12 +1,15 @@
-name: Stage CI/CD Pipeline - Quality & Automation Enforcement
+name: Master CI/CD Pipeline - Quality & Automation Enforcement
 
 on:
   push:
     branches:
-      - stage
+      - master
       - main
+      - stage
   pull_request:
     branches:
+      - master
+      - main
       - stage
 
 jobs:
