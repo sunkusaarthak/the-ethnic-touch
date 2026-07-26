@@ -413,7 +413,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                         <div className="drawer-item-icon">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
                                         </div>
-                                        <span className="drawer-item-label">Sign In / Register</span>
+                                        <span className="drawer-item-label">Sign In</span>
                                     </Link>
                                 )}
                             </div>

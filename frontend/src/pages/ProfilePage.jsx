@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import CopyButton from '../components/CopyButton';
 import { auth, API_BASE_URL } from '../data/config';
+import firebase from 'firebase/compat/app';
 
 const ProfilePage = ({ authUser }) => {
     const navigate = useNavigate();
@@ -11,6 +12,15 @@ const ProfilePage = ({ authUser }) => {
     const [message, setMessage] = useState({ type: '', text: '' });
     const [successVisible, setSuccessVisible] = useState(false);
     const redirectTimer = useRef(null);
+    const profileRecaptchaRef = useRef(null);
+
+    // Phone OTP Verification states for Google users linking/verifying phone
+    const [phoneOtpStep, setPhoneOtpStep] = useState('idle'); // 'idle' | 'otp_sent' | 'verified'
+    const [phoneOtp, setPhoneOtp] = useState('');
+    const [phoneConfirmationResult, setPhoneConfirmationResult] = useState(null);
+    const [phoneError, setPhoneError] = useState('');
+    const [phoneSending, setPhoneSending] = useState(false);
+
     const [form, setForm] = useState({
         fullName: '',
         email: '',
@@ -34,15 +44,88 @@ const ProfilePage = ({ authUser }) => {
     const [activeTab, setActiveTab] = useState('profile');
     const [isEditing, setIsEditing] = useState(false);
 
+    const isPhoneUser = Boolean(authUser?.phoneNumber);
+    const isGoogleUser = Boolean(authUser?.email && !authUser?.phoneNumber);
+
+    const initProfileRecaptcha = () => {
+        if (!profileRecaptchaRef.current) {
+            try {
+                profileRecaptchaRef.current = new firebase.auth.RecaptchaVerifier('profile-recaptcha-container', {
+                    size: 'invisible',
+                    'expired-callback': () => {
+                        setPhoneError('reCAPTCHA expired. Please try sending OTP again.');
+                    }
+                });
+            } catch (e) {
+                console.error("Profile recaptcha init error:", e);
+            }
+        }
+        return profileRecaptchaRef.current;
+    };
+
+    const handleSendProfilePhoneOTP = async () => {
+        setPhoneError('');
+        const cleanPhone = form.phone.trim().replace(/[\s-]/g, '');
+        if (!cleanPhone || cleanPhone.length < 7) {
+            setPhoneError('Please enter a valid mobile number first.');
+            return;
+        }
+        const fullPhone = cleanPhone.startsWith('+') ? cleanPhone : `+91${cleanPhone}`;
+        setPhoneSending(true);
+        try {
+            const verifier = initProfileRecaptcha();
+            const result = await auth.signInWithPhoneNumber(fullPhone, verifier);
+            setPhoneConfirmationResult(result);
+            setPhoneOtpStep('otp_sent');
+        } catch (err) {
+            console.error("Profile Phone Verification Error:", err);
+            setPhoneError(err.message || 'Failed to send OTP code.');
+            if (profileRecaptchaRef.current) {
+                profileRecaptchaRef.current.clear();
+                profileRecaptchaRef.current = null;
+            }
+        } finally {
+            setPhoneSending(false);
+        }
+    };
+
+    const handleVerifyProfilePhoneOTP = async () => {
+        setPhoneError('');
+        if (!phoneOtp || phoneOtp.trim().length < 6) {
+            setPhoneError('Please enter the 6-digit OTP code.');
+            return;
+        }
+        setPhoneSending(true);
+        try {
+            if (!phoneConfirmationResult) {
+                throw new Error("Session expired. Please click resend OTP.");
+            }
+            await phoneConfirmationResult.confirm(phoneOtp.trim());
+            setPhoneOtpStep('verified');
+            setPhoneError('');
+        } catch (err) {
+            console.error("OTP Verification Error:", err);
+            setPhoneError(err.message || 'Invalid OTP code.');
+        } finally {
+            setPhoneSending(false);
+        }
+    };
+
     const validateProfileForm = (cleaned) => {
-        if (!cleaned.fullName || !cleaned.phone || !cleaned.address || !cleaned.city || !cleaned.state || !cleaned.zipCode) {
-            return 'Please complete the required fields.';
+        if (!cleaned.fullName || !cleaned.email || !cleaned.phone || !cleaned.address || !cleaned.city || !cleaned.state || !cleaned.zipCode) {
+            return 'Please complete all required fields.';
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned.email)) {
+            return 'Please enter a valid email address.';
         }
         if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(cleaned.fullName)) {
             return 'Please enter a valid full name.';
         }
         if (!/^\+?[0-9()\-\s]{8,15}$/.test(cleaned.phone)) {
             return 'Please enter a valid phone number.';
+        }
+        if (isGoogleUser && mode === 'create' && phoneOtpStep !== 'verified' && !form.phone) {
+            return 'Please enter and verify your phone number via OTP.';
         }
         if (cleaned.address.length < 5) {
             return 'Please enter a complete address.';
@@ -176,9 +259,17 @@ const ProfilePage = ({ authUser }) => {
                 const response = await fetch(`${API_BASE_URL}/api/profile/me`, {
                     headers: { 'X-User-Id': authUser.uid }
                 });
+                const authPhone = authUser.phoneNumber ? authUser.phoneNumber.replace(/^\+91/, '') : '';
+                const authEmail = authUser.email || '';
+
                 if (response.status === 404) {
                     setMode('create');
-                    setForm(f => ({ ...f, email: authUser.email || '' }));
+                    setForm(f => ({ 
+                        ...f, 
+                        fullName: authUser.displayName || '',
+                        email: authEmail, 
+                        phone: authPhone 
+                    }));
                     setIsEditing(true);
                     setLoading(false);
                     return;
@@ -188,9 +279,9 @@ const ProfilePage = ({ authUser }) => {
                 }
                 const profile = await response.json();
                 setForm({
-                    fullName: profile.fullName || '',
-                    email: profile.email || authUser.email || '',
-                    phone: profile.phone || '',
+                    fullName: profile.fullName || authUser.displayName || '',
+                    email: profile.email || authEmail,
+                    phone: profile.phone || authPhone,
                     address: profile.address || '',
                     city: profile.city || '',
                     state: profile.state || '',
@@ -198,6 +289,9 @@ const ProfilePage = ({ authUser }) => {
                     preferredSize: profile.preferredSize || '',
                     styleNotes: profile.styleNotes || ''
                 });
+                if (profile.phone) {
+                    setPhoneOtpStep('verified');
+                }
                 setMode('edit');
                 setIsEditing(false);
             } catch (error) {
@@ -354,7 +448,9 @@ const ProfilePage = ({ authUser }) => {
                     }}>
                         {form.fullName || 'Welcome to The Ethnic Touch'}
                     </h1>
-                    <p style={{ margin: '0.15rem 0 0', color: '#666', fontSize: '0.85rem' }}>{authUser.email}</p>
+                    <p style={{ margin: '0.15rem 0 0', color: '#666', fontSize: '0.85rem' }}>
+                        {authUser.email || authUser.phoneNumber || form.email || form.phone}
+                    </p>
                 </div>
             </div>
 
@@ -580,17 +676,34 @@ const ProfilePage = ({ authUser }) => {
                                 </div>
                             ) : (
                                 <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                    <div id="profile-recaptcha-container"></div>
+                                    
+                                    {/* Email Field */}
                                     <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Email Address (Required)</label>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                                            <label style={{ fontSize: '0.9rem', color: '#555', fontWeight: '500' }}>
+                                                Email Address * {isPhoneUser && '(Required for order receipts & invoices)'}
+                                            </label>
+                                            {isGoogleUser && (
+                                                <span style={{ fontSize: '0.72rem', backgroundColor: '#eafaf1', color: '#0e6245', padding: '0.15rem 0.5rem', borderRadius: '50px', fontWeight: '600' }}>
+                                                    ✓ Google Verified
+                                                </span>
+                                            )}
+                                        </div>
                                         <input 
                                             type="email" 
+                                            required
                                             value={form.email} 
-                                            readOnly 
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', backgroundColor: '#f9f9f9', color: '#777', outline: 'none' }}
+                                            onChange={e => setForm({ ...form, email: e.target.value })}
+                                            readOnly={isGoogleUser} 
+                                            placeholder="you@example.com"
+                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', backgroundColor: isGoogleUser ? '#f9f9f9' : '#fff', color: isGoogleUser ? '#777' : '#333', outline: 'none' }}
                                         />
                                     </div>
+
+                                    {/* Full Name Field */}
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Full Name *</label>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555', fontWeight: '500' }}>Full Name *</label>
                                         <input 
                                             type="text" 
                                             required 
@@ -600,16 +713,87 @@ const ProfilePage = ({ authUser }) => {
                                             style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
                                         />
                                     </div>
+
+                                    {/* Phone Field */}
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Phone Number *</label>
-                                        <input 
-                                            type="tel" 
-                                            required 
-                                            placeholder="10-digit number"
-                                            value={form.phone}
-                                            onChange={e => setForm({ ...form, phone: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
-                                        />
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                                            <label style={{ fontSize: '0.9rem', color: '#555', fontWeight: '500' }}>Phone Number *</label>
+                                            {isPhoneUser ? (
+                                                <span style={{ fontSize: '0.72rem', backgroundColor: '#eafaf1', color: '#0e6245', padding: '0.15rem 0.5rem', borderRadius: '50px', fontWeight: '600' }}>
+                                                    ✓ Mobile OTP Verified
+                                                </span>
+                                            ) : (phoneOtpStep === 'verified' || (mode === 'edit' && form.phone)) ? (
+                                                <span style={{ fontSize: '0.72rem', backgroundColor: '#eafaf1', color: '#0e6245', padding: '0.15rem 0.5rem', borderRadius: '50px', fontWeight: '600' }}>
+                                                    ✓ Phone Verified
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                        
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <input 
+                                                type="tel" 
+                                                required 
+                                                placeholder="10-digit number"
+                                                value={form.phone}
+                                                readOnly={isPhoneUser}
+                                                onChange={e => {
+                                                    setForm({ ...form, phone: e.target.value });
+                                                    if (phoneOtpStep === 'verified') setPhoneOtpStep('idle');
+                                                }}
+                                                style={{ flex: 1, padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', backgroundColor: isPhoneUser ? '#f9f9f9' : '#fff', color: isPhoneUser ? '#777' : '#333', outline: 'none' }}
+                                            />
+                                            {isGoogleUser && !isPhoneUser && phoneOtpStep !== 'verified' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSendProfilePhoneOTP}
+                                                    disabled={phoneSending || !form.phone}
+                                                    style={{
+                                                        padding: '0 0.85rem',
+                                                        fontSize: '0.78rem',
+                                                        fontWeight: '600',
+                                                        backgroundColor: '#FAF7F2',
+                                                        border: '1px solid #D4A373',
+                                                        color: '#8F5E36',
+                                                        borderRadius: '6px',
+                                                        cursor: 'pointer',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    {phoneSending ? 'Sending...' : 'Verify OTP'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* OTP Input Box if OTP Sent */}
+                                        {phoneOtpStep === 'otp_sent' && (
+                                            <div style={{ marginTop: '0.6rem', padding: '0.65rem', backgroundColor: '#FAF7F2', borderRadius: '8px', border: '1px solid rgba(212, 163, 115, 0.4)' }}>
+                                                <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', color: '#8F5E36', fontWeight: '500' }}>
+                                                    Enter 6-digit OTP code sent to +91 {form.phone}
+                                                </p>
+                                                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                                    <input 
+                                                        type="text" 
+                                                        maxLength={6}
+                                                        value={phoneOtp}
+                                                        onChange={e => setPhoneOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                                                        placeholder="• • • • • •"
+                                                        style={{ width: '120px', padding: '0.4rem', fontSize: '0.95rem', letterSpacing: '3px', textAlign: 'center', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleVerifyProfilePhoneOTP}
+                                                        disabled={phoneSending}
+                                                        style={{ padding: '0 0.85rem', fontSize: '0.78rem', fontWeight: '600', backgroundColor: '#8F5E36', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                                    >
+                                                        {phoneSending ? 'Verifying...' : 'Confirm'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {phoneError && (
+                                            <p style={{ margin: '0.3rem 0 0', fontSize: '0.75rem', color: '#d32f2f' }}>{phoneError}</p>
+                                        )}
                                     </div>
                                     <div style={{ gridColumn: 'span 2' }}>
                                         <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Shipping Address Line *</label>

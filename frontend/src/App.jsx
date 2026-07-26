@@ -383,7 +383,7 @@ const App = () => {
                 />
 
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} wishlist={wishlist} toggleWishlist={toggleWishlist} authUser={authUser} />} />
-                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} />} />
+                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} wishlist={wishlist} toggleWishlist={toggleWishlist} />} />
                 <Route 
                     path="/checkout" 
                     element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} authLoading={authLoading} />} 

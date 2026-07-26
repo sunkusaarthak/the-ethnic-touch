@@ -4,12 +4,13 @@ import Checkout from './Checkout';
 import AuthRequiredModal from '../components/AuthRequiredModal';
 import { API_BASE_URL } from '../data/config';
 
-const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser }) => {
+const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser, wishlist = [], toggleWishlist }) => {
     const navigate = useNavigate();
     const [couponCode, setCouponCode] = useState('');
     const [msg, setMsg] = useState('');
     const [tiers, setTiers] = useState([]);
     const [showAuthModal, setShowAuthModal] = useState(false);
+    const [removePopup, setRemovePopup] = useState({ show: false, index: null, item: null });
     
     // Added a safety check (cart || []) just in case cart is ever undefined
     const subtotal = (cart || []).reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
@@ -154,7 +155,14 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
 
                                         {/* Delete button */}
                                         <button 
-                                            onClick={() => removeFromCart && removeFromCart(idx)}
+                                            onClick={() => {
+                                                const isInWishlist = wishlist.some(w => w.id === item.id);
+                                                if (isInWishlist) {
+                                                    removeFromCart && removeFromCart(idx);
+                                                } else {
+                                                    setRemovePopup({ show: true, index: idx, item });
+                                                }
+                                            }}
                                             aria-label="Delete item from cart"
                                             title="Remove item"
                                             style={{
@@ -421,6 +429,85 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                 onClose={() => setShowAuthModal(false)}
                 redirectPath="/checkout"
             />
+
+            {/* Move to Wishlist Popup */}
+            {removePopup.show && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 9999, padding: '1rem',
+                    animation: 'modalFadeIn 0.2s ease'
+                }}  onClick={() => setRemovePopup({ show: false, index: null, item: null })}>
+                    <div style={{
+                        background: '#fff', borderRadius: '20px', padding: '1.75rem 1.75rem 1.5rem',
+                        maxWidth: '320px', width: '100%', textAlign: 'center',
+                        boxShadow: '0 12px 48px rgba(196, 147, 99, 0.18), 0 2px 8px rgba(0,0,0,0.06)',
+                        animation: 'modalSlideUp 0.25s ease'
+                    }} onClick={e => e.stopPropagation()}>
+                        {removePopup.item && (
+                            <div style={{ marginBottom: '1.15rem' }}>
+                                <img 
+                                    src={removePopup.item.imageUrl} 
+                                    alt={removePopup.item.name}
+                                    style={{ width: '88px', height: '110px', borderRadius: '14px', objectFit: 'cover', margin: '0 auto 0.85rem', display: 'block', boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}
+                                />
+                                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.05rem', fontWeight: '500', color: 'var(--color-text)', margin: '0 0 0.25rem', lineHeight: '1.3' }}>
+                                    {removePopup.item.name}
+                                </h3>
+                                <p style={{ fontSize: '0.78rem', color: '#a09890', margin: 0, letterSpacing: '0.2px' }}>
+                                    Save it for later?
+                                </p>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => {
+                                if (toggleWishlist && removePopup.item) {
+                                    toggleWishlist(removePopup.item);
+                                }
+                                if (removeFromCart && removePopup.index !== null) {
+                                    removeFromCart(removePopup.index);
+                                }
+                                setRemovePopup({ show: false, index: null, item: null });
+                            }}
+                            style={{
+                                width: '100%', padding: '0.6rem', borderRadius: '50px',
+                                border: 'none', fontSize: '0.82rem', fontWeight: '600',
+                                cursor: 'pointer', marginBottom: '0.5rem',
+                                background: 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)',
+                                color: '#fff', boxShadow: '0 4px 15px rgba(212,163,115,0.25)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="#fff" stroke="none">
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                            </svg>
+                            Move to Wishlist
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                if (removeFromCart && removePopup.index !== null) {
+                                    removeFromCart(removePopup.index);
+                                }
+                                setRemovePopup({ show: false, index: null, item: null });
+                            }}
+                            style={{
+                                width: '100%', padding: '0.55rem', borderRadius: '50px',
+                                border: '1.5px solid #e0e0e0', fontSize: '0.8rem', fontWeight: '500',
+                                cursor: 'pointer', background: 'transparent',
+                                color: '#888', transition: 'all 0.2s ease'
+                            }}
+                            onMouseOver={e => { e.currentTarget.style.borderColor = '#d9534f'; e.currentTarget.style.color = '#d9534f'; }}
+                            onMouseOut={e => { e.currentTarget.style.borderColor = '#e0e0e0'; e.currentTarget.style.color = '#888'; }}
+                        >
+                            Remove Item
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
