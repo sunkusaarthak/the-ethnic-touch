@@ -20,6 +20,13 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AlertProvider, useAlert } from './context/AlertContext';
 import { CartProvider, useCart } from './context/CartContext';
 
+const AdminRedirect = () => {
+    useEffect(() => {
+        window.location.href = '/admin/index.html';
+    }, []);
+    return null;
+};
+
 const AppFooterWrapper = () => {
     const location = useLocation();
     if (location.pathname === '/auth') return null;
@@ -125,8 +132,9 @@ const AppRoutesContent = () => {
                             toggleWishlist={toggleWishlist}
                             addToCart={addToCart}
                         />
-                    } 
-                />
+                    } />
+                <Route path="/admin" element={<AdminRedirect />} />
+                <Route path="/admin/*" element={<AdminRedirect />} />
             </Routes>
             <AppFooterWrapper />
 

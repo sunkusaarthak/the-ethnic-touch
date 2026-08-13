@@ -333,11 +333,11 @@ const Auth = () => {
                     }}>
                         {/* Clean Static Header */}
                         <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-                            <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.65rem', color: '#2D2A26', marginBottom: '0.3rem', fontWeight: '400' }}>
+                            <h1 className="section-title" style={{ color: 'var(--color-text)', marginBottom: '0.3rem', fontWeight: '500' }}>
                                 {isSignUp ? 'Create Account' : 'Welcome Back'}
                             </h1>
                             
-                            <p style={{ color: '#6C6863', fontSize: '0.8rem', lineHeight: '1.4', margin: '0 auto', maxWidth: '300px' }}>
+                            <p style={{ color: 'var(--color-text-light)', fontSize: 'var(--font-size-sm)', lineHeight: '1.4', margin: '0 auto', maxWidth: '300px' }}>
                                 {isSignUp ? 'Join The Ethnic Touch to enjoy personalized royal rewards.' : 'Sign in to access your handcrafted Jaipur collection, wishlist, & orders.'}
                             </p>
                         </div>
@@ -350,7 +350,7 @@ const Auth = () => {
                                 padding: '0.65rem 0.85rem',
                                 borderRadius: '12px',
                                 marginBottom: '1rem',
-                                fontSize: '0.78rem',
+                                fontSize: 'var(--font-size-xs)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.55rem',
@@ -366,7 +366,7 @@ const Auth = () => {
                         )}
 
                         {error && (
-                            <div style={{ background: '#FDF1F0', color: 'var(--color-error)', padding: '0.55rem', borderRadius: '10px', marginBottom: '1rem', fontSize: '0.78rem', textAlign: 'center', border: '1px solid rgba(217, 83, 79, 0.2)' }}>
+                            <div style={{ background: '#FDF1F0', color: 'var(--color-error)', padding: '0.55rem', borderRadius: '10px', marginBottom: '1rem', fontSize: 'var(--font-size-sm)', textAlign: 'center', border: '1px solid rgba(217, 83, 79, 0.2)' }}>
                                 {error}
                             </div>
                         )}
@@ -385,7 +385,7 @@ const Auth = () => {
                                     cursor: 'pointer',
                                     transition: 'all 0.3s ease',
                                     fontWeight: '600',
-                                    fontSize: '0.82rem',
+                                    fontSize: 'var(--font-size-sm)',
                                     boxShadow: !isSignUp ? '0 4px 12px rgba(212, 163, 115, 0.25)' : 'none'
                                 }}
                             >
@@ -403,7 +403,7 @@ const Auth = () => {
                                     cursor: 'pointer',
                                     transition: 'all 0.3s ease',
                                     fontWeight: '600',
-                                    fontSize: '0.82rem',
+                                    fontSize: 'var(--font-size-sm)',
                                     boxShadow: isSignUp ? '0 4px 12px rgba(212, 163, 115, 0.25)' : 'none'
                                 }}
                             >
@@ -414,43 +414,40 @@ const Auth = () => {
                         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                             {isSignUp && (
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: '500', fontSize: '0.78rem', color: '#444' }}>Full Name</label>
+                                    <label className="form-label">Full Name</label>
                                     <input 
                                         type="text" 
                                         required 
-                                        className="auth-input"
+                                        className="form-control"
                                         value={fullName}
                                         onChange={(e) => setFullName(e.target.value)}
                                         placeholder="Enter your full name"
-                                        style={{ height: '38px', fontSize: '0.82rem' }}
                                     />
                                 </div>
                             )}
                             <div>
-                                <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: '500', fontSize: '0.78rem', color: '#444' }}>Email Address</label>
+                                <label className="form-label">Email Address</label>
                                 <input 
                                     type="email" 
                                     required 
-                                    className="auth-input"
+                                    className="form-control"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="you@example.com"
-                                    style={{ height: '38px', fontSize: '0.82rem' }}
                                 />
                             </div>
                             <div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                                    <label style={{ fontWeight: '500', fontSize: '0.78rem', color: '#444' }}>Password</label>
-                                    {!isSignUp && <a href="#" style={{ fontSize: '0.75rem', color: '#8F5E36', textDecoration: 'none', fontWeight: '500' }}>Forgot password?</a>}
+                                    <label className="form-label" style={{ marginBottom: 0 }}>Password</label>
+                                    {!isSignUp && <a href="#" style={{ fontSize: 'var(--font-size-xs)', color: '#8F5E36', textDecoration: 'none', fontWeight: '500' }}>Forgot password?</a>}
                                 </div>
                                 <input 
                                     type="password" 
                                     required 
-                                    className="auth-input"
+                                    className="form-control"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder={isSignUp ? "Create password (min. 6 chars)" : "Enter your password"}
-                                    style={{ height: '38px', fontSize: '0.82rem' }}
                                 />
                             </div>
                             

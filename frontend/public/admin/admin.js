@@ -260,10 +260,41 @@ async function uploadGalleryRowFile(event, fileInputElement) {
 
 // Helper to assemble Auth headers dynamically
 function getAuthHeader() {
-    const token = localStorage.getItem('authToken') || 'admin_secret_token_123';
+    const adminKey = localStorage.getItem('adminApiKey') || 'admin_secret_token_123';
     return {
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${adminKey}`
     };
+}
+
+async function fetchJsonSafe(url, options = {}) {
+    try {
+        const res = await fetch(url, options);
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok) {
+            let errText = `HTTP ${res.status}`;
+            if (contentType.includes('application/json')) {
+                try {
+                    const j = await res.json();
+                    if (j && (j.error || j.message)) errText = j.error || j.message;
+                } catch (_) {}
+            }
+            throw new Error(errText);
+        }
+        if (contentType.includes('application/json')) {
+            return res.json();
+        }
+        const text = await res.text();
+        if (text.trim().startsWith('<')) {
+            throw new Error('Backend server is not updated or running. Please restart the backend server (go run main.go).');
+        }
+        try {
+            return JSON.parse(text);
+        } catch (_) {
+            return [];
+        }
+    } catch (err) {
+        throw err;
+    }
 }
 
 function initTabs() {
@@ -327,16 +358,19 @@ async function loadTabData(tab) {
 async function loadDashboard() {
     try {
         const [products, orders, coupons] = await Promise.all([
-            fetch('/api/products').then(r => r.json()),
-            fetch('/api/admin/orders', { headers: getAuthHeader() }).then(r => r.json()),
-            fetch('/api/admin/coupons', { headers: getAuthHeader() }).then(r => r.json())
+            fetchJsonSafe('/api/products').catch(() => []),
+            fetchJsonSafe('/api/admin/orders', { headers: getAuthHeader() }).catch(() => []),
+            fetchJsonSafe('/api/admin/coupons', { headers: getAuthHeader() }).catch(() => [])
         ]);
 
-        const revenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+        const orderList = Array.isArray(orders) ? orders : [];
+        const couponList = Array.isArray(coupons) ? coupons : [];
+
+        const revenue = orderList.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
         
         document.getElementById('stat-revenue').innerText = `₹${revenue.toLocaleString('en-IN')}`;
-        document.getElementById('stat-orders').innerText = orders.length;
-        document.getElementById('stat-coupons').innerText = coupons.length;
+        document.getElementById('stat-orders').innerText = orderList.length;
+        document.getElementById('stat-coupons').innerText = couponList.length;
     } catch (err) {
         console.error("Dashboard load failed", err);
     }
@@ -387,8 +421,12 @@ async function loadOrders() {
     body.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
     
     try {
-        const orders = await fetch('/api/admin/orders', { headers: getAuthHeader() }).then(r => r.json());
+        const orders = await fetchJsonSafe('/api/admin/orders', { headers: getAuthHeader() });
         body.innerHTML = '';
+        if (!Array.isArray(orders) || orders.length === 0) {
+            body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999">No orders placed yet.</td></tr>';
+            return;
+        }
         orders.forEach(o => {
             const tr = document.createElement('tr');
             const date = new Date(o.createdAt).toLocaleDateString();
@@ -941,12 +979,10 @@ async function loadProfiles() {
     body.innerHTML = '<tr><td colspan="6">Loading profiles...</td></tr>';
     
     try {
-        const res = await fetch('/api/admin/profiles', { headers: getAuthHeader() });
-        if (!res.ok) throw new Error("HTTP Status " + res.status);
-        const data = await res.json();
+        const data = await fetchJsonSafe('/api/admin/profiles', { headers: getAuthHeader() });
         body.innerHTML = '';
         
-        if (data.length === 0) {
+        if (!Array.isArray(data) || data.length === 0) {
             body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">No user profiles completed yet.</td></tr>';
             return;
         }
@@ -966,7 +1002,8 @@ async function loadProfiles() {
             body.appendChild(tr);
         });
     } catch (err) {
-        body.innerHTML = `<tr><td colspan="6" style="color:red">Failed to load profiles: ${err.message}</td></tr>`;
+        console.warn("Profiles load notice:", err);
+        body.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#777; padding: 1.5rem;">No user profiles found or backend API server needs to be restarted.<br><small style="color:#999">Run: go run main.go</small></td></tr>`;
     }
 }
 

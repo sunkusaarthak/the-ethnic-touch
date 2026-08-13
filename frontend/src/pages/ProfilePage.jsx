@@ -94,18 +94,7 @@ const ProfilePage = ({ authUser }) => {
         e.preventDefault();
         setAddressMessage('');
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': authUser.uid
-                },
-                body: JSON.stringify(addressForm)
-            });
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || 'Failed to save address');
-            }
+            await apiClient.post('/api/profile/addresses', addressForm);
             setAddressForm({ id: 0, fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
             setShowAddressForm(false);
             loadAddresses();
@@ -117,13 +106,8 @@ const ProfilePage = ({ authUser }) => {
     const handleDeleteAddress = async (id) => {
         if (!confirm('Are you sure you want to delete this address?')) return;
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses?id=${id}`, {
-                method: 'DELETE',
-                headers: { 'X-User-Id': authUser.uid }
-            });
-            if (response.ok) {
-                loadAddresses();
-            }
+            await apiClient.delete(`/api/profile/addresses?id=${id}`);
+            loadAddresses();
         } catch (err) {
             console.error(err);
         }
@@ -131,31 +115,22 @@ const ProfilePage = ({ authUser }) => {
 
     const handleSetDefaultAddress = async (id) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses?id=${id}`, {
-                method: 'PATCH',
-                headers: { 'X-User-Id': authUser.uid }
-            });
-            if (response.ok) {
-                loadAddresses();
-                // Also reload profile details since primary profile address is bidirectionally synced
-                const profileRes = await fetch(`${API_BASE_URL}/api/profile/me`, {
-                    headers: { 'X-User-Id': authUser.uid }
+            await apiClient.patch(`/api/profile/addresses?id=${id}`, {});
+            loadAddresses();
+            try {
+                const profile = await apiClient.get('/api/profile/me');
+                setForm({
+                    fullName: profile.fullName || '',
+                    email: profile.email || authUser.email || '',
+                    phone: profile.phone || '',
+                    address: profile.address || '',
+                    city: profile.city || '',
+                    state: profile.state || '',
+                    zipCode: profile.zipCode || '',
+                    preferredSize: profile.preferredSize || '',
+                    styleNotes: profile.styleNotes || ''
                 });
-                if (profileRes.ok) {
-                    const profile = await profileRes.json();
-                    setForm({
-                        fullName: profile.fullName || '',
-                        email: profile.email || authUser.email || '',
-                        phone: profile.phone || '',
-                        address: profile.address || '',
-                        city: profile.city || '',
-                        state: profile.state || '',
-                        zipCode: profile.zipCode || '',
-                        preferredSize: profile.preferredSize || '',
-                        styleNotes: profile.styleNotes || ''
-                    });
-                }
-            }
+            } catch (_) {}
         } catch (err) {
             console.error(err);
         }
@@ -166,20 +141,7 @@ const ProfilePage = ({ authUser }) => {
 
         const loadProfile = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/profile/me`, {
-                    headers: { 'X-User-Id': authUser.uid }
-                });
-                if (response.status === 404) {
-                    setMode('create');
-                    setForm(f => ({ ...f, email: authUser.email || '' }));
-                    setIsEditing(true);
-                    setLoading(false);
-                    return;
-                }
-                if (!response.ok) {
-                    throw new Error('Unable to load profile');
-                }
-                const profile = await response.json();
+                const profile = await apiClient.get('/api/profile/me');
                 setForm({
                     fullName: profile.fullName || '',
                     email: profile.email || authUser.email || '',
@@ -194,7 +156,13 @@ const ProfilePage = ({ authUser }) => {
                 setMode('edit');
                 setIsEditing(false);
             } catch (error) {
-                setMessage({ type: 'error', text: 'We could not load your profile right now.' });
+                if (error.status === 404) {
+                    setMode('create');
+                    setForm(f => ({ ...f, email: authUser.email || '' }));
+                    setIsEditing(true);
+                } else {
+                    setMessage({ type: 'error', text: error.message || 'We could not load your profile right now.' });
+                }
             } finally {
                 setLoading(false);
             }
@@ -241,21 +209,11 @@ const ProfilePage = ({ authUser }) => {
         setMessage({ type: '', text: '' });
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/me`, {
-                method: mode === 'create' ? 'POST' : 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': authUser.uid
-                },
-                body: JSON.stringify(cleaned)
-            });
+            const endpoint = '/api/profile/me';
+            const profile = mode === 'create' 
+                ? await apiClient.post(endpoint, cleaned)
+                : await apiClient.patch(endpoint, cleaned);
 
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || 'Unable to save profile');
-            }
-
-            const profile = await response.json();
             setForm({
                 fullName: profile.fullName || '',
                 email: profile.email || authUser.email || '',
@@ -311,25 +269,9 @@ const ProfilePage = ({ authUser }) => {
     }
 
     return (
-        <div style={{
-            maxWidth: '1100px',
-            margin: '2.5rem auto 3rem',
-            padding: '0 1.25rem',
-            minHeight: '75vh',
-            fontFamily: 'var(--font-body)'
-        }}>
+        <div className="profile-container">
             {/* Header Section */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1.25rem',
-                marginBottom: '1.25rem',
-                background: '#fff',
-                padding: '1.25rem 1.5rem',
-                borderRadius: '12px',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-                border: '1px solid rgba(0,0,0,0.04)'
-            }}>
+            <div className="profile-header-card">
                 <div style={{
                     width: '52px',
                     height: '52px',
@@ -341,112 +283,46 @@ const ProfilePage = ({ authUser }) => {
                     justifyContent: 'center',
                     fontSize: '1.4rem',
                     fontWeight: 'bold',
-                    boxShadow: '0 4px 10px rgba(185, 122, 102, 0.25)'
+                    boxShadow: '0 4px 10px rgba(185, 122, 102, 0.25)',
+                    flexShrink: 0
                 }}>
                     {form.fullName ? form.fullName.trim().charAt(0).toUpperCase() : 'U'}
                 </div>
                 <div>
-                    <h1 style={{
-                        fontSize: '1.4rem',
-                        fontFamily: 'var(--font-title)',
-                        margin: 0,
-                        color: '#333'
-                    }}>
+                    <h1 className="page-title" style={{ margin: 0, color: 'var(--color-text)' }}>
                         {form.fullName || 'Welcome to The Ethnic Touch'}
                     </h1>
-                    <p style={{ margin: '0.15rem 0 0', color: '#666', fontSize: '0.85rem' }}>{authUser.email}</p>
+                    <p style={{ margin: '0.15rem 0 0', color: 'var(--color-text-light)', fontSize: 'var(--font-size-sm)' }}>{authUser.email}</p>
                 </div>
             </div>
 
             {/* Main Content Layout */}
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: '220px 1fr',
-                gap: '1.25rem'
-            }} className="profile-dashboard-grid">
+            <div className="profile-dashboard-grid">
                 
                 {/* Sidemenu Panel */}
-                <div style={{
-                    background: '#fff',
-                    padding: '1rem',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-                    border: '1px solid rgba(0,0,0,0.04)',
-                    height: 'fit-content'
-                }}>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                <div className="profile-sidebar-panel">
+                    <ul className="profile-nav-menu" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                         <li 
                             onClick={() => { setActiveTab('profile'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
-                            style={{
-                                padding: '0.65rem 0.9rem',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontSize: '0.88rem',
-                                fontWeight: activeTab === 'profile' ? '600' : 'normal',
-                                backgroundColor: activeTab === 'profile' ? '#fff0e9' : 'transparent',
-                                color: activeTab === 'profile' ? '#b97a66' : '#555',
-                                transition: 'all 0.2s',
-                                marginBottom: '0.35rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.6rem'
-                            }}
+                            className={`profile-nav-item ${activeTab === 'profile' ? 'active' : ''}`}
                         >
                             My Profile
                         </li>
                         <li 
                             onClick={() => { setActiveTab('addresses'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
-                            style={{
-                                padding: '0.65rem 0.9rem',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontSize: '0.88rem',
-                                fontWeight: activeTab === 'addresses' ? '600' : 'normal',
-                                backgroundColor: activeTab === 'addresses' ? '#fff0e9' : 'transparent',
-                                color: activeTab === 'addresses' ? '#b97a66' : '#555',
-                                transition: 'all 0.2s',
-                                marginBottom: '0.35rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.6rem'
-                            }}
+                            className={`profile-nav-item ${activeTab === 'addresses' ? 'active' : ''}`}
                         >
                             Shipping Addresses
                         </li>
                         <li 
                             onClick={() => { setActiveTab('orders'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
-                            style={{
-                                padding: '0.65rem 0.9rem',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontSize: '0.88rem',
-                                fontWeight: activeTab === 'orders' ? '600' : 'normal',
-                                backgroundColor: activeTab === 'orders' ? '#fff0e9' : 'transparent',
-                                color: activeTab === 'orders' ? '#b97a66' : '#555',
-                                transition: 'all 0.2s',
-                                marginBottom: '0.35rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.6rem'
-                            }}
+                            className={`profile-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
                         >
                             Order History
                         </li>
                         <li 
                             onClick={() => { setActiveTab('coupons'); setSuccessVisible(false); setMessage({ type: '', text: '' }); }}
-                            style={{
-                                padding: '0.65rem 0.9rem',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontSize: '0.88rem',
-                                fontWeight: activeTab === 'coupons' ? '600' : 'normal',
-                                backgroundColor: activeTab === 'coupons' ? '#fff0e9' : 'transparent',
-                                color: activeTab === 'coupons' ? '#b97a66' : '#555',
-                                transition: 'all 0.2s',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.6rem'
-                            }}
+                            className={`profile-nav-item ${activeTab === 'coupons' ? 'active' : ''}`}
                         >
                             My Coupons
                         </li>
@@ -458,23 +334,7 @@ const ProfilePage = ({ authUser }) => {
                                     });
                                 }
                             }}
-                            style={{
-                                padding: '0.65rem 0.9rem',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontSize: '0.88rem',
-                                fontWeight: '500',
-                                backgroundColor: 'transparent',
-                                color: '#d32f2f',
-                                transition: 'all 0.2s',
-                                marginTop: '0.75rem',
-                                borderTop: '1px solid #f5f5f5',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.6rem'
-                            }}
-                            onMouseEnter={e => { e.target.style.backgroundColor = '#fdf2f2'; }}
-                            onMouseLeave={e => { e.target.style.backgroundColor = 'transparent'; }}
+                            className="profile-nav-item signout"
                         >
                             Sign Out
                         </li>
@@ -482,20 +342,13 @@ const ProfilePage = ({ authUser }) => {
                 </div>
 
                 {/* Content Panel */}
-                <div style={{
-                    background: '#fff',
-                    padding: '1.5rem',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-                    border: '1px solid rgba(0,0,0,0.04)',
-                    minHeight: '380px'
-                }}>
+                <div className="profile-content-panel">
                     
                     {/* TAB: PROFILE */}
                     {activeTab === 'profile' && (
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
-                                <h2 style={{ fontFamily: 'var(--font-title)', margin: 0, fontSize: '1.4rem', color: '#333' }}>Account Profile</h2>
+                                <h2 className="section-title" style={{ margin: 0, color: 'var(--color-text)' }}>Account Profile</h2>
                                 {mode === 'edit' && (
                                     <button 
                                         type="button"
@@ -507,7 +360,7 @@ const ProfilePage = ({ authUser }) => {
                                             backgroundColor: isEditing ? '#fff0e9' : 'transparent',
                                             padding: '0.5rem 1.2rem',
                                             borderRadius: '6px',
-                                            fontSize: '0.9rem',
+                                            fontSize: 'var(--font-size-sm)',
                                             fontWeight: '500',
                                             cursor: 'pointer'
                                         }}
@@ -524,7 +377,7 @@ const ProfilePage = ({ authUser }) => {
                                     backgroundColor: message.type === 'error' ? '#fde8e8' : '#eafaf1',
                                     color: message.type === 'error' ? '#9b1c1c' : '#0e6245',
                                     marginBottom: '1.5rem',
-                                    fontSize: '0.9rem'
+                                    fontSize: 'var(--font-size-sm)'
                                 }}>
                                     {message.text}
                                 </div>
@@ -539,128 +392,128 @@ const ProfilePage = ({ authUser }) => {
                                     borderRadius: '8px',
                                     marginBottom: '1.5rem'
                                 }}>
-                                    <span style={{ fontSize: '3rem', color: '#2e7d32' }}>✓</span>
-                                    <h4 style={{ margin: '0.5rem 0 0.2rem', color: '#2e7d32' }}>Profile Updated Successfully!</h4>
-                                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#666' }}>Your profile has been saved.</p>
+                                    <span style={{ fontSize: '2.5rem', color: '#2e7d32' }}>✓</span>
+                                    <h4 className="subsection-title" style={{ margin: '0.5rem 0 0.2rem', color: '#2e7d32' }}>Profile Updated Successfully!</h4>
+                                    <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-light)' }}>Your profile has been saved.</p>
                                 </div>
                             )}
 
                             {(!isEditing && mode === 'edit') ? (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Full Name</label>
-                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.fullName || '-'}</p>
+                                <div className="form-grid-2">
+                                    <div className="profile-info-block">
+                                        <span className="profile-info-label">Full Name</span>
+                                        <p className="profile-info-value">{form.fullName || '-'}</p>
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Email Address</label>
-                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.email || '-'}</p>
+                                    <div className="profile-info-block">
+                                        <span className="profile-info-label">Email Address</span>
+                                        <p className="profile-info-value">{form.email || '-'}</p>
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Phone Number</label>
-                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.phone || '-'}</p>
+                                    <div className="profile-info-block">
+                                        <span className="profile-info-label">Phone Number</span>
+                                        <p className="profile-info-value">{form.phone || '-'}</p>
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>ZIP / Postal Code</label>
-                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.zipCode || '-'}</p>
+                                    <div className="profile-info-block">
+                                        <span className="profile-info-label">ZIP / Postal Code</span>
+                                        <p className="profile-info-value">{form.zipCode || '-'}</p>
                                     </div>
-                                    <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Primary Shipping Address</label>
-                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>
+                                    <div className="profile-info-block form-span-2">
+                                        <span className="profile-info-label">Primary Shipping Address</span>
+                                        <p className="profile-info-value">
                                             {form.address ? `${form.address}, ${form.city}, ${form.state} - ${form.zipCode}` : '-'}
                                         </p>
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Preferred Size</label>
-                                        <p style={{ fontSize: '1.05rem', color: '#333', fontWeight: '500', margin: 0 }}>{form.preferredSize || 'Not set'}</p>
+                                    <div className="profile-info-block">
+                                        <span className="profile-info-label">Preferred Size</span>
+                                        <p className="profile-info-value">{form.preferredSize || 'Not set'}</p>
                                     </div>
-                                    <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ fontSize: '0.85rem', color: '#888', display: 'block', marginBottom: '0.2rem' }}>Style Preferences & Notes</label>
-                                        <p style={{ fontSize: '1.05rem', color: '#333', margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>{form.styleNotes || 'None added'}</p>
+                                    <div className="profile-info-block form-span-2">
+                                        <span className="profile-info-label">Style Preferences & Notes</span>
+                                        <p className="profile-info-value">{form.styleNotes || 'None added'}</p>
                                     </div>
                                 </div>
                             ) : (
-                                <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                <form onSubmit={handleSubmit} className="form-grid-2">
                                     <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Email Address (Required)</label>
+                                        <label className="form-label">Email Address (Required)</label>
                                         <input 
                                             type="email" 
                                             value={form.email} 
                                             readOnly 
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', backgroundColor: '#f9f9f9', color: '#777', outline: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Full Name *</label>
+                                        <label className="form-label">Full Name *</label>
                                         <input 
                                             type="text" 
                                             required 
                                             placeholder="Enter your full name"
                                             value={form.fullName}
                                             onChange={e => setForm({ ...form, fullName: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Phone Number *</label>
+                                        <label className="form-label">Phone Number *</label>
                                         <input 
                                             type="tel" 
                                             required 
                                             placeholder="10-digit number"
                                             value={form.phone}
                                             onChange={e => setForm({ ...form, phone: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
                                     <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Shipping Address Line *</label>
+                                        <label className="form-label">Shipping Address Line *</label>
                                         <input 
                                             type="text" 
                                             required 
                                             placeholder="Apartment, Street Address"
                                             value={form.address}
                                             onChange={e => setForm({ ...form, address: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>City *</label>
+                                        <label className="form-label">City *</label>
                                         <input 
                                             type="text" 
                                             required 
                                             placeholder="City Name"
                                             value={form.city}
                                             onChange={e => setForm({ ...form, city: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>State *</label>
+                                        <label className="form-label">State *</label>
                                         <input 
                                             type="text" 
                                             required 
                                             placeholder="State Name"
                                             value={form.state}
                                             onChange={e => setForm({ ...form, state: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>ZIP / Postal Code *</label>
+                                        <label className="form-label">ZIP / Postal Code *</label>
                                         <input 
                                             type="text" 
                                             required 
                                             placeholder="6-digit PIN code"
                                             value={form.zipCode}
                                             onChange={e => setForm({ ...form, zipCode: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Preferred Sizing (Optional)</label>
+                                        <label className="form-label">Preferred Sizing (Optional)</label>
                                         <select 
                                             value={form.preferredSize} 
                                             onChange={e => setForm({ ...form, preferredSize: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none', backgroundColor: '#fff' }}
+                                            className="form-control"
                                         >
                                             <option value="">Choose Sizing</option>
                                             <option value="XS">XS</option>
@@ -671,16 +524,16 @@ const ProfilePage = ({ authUser }) => {
                                         </select>
                                     </div>
                                     <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Style Preferences & Special Instructions</label>
+                                        <label className="form-label">Style Preferences & Special Instructions</label>
                                         <textarea 
                                             rows="3" 
                                             placeholder="Tell us what fit, patterns or fabrics you love"
                                             value={form.styleNotes}
                                             onChange={e => setForm({ ...form, styleNotes: e.target.value })}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', outline: 'none', resize: 'none' }}
+                                            className="form-control"
                                         />
                                     </div>
-                                    <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
+                                    <div style={{ gridColumn: 'span 2', marginTop: '0.5rem' }}>
                                         <button 
                                             type="submit" 
                                             className="btn btn-primary"
@@ -699,7 +552,7 @@ const ProfilePage = ({ authUser }) => {
                     {activeTab === 'addresses' && (
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
-                                <h2 style={{ fontFamily: 'var(--font-title)', margin: 0, fontSize: '1.4rem', color: '#333' }}>Saved Addresses Book</h2>
+                                <h2 className="section-title" style={{ margin: 0, color: 'var(--color-text)' }}>Saved Addresses Book</h2>
                                 <button 
                                     type="button" 
                                     onClick={() => {
@@ -708,56 +561,53 @@ const ProfilePage = ({ authUser }) => {
                                         setShowAddressForm(!showAddressForm);
                                     }}
                                     className="btn btn-primary" 
-                                    style={{ padding: '0.5rem 1.2rem', borderRadius: '6px', fontSize: '0.9rem' }}
+                                    style={{ padding: '0.5rem 1.2rem', borderRadius: '6px', fontSize: 'var(--font-size-sm)' }}
                                 >
                                     {showAddressForm ? 'Close Form' : '+ Add Address'}
                                 </button>
                             </div>
 
                             {showAddressForm && (
-                                <form onSubmit={handleAddressSubmit} style={{ 
+                                <form onSubmit={handleAddressSubmit} className="form-grid-2" style={{ 
                                     background: '#fafafa', 
                                     padding: '1.5rem', 
                                     borderRadius: '8px', 
                                     border: '1px solid #eee',
-                                    marginBottom: '2rem',
-                                    display: 'grid', 
-                                    gridTemplateColumns: '1fr 1fr', 
-                                    gap: '1rem' 
+                                    marginBottom: '2rem' 
                                 }}>
-                                    <h4 style={{ gridColumn: 'span 2', margin: '0 0 0.5rem', fontFamily: 'var(--font-title)', fontSize: '1.1rem' }}>
+                                    <h4 className="subsection-title" style={{ gridColumn: 'span 2', margin: '0 0 0.5rem' }}>
                                         {addressForm.id > 0 ? 'Edit Shipping Address' : 'New Shipping Address'}
                                     </h4>
                                     
-                                    {addressMessage && <p style={{ gridColumn: 'span 2', color: 'red', margin: 0, fontSize: '0.85rem' }}>{addressMessage}</p>}
+                                    {addressMessage && <p style={{ gridColumn: 'span 2', color: 'red', margin: 0, fontSize: 'var(--font-size-sm)' }}>{addressMessage}</p>}
 
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>Full Name *</label>
-                                        <input type="text" required value={addressForm.fullName} onChange={e => setAddressForm({...addressForm, fullName: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                        <label className="form-label">Full Name *</label>
+                                        <input type="text" required value={addressForm.fullName} onChange={e => setAddressForm({...addressForm, fullName: e.target.value})} className="form-control" />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>Contact Phone *</label>
-                                        <input type="text" required value={addressForm.phone} onChange={e => setAddressForm({...addressForm, phone: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                        <label className="form-label">Contact Phone *</label>
+                                        <input type="text" required value={addressForm.phone} onChange={e => setAddressForm({...addressForm, phone: e.target.value})} className="form-control" />
                                     </div>
                                     <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>Address Line *</label>
-                                        <input type="text" required value={addressForm.addressLine} onChange={e => setAddressForm({...addressForm, addressLine: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                        <label className="form-label">Address Line *</label>
+                                        <input type="text" required value={addressForm.addressLine} onChange={e => setAddressForm({...addressForm, addressLine: e.target.value})} className="form-control" />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>City *</label>
-                                        <input type="text" required value={addressForm.city} onChange={e => setAddressForm({...addressForm, city: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                        <label className="form-label">City *</label>
+                                        <input type="text" required value={addressForm.city} onChange={e => setAddressForm({...addressForm, city: e.target.value})} className="form-control" />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>State *</label>
-                                        <input type="text" required value={addressForm.state} onChange={e => setAddressForm({...addressForm, state: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                        <label className="form-label">State *</label>
+                                        <input type="text" required value={addressForm.state} onChange={e => setAddressForm({...addressForm, state: e.target.value})} className="form-control" />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.2rem' }}>ZIP Code *</label>
-                                        <input type="text" required value={addressForm.zipCode} onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                        <label className="form-label">ZIP Code *</label>
+                                        <input type="text" required value={addressForm.zipCode} onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})} className="form-control" />
                                     </div>
                                     <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                        <button type="button" onClick={() => setShowAddressForm(false)} className="btn-secondary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem' }}>Cancel</button>
-                                        <button type="submit" className="btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem' }}>Save Address</button>
+                                        <button type="button" onClick={() => setShowAddressForm(false)} className="btn-secondary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: 'var(--font-size-sm)' }}>Cancel</button>
+                                        <button type="submit" className="btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: 'var(--font-size-sm)' }}>Save Address</button>
                                     </div>
                                 </form>
                             )}
@@ -765,11 +615,11 @@ const ProfilePage = ({ authUser }) => {
                             {addresses.length === 0 ? (
                                 <p style={{ color: '#888', textAlign: 'center', marginTop: '2rem' }}>No shipping addresses added yet.</p>
                             ) : (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.25rem' }}>
                                     {addresses.map(addr => (
                                         <div key={addr.id} style={{
                                             border: '1px solid #eee',
-                                            padding: '1.5rem',
+                                            padding: '1.25rem',
                                             borderRadius: '8px',
                                             position: 'relative',
                                             backgroundColor: addr.isDefault ? '#fffcf9' : '#fff',
@@ -817,38 +667,38 @@ const ProfilePage = ({ authUser }) => {
                     {/* TAB: ORDERS */}
                     {activeTab === 'orders' && (
                         <div>
-                            <h2 style={{ fontFamily: 'var(--font-title)', marginBottom: '1.5rem', fontSize: '1.4rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>Order History</h2>
+                            <h2 className="section-title" style={{ marginBottom: '1.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem', color: 'var(--color-text)' }}>Order History</h2>
                             {orders.length === 0 ? (
                                 <p style={{ color: '#888', textAlign: 'center', marginTop: '2rem' }}>You have not placed any orders yet.</p>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                     {orders.map(order => (
-                                        <div key={order.id} style={{ border: '1px solid #eee', borderRadius: '8px', padding: '1.5rem', backgroundColor: '#fafafa' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem', marginBottom: '1rem' }}>
+                                        <div key={order.id} style={{ border: '1px solid #eee', borderRadius: '8px', padding: '1.25rem', backgroundColor: '#fafafa' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.8rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem', marginBottom: '1rem' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                    <span style={{ fontSize: '0.8rem', color: '#888' }}>Order ID:</span>
-                                                    <span style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: '0.95rem' }}>{order.id}</span>
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: '#888' }}>Order ID:</span>
+                                                    <span style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: 'var(--font-size-input)' }}>{order.id}</span>
                                                     <CopyButton text={order.id} label="Copy ID" />
                                                 </div>
                                                 <div>
-                                                    <span style={{ fontSize: '0.85rem', color: '#b97a66', fontWeight: '500', textTransform: 'uppercase' }}>{order.status}</span>
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: '#b97a66', fontWeight: '500', textTransform: 'uppercase' }}>{order.status}</span>
                                                 </div>
                                             </div>
 
-                                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+                                            <div className="form-grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
                                                 <div>
-                                                    <h5 style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: '#888', textTransform: 'uppercase' }}>Items</h5>
+                                                    <h5 style={{ margin: '0 0 0.5rem', fontSize: 'var(--font-size-xs)', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Items</h5>
                                                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                                                         {order.items && order.items.map((it, idx) => {
                                                              const qty = it.quantity || 1;
                                                              const unitPrice = it.priceAtQty || 0;
                                                              const lineTotal = unitPrice * qty;
                                                              return (
-                                                                 <li key={it.productId || idx} style={{ fontSize: '0.9rem', color: '#333', padding: '0.4rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                 <li key={it.productId || idx} style={{ fontSize: 'var(--font-size-sm)', color: '#333', padding: '0.4rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                      <div>
                                                                          <span>{it.productName || it.productId}</span>
                                                                          {it.size && (
-                                                                             <span style={{ fontSize: '0.75rem', background: '#fff0e9', color: '#b97a66', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '500' }}>
+                                                                             <span style={{ fontSize: 'var(--font-size-xs)', background: '#fff0e9', color: '#b97a66', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '500' }}>
                                                                                  Size: {it.size}
                                                                              </span>
                                                                          )}
@@ -857,7 +707,7 @@ const ProfilePage = ({ authUser }) => {
                                                                      <div style={{ textAlign: 'right' }}>
                                                                          <span style={{ fontWeight: '500' }}>₹{lineTotal.toLocaleString('en-IN')}</span>
                                                                          {qty > 1 && (
-                                                                             <span style={{ display: 'block', fontSize: '0.75rem', color: '#888' }}>
+                                                                             <span style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: '#888' }}>
                                                                                  (₹{unitPrice.toLocaleString('en-IN')} each)
                                                                              </span>
                                                                          )}
@@ -867,22 +717,22 @@ const ProfilePage = ({ authUser }) => {
                                                          })}
                                                     </ul>
                                                 </div>
-                                                <div style={{ borderLeft: '1px solid #eee', paddingLeft: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                                <div style={{ borderLeft: '1px solid #eee', paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                                     <div style={{ marginBottom: '0.5rem' }}>
-                                                        <span style={{ fontSize: '0.8rem', color: '#888' }}>Date:</span>
-                                                        <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500' }}>{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
+                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#888' }}>Date:</span>
+                                                        <span style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: '500' }}>{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
                                                     </div>
                                                     <div>
-                                                        <span style={{ fontSize: '0.8rem', color: '#888' }}>Total Amount Paid:</span>
-                                                        <span style={{ display: 'block', fontSize: '1.15rem', color: '#b97a66', fontWeight: '600' }}>₹{order.totalAmount.toLocaleString('en-IN')}</span>
+                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#888' }}>Total Amount Paid:</span>
+                                                        <span style={{ display: 'block', fontSize: 'var(--font-size-h3)', color: '#b97a66', fontWeight: '600' }}>₹{order.totalAmount.toLocaleString('en-IN')}</span>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             {order.trackingNumber && (
                                                 <div style={{ marginTop: '1rem', background: '#eaf3fc', padding: '0.75rem 1rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.85rem', color: '#1a5695' }}>
-                                                        Shipping Carrier Tracking Number: <strong style={{ fontFamily: 'monospace' }}>{order.trackingNumber}</strong>
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: '#1a5695' }}>
+                                                        Carrier Tracking Number: <strong style={{ fontFamily: 'monospace' }}>{order.trackingNumber}</strong>
                                                     </span>
                                                     <CopyButton text={order.trackingNumber} label="Copy Tracking ID" />
                                                 </div>
@@ -890,7 +740,7 @@ const ProfilePage = ({ authUser }) => {
 
                                             {order.unlockedGift && (
                                                 <div style={{ marginTop: '0.8rem', background: '#fff9e6', padding: '0.75rem 1rem', border: '1px dashed #fcd34d', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.85rem', color: '#854d0e' }}>
+                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: '#854d0e' }}>
                                                         Reward Unlocked: <strong>{order.unlockedGift}</strong>
                                                     </span>
                                                     <CopyButton text={order.unlockedGift} label="Copy Code" />
@@ -906,7 +756,7 @@ const ProfilePage = ({ authUser }) => {
                     {/* TAB: COUPONS */}
                     {activeTab === 'coupons' && (
                         <div>
-                            <h2 style={{ fontFamily: 'var(--font-title)', marginBottom: '1.5rem', fontSize: '1.4rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>My Loyalty Coupons</h2>
+                            <h2 className="section-title" style={{ marginBottom: '1.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem', color: 'var(--color-text)' }}>My Loyalty Coupons</h2>
                             {coupons.length === 0 ? (
                                 <p style={{ color: '#888', textAlign: 'center', marginTop: '2rem' }}>No dynamic coupons issued to your email yet.</p>
                             ) : (

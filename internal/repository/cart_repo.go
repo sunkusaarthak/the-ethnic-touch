@@ -59,9 +59,9 @@ func (r *postgresCartRepo) GetCart(userID string) ([]CartItemResponse, error) {
 
 func (r *postgresCartRepo) AddToCart(userID, productID string, quantity int, size string) error {
 	_, err := r.db.Exec(`
-		INSERT INTO cart_items (user_id, product_id, quantity, size)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (user_id, product_id, size) DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity`,
+		INSERT INTO cart_items (user_id, product_id, quantity, size, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (user_id, product_id, size) DO UPDATE SET quantity = EXCLUDED.quantity`,
 		userID, productID, quantity, size)
 	return err
 }

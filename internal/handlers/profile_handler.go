@@ -126,3 +126,65 @@ func (h *ProfileHandler) HandleAddresses(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
+
+func (h *ProfileHandler) HandleAdminProfiles(w http.ResponseWriter, r *http.Request) {
+	profiles, err := h.svc.GetAllProfiles()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`[]`))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(profiles)
+}
+
+func (h *ProfileHandler) HandleAdminProfileDetails(w http.ResponseWriter, r *http.Request) {
+	userID := r.URL.Query().Get("userId")
+	if userID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Missing userId query parameter"}`))
+		return
+	}
+	profile, _ := h.svc.GetProfile(userID)
+	addresses, _ := h.svc.GetAddresses(userID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"profile":   profile,
+		"addresses": addresses,
+	})
+}
+
+func (h *ProfileHandler) HandleAdminProfileEdit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var p models.Profile
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Invalid payload"}`))
+		return
+	}
+
+	if p.UserID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Missing user ID"}`))
+		return
+	}
+
+	if err := h.svc.UpsertProfile(&p); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Failed to update profile"}`))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(p)
+}

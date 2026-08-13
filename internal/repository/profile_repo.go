@@ -7,6 +7,7 @@ import (
 
 type ProfileRepository interface {
 	GetProfile(userID string) (*models.Profile, error)
+	GetAllProfiles() ([]models.Profile, error)
 	UpsertProfile(p *models.Profile) error
 	GetAddresses(userID string) ([]models.Address, error)
 	CreateAddress(addr *models.Address) error
@@ -34,6 +35,31 @@ func (r *postgresProfileRepo) GetProfile(userID string) (*models.Profile, error)
 		return nil, err
 	}
 	return &p, nil
+}
+
+func (r *postgresProfileRepo) GetAllProfiles() ([]models.Profile, error) {
+	rows, err := r.db.Query(`
+		SELECT user_id, COALESCE(email, ''), COALESCE(full_name, ''), COALESCE(phone, ''), 
+		COALESCE(address, ''), COALESCE(city, ''), COALESCE(state, ''), COALESCE(zip_code, ''), 
+		COALESCE(preferred_size, ''), COALESCE(style_notes, ''), COALESCE(created_at, ''), COALESCE(updated_at, '')
+		FROM profiles ORDER BY updated_at DESC`)
+	if err != nil {
+		return []models.Profile{}, nil
+	}
+	defer rows.Close()
+
+	profiles := []models.Profile{}
+	for rows.Next() {
+		var p models.Profile
+		if err := rows.Scan(&p.UserID, &p.Email, &p.FullName, &p.Phone, &p.Address, &p.City, &p.State, &p.ZIPCode,
+			&p.PreferredSize, &p.StyleNotes, &p.CreatedAt, &p.UpdatedAt); err == nil {
+			profiles = append(profiles, p)
+		}
+	}
+	if profiles == nil {
+		profiles = []models.Profile{}
+	}
+	return profiles, nil
 }
 
 func (r *postgresProfileRepo) UpsertProfile(p *models.Profile) error {

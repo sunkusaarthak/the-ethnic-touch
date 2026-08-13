@@ -24,6 +24,14 @@ func (m *mockProfileRepo) GetProfile(userID string) (*models.Profile, error) {
 	return nil, models.ErrNotFound
 }
 
+func (m *mockProfileRepo) GetAllProfiles() ([]models.Profile, error) {
+	var profiles []models.Profile
+	for _, p := range m.profiles {
+		profiles = append(profiles, *p)
+	}
+	return profiles, nil
+}
+
 func (m *mockProfileRepo) UpsertProfile(p *models.Profile) error {
 	m.profiles[p.UserID] = p
 	return nil

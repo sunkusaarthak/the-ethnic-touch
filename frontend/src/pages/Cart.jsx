@@ -88,11 +88,11 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                 href="#" 
                 onClick={handleBack} 
                 className="cart-back-link" 
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1rem', color: 'var(--color-text-light)', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '500' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1rem', color: 'var(--color-text-light)', textDecoration: 'none', fontSize: 'var(--font-size-sm)', fontWeight: '500' }}
             >
                 &larr; Back
             </a>
-            <h1 style={{marginBottom: '1rem', fontSize: '1.35rem', fontFamily: 'var(--font-heading)', color: 'var(--color-text)', fontWeight: '400'}}>
+            <h1 className="page-title">
                 Your Cart ({(cart || []).reduce((s, i) => s + (i.quantity || 1), 0)})
             </h1>
             
@@ -105,9 +105,9 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                             <path d="M16 10a4 4 0 0 1-8 0"></path>
                         </svg>
                     </div>
-                    <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', marginBottom: '0.4rem', color: 'var(--color-text)' }}>Your cart is empty</h2>
-                    <p style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '0.85rem' }}>Looks like you haven't added any handcrafted luxury to your cart yet.</p>
-                    <Link to="/shop" className="btn btn-primary" style={{ padding: '0.6rem 1.8rem', fontSize: '0.85rem', borderRadius: '50px' }}>Browse Collection</Link>
+                    <h2 className="section-title" style={{ marginBottom: '0.4rem' }}>Your cart is empty</h2>
+                    <p style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: 'var(--font-size-body)' }}>Looks like you haven't added any handcrafted luxury to your cart yet.</p>
+                    <Link to="/shop" className="btn btn-primary" style={{ padding: '0.6rem 1.8rem', fontSize: 'var(--font-size-sm)', borderRadius: '50px' }}>Browse Collection</Link>
                 </div>
             ) : (
                 <div className="desktop-split-layout cart-layout" style={{ gap: '1.25rem' }}>
@@ -130,72 +130,74 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                             <p style={{color:'var(--color-text-light)', fontSize:'0.75rem', margin: '0.15rem 0 0'}}>{item.description?.substring(0, 42)}...</p>
                                         </div>
                                         
-                                        {/* Quantity Selector */}
-                                        <div className="cart-quantity-selector" style={{display:'flex', alignItems:'center', gap:'0.25rem', border:'1px solid #e0e0e0', borderRadius:'6px', padding:'0.1rem 0.35rem', background:'#fbfbfb'}}>
-                                            <button 
-                                                onClick={() => updateQuantity && updateQuantity(idx, itemQty - 1)}
-                                                aria-label="Decrease quantity"
-                                                title="Decrease quantity"
-                                                style={{width:'22px', height:'22px', border:'none', background:'#eee', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'0.8rem', display:'flex', alignItems:'center', justifyContent:'center', color:'#333', transition:'all 0.2s ease'}}
-                                                onMouseOver={e => e.currentTarget.style.background='#e0e0e0'}
-                                                onMouseOut={e => e.currentTarget.style.background='#eee'}
-                                            >
-                                                -
-                                            </button>
-                                            <span style={{minWidth:'22px', textAlign:'center', fontWeight:'600', fontSize:'0.82rem', userSelect:'none'}}>
-                                                {itemQty}
-                                            </span>
-                                            <button 
-                                                onClick={() => updateQuantity && updateQuantity(idx, itemQty + 1)}
-                                                aria-label="Increase quantity"
-                                                title="Increase quantity"
-                                                style={{width:'22px', height:'22px', border:'none', background:'#eee', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'0.8rem', display:'flex', alignItems:'center', justifyContent:'center', color:'#333', transition:'all 0.2s ease'}}
-                                                onMouseOver={e => e.currentTarget.style.background='#e0e0e0'}
-                                                onMouseOut={e => e.currentTarget.style.background='#eee'}
-                                            >
-                                                +
-                                            </button>
-                                        </div>
-
-                                        {/* Price section */}
-                                        <div style={{textAlign:'right', minWidth:'85px'}}>
-                                            <div style={{fontWeight:'600', fontSize:'0.88rem', color:'var(--color-text)'}}>
-                                                ₹{itemTotal.toLocaleString('en-IN')}
+                                        <div style={{display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0, marginLeft: 'auto'}}>
+                                            {/* Quantity Selector */}
+                                            <div className="cart-quantity-selector" style={{display:'flex', alignItems:'center', gap:'0.25rem', border:'1px solid #e0e0e0', borderRadius:'6px', padding:'0.1rem 0.35rem', background:'#fbfbfb'}}>
+                                                <button 
+                                                    onClick={() => updateQuantity && updateQuantity(item.id, item.size, -1)}
+                                                    aria-label="Decrease quantity"
+                                                    title="Decrease quantity"
+                                                    style={{width:'22px', height:'22px', border:'none', background:'#eee', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'0.8rem', display:'flex', alignItems:'center', justifyContent:'center', color:'#333', transition:'all 0.2s ease'}}
+                                                    onMouseOver={e => e.currentTarget.style.background='#e0e0e0'}
+                                                    onMouseOut={e => e.currentTarget.style.background='#eee'}
+                                                >
+                                                    -
+                                                </button>
+                                                <span style={{minWidth:'22px', textAlign:'center', fontWeight:'600', fontSize:'0.82rem', userSelect:'none'}}>
+                                                    {itemQty}
+                                                </span>
+                                                <button 
+                                                    onClick={() => updateQuantity && updateQuantity(item.id, item.size, 1)}
+                                                    aria-label="Increase quantity"
+                                                    title="Increase quantity"
+                                                    style={{width:'22px', height:'22px', border:'none', background:'#eee', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'0.8rem', display:'flex', alignItems:'center', justifyContent:'center', color:'#333', transition:'all 0.2s ease'}}
+                                                    onMouseOver={e => e.currentTarget.style.background='#e0e0e0'}
+                                                    onMouseOut={e => e.currentTarget.style.background='#eee'}
+                                                >
+                                                    +
+                                                </button>
                                             </div>
-                                            {itemQty > 1 && (
-                                                <div style={{fontSize:'0.7rem', color:'#888', marginTop:'1px'}}>
-                                                    (₹{item.price.toLocaleString('en-IN')} each)
-                                                </div>
-                                            )}
-                                        </div>
 
-                                        {/* Delete button */}
-                                        <button 
-                                            onClick={() => removeFromCart && removeFromCart(idx)}
-                                            aria-label="Delete item from cart"
-                                            title="Remove item"
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                color: '#d9534f',
-                                                cursor: 'pointer',
-                                                padding: '0.25rem',
-                                                borderRadius: '4px',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                transition: 'all 0.2s ease'
-                                            }}
-                                            onMouseOver={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#c9302c'; }}
-                                            onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#d9534f'; }}
-                                        >
-                                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="3 6 5 6 21 6"></polyline>
-                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                                <line x1="10" y1="11" x2="10" y2="17"></line>
-                                                <line x1="14" y1="11" x2="14" y2="17"></line>
-                                            </svg>
-                                        </button>
+                                            {/* Price section */}
+                                            <div style={{textAlign:'right', minWidth:'85px'}}>
+                                                <div style={{fontWeight:'600', fontSize:'0.88rem', color:'var(--color-text)'}}>
+                                                    ₹{itemTotal.toLocaleString('en-IN')}
+                                                </div>
+                                                {itemQty > 1 && (
+                                                    <div style={{fontSize:'0.7rem', color:'#888', marginTop:'1px'}}>
+                                                        (₹{item.price.toLocaleString('en-IN')} each)
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Delete button */}
+                                            <button 
+                                                onClick={() => removeFromCart && removeFromCart(item.id, item.size)}
+                                                aria-label="Delete item from cart"
+                                                title="Remove item"
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: '#d9534f',
+                                                    cursor: 'pointer',
+                                                    padding: '0.25rem',
+                                                    borderRadius: '4px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                                onMouseOver={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#c9302c'; }}
+                                                onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#d9534f'; }}
+                                            >
+                                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })}

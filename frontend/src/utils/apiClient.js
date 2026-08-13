@@ -37,14 +37,20 @@ export async function fetchWithAuth(url, options = {}) {
 
         clearTimeout(timeoutId);
 
+        const contentType = response.headers.get('content-type') || '';
+
         if (!response.ok) {
-            let errorMsg = `HTTP Error ${response.status}`;
-            try {
-                const errData = await response.json();
-                if (errData && errData.error) {
-                    errorMsg = errData.error;
-                }
-            } catch (_) {}
+            let errorMsg = `Server error (${response.status})`;
+            if (contentType.includes('application/json')) {
+                try {
+                    const errData = await response.json();
+                    if (errData && (errData.error || errData.message)) {
+                        errorMsg = errData.error || errData.message;
+                    }
+                } catch (_) {}
+            } else {
+                errorMsg = `Unable to connect to API server (${response.status}).`;
+            }
             const error = new Error(errorMsg);
             error.status = response.status;
             throw error;
@@ -60,10 +66,26 @@ export async function fetchWithAuth(url, options = {}) {
     }
 }
 
+async function safeJsonParse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        return response.json();
+    }
+    const text = await response.text();
+    if (text.trim().startsWith('<')) {
+        throw new Error('Backend API server returned HTML instead of JSON. Is the backend server running?');
+    }
+    try {
+        return JSON.parse(text);
+    } catch (_) {
+        throw new Error('Invalid response format received from server.');
+    }
+}
+
 export const apiClient = {
     get: async (url, options = {}) => {
         const res = await fetchWithAuth(url, { ...options, method: 'GET' });
-        return res.json();
+        return safeJsonParse(res);
     },
     post: async (url, body, options = {}) => {
         const res = await fetchWithAuth(url, {
@@ -71,7 +93,7 @@ export const apiClient = {
             method: 'POST',
             body: JSON.stringify(body)
         });
-        return res.json();
+        return safeJsonParse(res);
     },
     put: async (url, body, options = {}) => {
         const res = await fetchWithAuth(url, {
@@ -79,7 +101,7 @@ export const apiClient = {
             method: 'PUT',
             body: JSON.stringify(body)
         });
-        return res.json();
+        return safeJsonParse(res);
     },
     patch: async (url, body, options = {}) => {
         const res = await fetchWithAuth(url, {
@@ -87,11 +109,11 @@ export const apiClient = {
             method: 'PATCH',
             body: JSON.stringify(body)
         });
-        return res.json();
+        return safeJsonParse(res);
     },
     delete: async (url, options = {}) => {
         const res = await fetchWithAuth(url, { ...options, method: 'DELETE' });
-        return res.json();
+        return safeJsonParse(res);
     }
 };
 

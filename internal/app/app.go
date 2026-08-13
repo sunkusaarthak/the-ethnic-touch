@@ -85,8 +85,15 @@ func (a *App) setupRoutes() {
 	// Coupons & Gifting
 	a.Router.HandleFunc("GET /api/gift-tiers", couponHandler.HandleGetGiftTiers)
 	a.Router.HandleFunc("POST /api/coupons/validate", rateLimiter.Limit(http.HandlerFunc(couponHandler.HandleValidateCoupon)).ServeHTTP)
-	a.Router.HandleFunc("GET /api/admin/coupons", middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/admin/coupons", middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
+	
+	// Admin API Endpoints
+	adminAuth := middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)
+	a.Router.HandleFunc("GET /api/admin/orders", adminAuth(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
+	a.Router.HandleFunc("GET /api/admin/profiles", adminAuth(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
+	a.Router.HandleFunc("POST /api/admin/profiles/edit", adminAuth(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
+	a.Router.HandleFunc("GET /api/admin/profiles/details", adminAuth(http.HandlerFunc(profileHandler.HandleAdminProfileDetails)).ServeHTTP)
+	a.Router.HandleFunc("GET /api/admin/coupons", adminAuth(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
+	a.Router.HandleFunc("POST /api/admin/coupons", adminAuth(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
 
 	// User Profiles & Addresses
 	a.Router.HandleFunc("GET /api/profile", profileHandler.HandleProfile)
@@ -127,16 +134,46 @@ func (a *App) setupRoutes() {
 		w.Write([]byte(`{"status":"` + status + `", "database":"` + dbStatus + `"}`))
 	})
 
-	// Static file server fallback for SPA
+	// Static file server fallback for SPA & Admin Portal
 	frontendDist := "./frontend/dist"
-	fs := http.FileServer(http.Dir(frontendDist))
+	frontendPublic := "./frontend/public"
+
+	fsDist := http.FileServer(http.Dir(frontendDist))
+	fsPublic := http.FileServer(http.Dir(frontendPublic))
+
 	a.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if _, err := os.Stat(frontendDist + path); os.IsNotExist(err) && path != "/" {
-			http.ServeFile(w, r, frontendDist+"/index.html")
+
+		// Direct match for /admin or /admin/
+		if path == "/admin" || path == "/admin/" {
+			adminFile := frontendPublic + "/admin/index.html"
+			if _, err := os.Stat(frontendDist + "/admin/index.html"); err == nil {
+				adminFile = frontendDist + "/admin/index.html"
+			}
+			http.ServeFile(w, r, adminFile)
 			return
 		}
-		fs.ServeHTTP(w, r)
+
+		// Check if file exists in frontend/dist
+		if _, err := os.Stat(frontendDist + path); err == nil && path != "/" {
+			fsDist.ServeHTTP(w, r)
+			return
+		}
+
+		// Check if file exists in frontend/public
+		if _, err := os.Stat(frontendPublic + path); err == nil && path != "/" {
+			fsPublic.ServeHTTP(w, r)
+			return
+		}
+
+		// Fallback for React SPA
+		if _, err := os.Stat(frontendDist + "/index.html"); err == nil {
+			http.ServeFile(w, r, frontendDist+"/index.html")
+		} else if _, err := os.Stat(frontendPublic + "/index.html"); err == nil {
+			http.ServeFile(w, r, frontendPublic+"/index.html")
+		} else {
+			http.NotFound(w, r)
+		}
 	})
 }
 

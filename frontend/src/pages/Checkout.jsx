@@ -335,11 +335,11 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                 href="#" 
                 onClick={handleBackClick} 
                 className="checkout-back-link" 
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1rem', color: 'var(--color-text-light)', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '500' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1rem', color: 'var(--color-text-light)', textDecoration: 'none', fontSize: 'var(--font-size-sm)', fontWeight: '500' }}
             >
                 &larr; Back
             </a>
-            <h1 style={{marginBottom: '1rem', fontSize: '1.35rem', fontFamily: 'var(--font-heading)', color: 'var(--color-text)', fontWeight: '400'}}>Checkout</h1>
+            <h1 className="page-title">Checkout</h1>
             
             <div className="desktop-split-layout checkout-layout" style={{ gap: '1.25rem' }}>
                 {/* Left Column: Delivery & Shipping Forms */}

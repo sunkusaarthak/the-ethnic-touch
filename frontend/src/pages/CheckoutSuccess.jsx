@@ -56,7 +56,7 @@ const CheckoutSuccess = () => {
     const isOffline = paymentMethod === 'offline_qr';
     
     // QR Code data: point to admin confirm pickup view
-    const qrUrl = window.location.origin + "/static/admin/index.html#pickup-scanner?orderId=" + orderId;
+    const qrUrl = window.location.origin + "/admin/index.html#pickup-scanner?orderId=" + orderId;
     const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=2c2c2c&data=${encodeURIComponent(qrUrl)}`;
 
     return (
