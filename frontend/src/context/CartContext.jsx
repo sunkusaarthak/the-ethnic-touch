@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import apiClient from '../utils/apiClient';
+import { fallbackProducts } from '../data/config';
 
 const CartContext = createContext({
     cart: [],
@@ -15,30 +16,85 @@ const CartContext = createContext({
     toastProduct: null
 });
 
+// Helper to ensure cart items always have an image and price
+const enrichCartItem = (item) => {
+    if (!item) return item;
+    const found = fallbackProducts.find(p => p.id === String(item.id));
+    return {
+        ...item,
+        id: String(item.id),
+        imageUrl: item.imageUrl || item.image_url || (found ? found.imageUrl : './images/kurthi_peach.png'),
+        description: item.description || (found ? found.description : ''),
+        price: item.price || (found ? found.price : 9999)
+    };
+};
+
 export const CartProvider = ({ children }) => {
     const { authUser, authLoading } = useAuth();
 
+    // Recover initial cart state safely from localStorage
     const [cart, setCart] = useState(() => {
         try {
-            const local = localStorage.getItem('tet_guest_cart');
-            return local ? JSON.parse(local) : [];
+            const active = localStorage.getItem('tet_cart_active');
+            if (active) {
+                const parsed = JSON.parse(active);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(enrichCartItem);
+            }
+            const guest = localStorage.getItem('tet_guest_cart');
+            if (guest) {
+                const parsed = JSON.parse(guest);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(enrichCartItem);
+            }
         } catch (e) {
-            return [];
+            console.error("[CartContext] Local storage parse error:", e);
         }
+        return [];
     });
 
     const [wishlist, setWishlist] = useState(() => {
         try {
-            const local = localStorage.getItem('tet_guest_wishlist');
-            return local ? JSON.parse(local) : [];
+            const active = localStorage.getItem('tet_wishlist_active');
+            if (active) {
+                const parsed = JSON.parse(active);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+            const guest = localStorage.getItem('tet_guest_wishlist');
+            if (guest) {
+                const parsed = JSON.parse(guest);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
         } catch (e) {
-            return [];
+            console.error("[CartContext] Wishlist local storage parse error:", e);
         }
+        return [];
     });
 
     const [discount, setDiscount] = useState(null);
     const [toastProduct, setToastProduct] = useState(null);
     const toastTimerRef = useRef(null);
+
+    // Save cart & wishlist state to localStorage on EVERY change so refreshes NEVER lose data
+    useEffect(() => {
+        try {
+            if (cart && cart.length > 0) {
+                localStorage.setItem('tet_cart_active', JSON.stringify(cart));
+                localStorage.setItem('tet_guest_cart', JSON.stringify(cart));
+            }
+        } catch (e) {
+            console.error("[CartContext] Local storage write error:", e);
+        }
+    }, [cart]);
+
+    useEffect(() => {
+        try {
+            if (wishlist && wishlist.length > 0) {
+                localStorage.setItem('tet_wishlist_active', JSON.stringify(wishlist));
+                localStorage.setItem('tet_guest_wishlist', JSON.stringify(wishlist));
+            }
+        } catch (e) {
+            console.error("[CartContext] Wishlist storage write error:", e);
+        }
+    }, [wishlist]);
 
     // Synchronize guest items and load account data upon login
     useEffect(() => {
@@ -46,57 +102,45 @@ export const CartProvider = ({ children }) => {
 
         const syncUserData = async () => {
             if (authUser) {
-                // Merge guest wishlist
-                const localW = localStorage.getItem('tet_guest_wishlist');
-                if (localW) {
-                    try {
-                        const parsed = JSON.parse(localW);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            const ids = parsed.map(p => p.id);
-                            await apiClient.post('/api/wishlist/merge', { productIds: ids });
-                        }
-                    } catch (e) {
-                        console.error("[CartContext] Wishlist merge error:", e);
-                    } finally {
-                        localStorage.removeItem('tet_guest_wishlist');
-                    }
-                }
-
                 // Fetch account wishlist
                 try {
                     const items = await apiClient.get('/api/wishlist');
-                    if (isMounted && Array.isArray(items)) {
-                        setWishlist(items);
+                    if (isMounted && Array.isArray(items) && items.length > 0) {
+                        setWishlist(prev => {
+                            const merged = new Map();
+                            prev.forEach(p => merged.set(String(p.id), p));
+                            items.forEach(p => merged.set(String(p.id), p));
+                            return Array.from(merged.values());
+                        });
                     }
                 } catch (e) {
                     console.error("[CartContext] Fetch wishlist error:", e);
-                }
-
-                // Merge guest cart
-                const localC = localStorage.getItem('tet_guest_cart');
-                if (localC) {
-                    try {
-                        const parsed = JSON.parse(localC);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            await apiClient.post('/api/cart/merge', {
-                                items: parsed.map(item => ({
-                                    productId: item.id,
-                                    quantity: item.quantity || 1,
-                                    size: item.size || ''
-                                }))
-                            });
-                            localStorage.removeItem('tet_guest_cart');
-                        }
-                    } catch (e) {
-                        console.error("[CartContext] Cart merge error:", e);
-                    }
                 }
 
                 // Fetch account cart
                 try {
                     const items = await apiClient.get('/api/cart');
                     if (isMounted && Array.isArray(items) && items.length > 0) {
-                        setCart(items);
+                        const enrichedItems = items.map(enrichCartItem);
+                        setCart(prev => {
+                            const merged = new Map();
+                            // Keep all existing local items
+                            (prev || []).forEach(it => {
+                                const key = `${it.id}_${it.size || ''}`;
+                                merged.set(key, enrichCartItem(it));
+                            });
+                            // Merge backend items
+                            enrichedItems.forEach(it => {
+                                const key = `${it.id}_${it.size || ''}`;
+                                merged.set(key, it);
+                            });
+                            const result = Array.from(merged.values());
+                            try {
+                                localStorage.setItem('tet_cart_active', JSON.stringify(result));
+                                localStorage.setItem('tet_guest_cart', JSON.stringify(result));
+                            } catch (err) {}
+                            return result;
+                        });
                     }
                 } catch (e) {
                     console.error("[CartContext] Fetch cart error:", e);
@@ -113,19 +157,6 @@ export const CartProvider = ({ children }) => {
         };
     }, [authUser, authLoading]);
 
-    // Local storage sync for guest state
-    useEffect(() => {
-        if (cart && cart.length > 0) {
-            localStorage.setItem('tet_guest_cart', JSON.stringify(cart));
-        }
-    }, [cart]);
-
-    useEffect(() => {
-        if (wishlist && wishlist.length > 0) {
-            localStorage.setItem('tet_guest_wishlist', JSON.stringify(wishlist));
-        }
-    }, [wishlist]);
-
     // Cleanup toast timer on unmount
     useEffect(() => {
         return () => {
@@ -136,11 +167,13 @@ export const CartProvider = ({ children }) => {
     }, []);
 
     const addToCart = useCallback((product) => {
-        const prodQty = product.quantity || 1;
-        const targetSize = product.size || '';
+        if (!product || !product.id) return;
+        const enriched = enrichCartItem(product);
+        const prodQty = enriched.quantity || 1;
+        const targetSize = enriched.size || '';
 
         setCart(prev => {
-            const existingIndex = prev.findIndex(item => item.id === product.id && (item.size || '') === targetSize);
+            const existingIndex = prev.findIndex(item => String(item.id) === String(enriched.id) && (item.size || '') === targetSize);
             let updated;
             let calcQty = prodQty;
 
@@ -153,18 +186,21 @@ export const CartProvider = ({ children }) => {
                     quantity: calcQty
                 };
             } else {
-                updated = [...prev, { ...product, quantity: prodQty }];
+                updated = [...prev, { ...enriched, quantity: prodQty, size: targetSize }];
             }
 
-            // Sync with backend async (outside state updater block)
+            try {
+                localStorage.setItem('tet_cart_active', JSON.stringify(updated));
+                localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+            } catch (e) {}
+
+            // Sync with backend async
             if (authUser) {
                 apiClient.post('/api/cart', {
-                    productId: product.id,
+                    productId: enriched.id,
                     quantity: calcQty,
                     size: targetSize
                 }).catch(e => console.error("[CartContext] DB cart add error:", e));
-            } else {
-                localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
             }
 
             return updated;
@@ -174,46 +210,105 @@ export const CartProvider = ({ children }) => {
         if (toastTimerRef.current) {
             clearTimeout(toastTimerRef.current);
         }
-        setToastProduct(product);
+        setToastProduct(enriched);
         toastTimerRef.current = setTimeout(() => {
             setToastProduct(null);
         }, 5500);
     }, [authUser]);
 
-    const updateQuantity = useCallback((id, size, delta) => {
+    // Flexible updateQuantity: handles (index, newQty) OR (id, size, delta)
+    const updateQuantity = useCallback((idOrIndex, sizeOrQty, newQtyOrDelta) => {
         setCart(prev => {
-            const updated = prev.map(item => {
-                if (item.id === id && (item.size || '') === (size || '')) {
-                    const newQty = (item.quantity || 1) + delta;
-                    return newQty > 0 ? { ...item, quantity: newQty } : null;
-                }
-                return item;
-            }).filter(Boolean);
+            let updated = [...prev];
 
-            const targetItem = updated.find(item => item.id === id && (item.size || '') === (size || ''));
-            if (authUser && targetItem) {
-                apiClient.post('/api/cart', {
-                    productId: id,
-                    quantity: targetItem.quantity,
-                    size: size || ''
-                }).catch(e => console.error("[CartContext] DB cart update error:", e));
-            } else if (!authUser) {
-                localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+            if (typeof idOrIndex === 'number' && idOrIndex >= 0 && idOrIndex < prev.length && typeof sizeOrQty === 'number') {
+                // Index-based update from Cart.jsx (index, newQty)
+                const targetIdx = idOrIndex;
+                const newQty = sizeOrQty;
+                const itemToUpdate = updated[targetIdx];
+
+                if (newQty <= 0) {
+                    updated = prev.filter((_, idx) => idx !== targetIdx);
+                    if (authUser && itemToUpdate) {
+                        apiClient.delete(`/api/cart?productId=${itemToUpdate.id}&size=${itemToUpdate.size || ''}`)
+                            .catch(e => console.error("[CartContext] DB cart delete error:", e));
+                    }
+                } else {
+                    updated[targetIdx] = { ...itemToUpdate, quantity: newQty };
+                    if (authUser && itemToUpdate) {
+                        apiClient.post('/api/cart', {
+                            productId: itemToUpdate.id,
+                            quantity: newQty,
+                            size: itemToUpdate.size || ''
+                        }).catch(e => console.error("[CartContext] DB cart update error:", e));
+                    }
+                }
+            } else {
+                // ID and Size based update (id, size, delta)
+                const id = String(idOrIndex);
+                const size = typeof sizeOrQty === 'string' ? sizeOrQty : '';
+                const val = newQtyOrDelta;
+
+                updated = prev.map(item => {
+                    if (String(item.id) === id && (item.size || '') === (size || '')) {
+                        const currentQty = item.quantity || 1;
+                        const nextQty = typeof val === 'number' ? (val <= 5 && val >= -5 ? currentQty + val : val) : currentQty;
+                        return nextQty > 0 ? { ...item, quantity: nextQty } : null;
+                    }
+                    return item;
+                }).filter(Boolean);
+
+                const targetItem = updated.find(item => String(item.id) === id && (item.size || '') === (size || ''));
+                if (authUser && targetItem) {
+                    apiClient.post('/api/cart', {
+                        productId: id,
+                        quantity: targetItem.quantity,
+                        size: size || ''
+                    }).catch(e => console.error("[CartContext] DB cart update error:", e));
+                }
             }
+
+            try {
+                localStorage.setItem('tet_cart_active', JSON.stringify(updated));
+                localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+            } catch (e) {}
 
             return updated;
         });
     }, [authUser]);
 
-    const removeFromCart = useCallback((id, size) => {
+    // Flexible removeFromCart: handles index, item object, OR (id, size)
+    const removeFromCart = useCallback((idOrIndexOrItem, size) => {
         setCart(prev => {
-            const updated = prev.filter(item => !(item.id === id && (item.size || '') === (size || '')));
-            if (authUser) {
-                apiClient.delete(`/api/cart?productId=${id}&size=${size || ''}`)
-                    .catch(e => console.error("[CartContext] DB cart delete error:", e));
+            let updated = [];
+            let itemToRemove = null;
+
+            if (typeof idOrIndexOrItem === 'number') {
+                // Index-based removal from Cart.jsx
+                itemToRemove = prev[idOrIndexOrItem];
+                updated = prev.filter((_, idx) => idx !== idOrIndexOrItem);
+            } else if (typeof idOrIndexOrItem === 'object' && idOrIndexOrItem !== null) {
+                // Item Object based removal
+                itemToRemove = idOrIndexOrItem;
+                updated = prev.filter(item => !(String(item.id) === String(itemToRemove.id) && (item.size || '') === (itemToRemove.size || '')));
             } else {
-                localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+                // ID & Size based removal
+                const targetId = String(idOrIndexOrItem);
+                const targetSize = size || '';
+                itemToRemove = prev.find(item => String(item.id) === targetId && (item.size || '') === targetSize);
+                updated = prev.filter(item => !(String(item.id) === targetId && (item.size || '') === targetSize));
             }
+
+            if (authUser && itemToRemove) {
+                apiClient.delete(`/api/cart?productId=${itemToRemove.id}&size=${itemToRemove.size || ''}`)
+                    .catch(e => console.error("[CartContext] DB cart delete error:", e));
+            }
+
+            try {
+                localStorage.setItem('tet_cart_active', JSON.stringify(updated));
+                localStorage.setItem('tet_guest_cart', JSON.stringify(updated));
+            } catch (e) {}
+
             return updated;
         });
     }, [authUser]);
@@ -221,18 +316,25 @@ export const CartProvider = ({ children }) => {
     const clearCart = useCallback(() => {
         setCart([]);
         setDiscount(null);
+        localStorage.removeItem('tet_cart_active');
         localStorage.removeItem('tet_guest_cart');
         if (authUser) {
             apiClient.delete('/api/cart').catch(e => console.error("[CartContext] Clear cart error:", e));
         }
     }, [authUser]);
 
-    const toggleWishlist = useCallback(async (product) => {
+    const toggleWishlist = useCallback((product) => {
+        if (!product || !product.id) return;
         setWishlist(prev => {
-            const isWished = prev.some(item => item.id === product.id);
+            const isWished = prev.some(item => String(item.id) === String(product.id));
             const updated = isWished
-                ? prev.filter(item => item.id !== product.id)
+                ? prev.filter(item => String(item.id) !== String(product.id))
                 : [...prev, product];
+
+            try {
+                localStorage.setItem('tet_wishlist_active', JSON.stringify(updated));
+                localStorage.setItem('tet_guest_wishlist', JSON.stringify(updated));
+            } catch (e) {}
 
             if (authUser) {
                 if (isWished) {
@@ -242,8 +344,6 @@ export const CartProvider = ({ children }) => {
                     apiClient.post('/api/wishlist', { productId: product.id })
                         .catch(e => console.error("[CartContext] DB wishlist add error:", e));
                 }
-            } else {
-                localStorage.setItem('tet_guest_wishlist', JSON.stringify(updated));
             }
 
             return updated;

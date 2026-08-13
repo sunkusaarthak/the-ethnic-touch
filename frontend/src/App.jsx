@@ -11,6 +11,7 @@ import CheckoutSuccess from './pages/CheckoutSuccess';
 import Home from './pages/Home';
 import ProductDetails from './pages/ProductDetails';
 import ProfilePage from './pages/ProfilePage';
+import CompleteProfile from './pages/CompleteProfile';
 import Shop from './pages/Shop';
 import WishlistPage from './pages/WishlistPage';
 import { fallbackProducts, API_BASE_URL } from './data/config';
@@ -116,13 +117,14 @@ const AppRoutesContent = () => {
                 />
 
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} wishlist={wishlist} toggleWishlist={toggleWishlist} authUser={authUser} />} />
-                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} />} />
+                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} wishlist={wishlist} toggleWishlist={toggleWishlist} />} />
                 <Route 
                     path="/checkout" 
                     element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} authLoading={authLoading} />} 
                 />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
                 <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
+                <Route path="/complete-profile" element={<CompleteProfile authUser={authUser} />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route 
                     path="/wishlist" 

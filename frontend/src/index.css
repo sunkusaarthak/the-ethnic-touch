@@ -616,6 +616,11 @@ textarea {
     }
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .auth-animated-word {
     display: inline-block;
     color: #8F5E36;

@@ -100,6 +100,8 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                     setSelectedAddressID(def.id);
                 } else if (data.length > 0) {
                     setSelectedAddressID(data[0].id);
+                } else {
+                    setShowNewAddressForm(true);
                 }
             }
         } catch (err) {
@@ -171,7 +173,8 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
             };
         } else {
             if (!activeAddr) {
-                return showAlert('Please select or add a shipping address before paying.', 'Address Required', 'warning');
+                setShowNewAddressForm(true);
+                return showAlert('Please enter your delivery address below to proceed with your order.', 'Address Required', 'warning');
             }
             if (checkoutType === 'hyderabad_instant') {
                 const city = (activeAddr.city || '').trim().toLowerCase();
