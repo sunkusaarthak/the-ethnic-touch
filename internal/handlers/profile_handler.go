@@ -40,7 +40,7 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(profile)
-	} else if r.Method == http.MethodPost || r.Method == http.MethodPut {
+	} else if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var p models.Profile
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
@@ -50,6 +50,12 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 		p.UserID = userID
 
 		if err := h.svc.UpsertProfile(&p); err != nil {
+			if err == models.ErrEmailAlreadyRegistered || 
+			   err == models.ErrMobileAlreadyRegistered || 
+			   err == models.ErrIdentityConflict {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

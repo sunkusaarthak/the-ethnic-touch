@@ -94,6 +94,7 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("GET /api/profile/me", profileHandler.HandleProfile)
 	a.Router.HandleFunc("POST /api/profile/me", profileHandler.HandleProfile)
 	a.Router.HandleFunc("PUT /api/profile/me", profileHandler.HandleProfile)
+	a.Router.HandleFunc("PATCH /api/profile/me", profileHandler.HandleProfile)
 
 	a.Router.HandleFunc("GET /api/addresses", profileHandler.HandleAddresses)
 	a.Router.HandleFunc("POST /api/addresses", profileHandler.HandleAddresses)

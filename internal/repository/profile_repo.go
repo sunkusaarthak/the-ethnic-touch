@@ -37,7 +37,48 @@ func (r *postgresProfileRepo) GetProfile(userID string) (*models.Profile, error)
 }
 
 func (r *postgresProfileRepo) UpsertProfile(p *models.Profile) error {
-	_, err := r.db.Exec(`
+	// Identity Validation
+	var existingEmailUserID, existingPhoneUserID sql.NullString
+	
+	rows, err := r.db.Query(`
+		SELECT user_id, email, phone FROM profiles 
+		WHERE (email = $1 AND email != '') OR (phone = $2 AND phone != '')`, p.Email, p.Phone)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var uid, email, phone string
+		if err := rows.Scan(&uid, &email, &phone); err != nil {
+			return err
+		}
+		if uid != p.UserID {
+			if email == p.Email {
+				existingEmailUserID.String = uid
+				existingEmailUserID.Valid = true
+			}
+			if phone == p.Phone {
+				existingPhoneUserID.String = uid
+				existingPhoneUserID.Valid = true
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if existingEmailUserID.Valid && existingPhoneUserID.Valid && existingEmailUserID.String != existingPhoneUserID.String {
+		return models.ErrIdentityConflict
+	}
+	if existingEmailUserID.Valid {
+		return models.ErrEmailAlreadyRegistered
+	}
+	if existingPhoneUserID.Valid {
+		return models.ErrMobileAlreadyRegistered
+	}
+
+	_, err = r.db.Exec(`
 		INSERT INTO profiles (user_id, email, full_name, phone, address, city, state, zip_code, preferred_size, style_notes, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (user_id) DO UPDATE SET

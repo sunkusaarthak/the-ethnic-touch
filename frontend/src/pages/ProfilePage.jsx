@@ -37,25 +37,30 @@ const ProfilePage = ({ authUser }) => {
     const [isEditing, setIsEditing] = useState(false);
 
     const validateProfileForm = (cleaned) => {
-        if (!cleaned.fullName || !cleaned.phone || !cleaned.address || !cleaned.city || !cleaned.state || !cleaned.zipCode) {
-            return 'Please complete the required fields.';
+        if (!cleaned.fullName) {
+            return 'Please enter your full name.';
         }
         if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(cleaned.fullName)) {
             return 'Please enter a valid full name.';
         }
+        if (!cleaned.phone) {
+            return 'Please enter your phone number.';
+        }
         if (!/^\+?[0-9()\-\s]{8,15}$/.test(cleaned.phone)) {
             return 'Please enter a valid phone number.';
         }
-        if (cleaned.address.length < 5) {
-            return 'Please enter a complete address.';
+        if (cleaned.address || cleaned.city || cleaned.state || cleaned.zipCode) {
+            if (!cleaned.address || cleaned.address.length < 3) {
+                return 'Please enter a complete address.';
+            }
+            if (!cleaned.city || cleaned.city.length < 2 || !cleaned.state || cleaned.state.length < 2) {
+                return 'Please enter a valid city and state.';
+            }
+            if (!cleaned.zipCode || !/^[A-Za-z0-9\-\s]{3,12}$/.test(cleaned.zipCode)) {
+                return 'Please enter a valid ZIP or postal code.';
+            }
         }
-        if (cleaned.city.length < 2 || cleaned.state.length < 2) {
-            return 'Please enter a valid city and state.';
-        }
-        if (!/^[A-Za-z0-9\-\s]{3,12}$/.test(cleaned.zipCode)) {
-            return 'Please enter a valid ZIP or postal code.';
-        }
-        if (cleaned.styleNotes.length > 500) {
+        if (cleaned.styleNotes && cleaned.styleNotes.length > 500) {
             return 'Style notes must be 500 characters or fewer.';
         }
         return '';
@@ -64,9 +69,21 @@ const ProfilePage = ({ authUser }) => {
     const loadAddresses = async () => {
         if (!authUser) return;
         try {
-            const data = await apiClient.get('/api/profile/addresses');
+            const data = await apiClient.get('/api/profile/addresses', { headers: { 'X-User-Id': authUser.uid } });
             if (Array.isArray(data)) {
                 setAddresses(data);
+                if (data.length > 0) {
+                    const def = data.find(a => a.isDefault) || data[0];
+                    setForm(prev => ({
+                        ...prev,
+                        fullName: prev.fullName || def.fullName || '',
+                        phone: prev.phone || def.phone || '',
+                        address: prev.address || def.addressLine || '',
+                        city: prev.city || def.city || '',
+                        state: prev.state || def.state || '',
+                        zipCode: prev.zipCode || def.zipCode || ''
+                    }));
+                }
             }
         } catch (err) {
             console.error("[ProfilePage] loadAddresses error:", err);
@@ -76,12 +93,12 @@ const ProfilePage = ({ authUser }) => {
     const loadOrdersAndCoupons = async () => {
         if (!authUser) return;
         try {
-            const data = await apiClient.get('/api/profile/orders');
+            const data = await apiClient.get('/api/profile/orders', { headers: { 'X-User-Id': authUser.uid } });
             if (Array.isArray(data)) {
                 setOrders(data);
             }
             
-            const cData = await apiClient.get('/api/profile/coupons');
+            const cData = await apiClient.get('/api/profile/coupons', { headers: { 'X-User-Id': authUser.uid } });
             if (Array.isArray(cData)) {
                 setCoupons(cData);
             }
@@ -94,36 +111,20 @@ const ProfilePage = ({ authUser }) => {
         e.preventDefault();
         setAddressMessage('');
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': authUser.uid
-                },
-                body: JSON.stringify(addressForm)
-            });
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || 'Failed to save address');
-            }
+            await apiClient.post('/api/profile/addresses', addressForm, { headers: { 'X-User-Id': authUser.uid } });
             setAddressForm({ id: 0, fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
             setShowAddressForm(false);
             loadAddresses();
         } catch (err) {
-            setAddressMessage(err.message);
+            setAddressMessage(err.message || 'Failed to save address');
         }
     };
 
     const handleDeleteAddress = async (id) => {
         if (!confirm('Are you sure you want to delete this address?')) return;
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses?id=${id}`, {
-                method: 'DELETE',
-                headers: { 'X-User-Id': authUser.uid }
-            });
-            if (response.ok) {
-                loadAddresses();
-            }
+            await apiClient.delete(`/api/profile/addresses?id=${id}`, { headers: { 'X-User-Id': authUser.uid } });
+            loadAddresses();
         } catch (err) {
             console.error(err);
         }
@@ -131,55 +132,11 @@ const ProfilePage = ({ authUser }) => {
 
     const handleSetDefaultAddress = async (id) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses?id=${id}`, {
-                method: 'PATCH',
-                headers: { 'X-User-Id': authUser.uid }
-            });
-            if (response.ok) {
-                loadAddresses();
-                // Also reload profile details since primary profile address is bidirectionally synced
-                const profileRes = await fetch(`${API_BASE_URL}/api/profile/me`, {
-                    headers: { 'X-User-Id': authUser.uid }
-                });
-                if (profileRes.ok) {
-                    const profile = await profileRes.json();
-                    setForm({
-                        fullName: profile.fullName || '',
-                        email: profile.email || authUser.email || '',
-                        phone: profile.phone || '',
-                        address: profile.address || '',
-                        city: profile.city || '',
-                        state: profile.state || '',
-                        zipCode: profile.zipCode || '',
-                        preferredSize: profile.preferredSize || '',
-                        styleNotes: profile.styleNotes || ''
-                    });
-                }
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    useEffect(() => {
-        if (!authUser) return;
-
-        const loadProfile = async () => {
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/profile/me`, {
-                    headers: { 'X-User-Id': authUser.uid }
-                });
-                if (response.status === 404) {
-                    setMode('create');
-                    setForm(f => ({ ...f, email: authUser.email || '' }));
-                    setIsEditing(true);
-                    setLoading(false);
-                    return;
-                }
-                if (!response.ok) {
-                    throw new Error('Unable to load profile');
-                }
-                const profile = await response.json();
+            await apiClient.patch(`/api/profile/addresses?id=${id}`, {}, { headers: { 'X-User-Id': authUser.uid } });
+            loadAddresses();
+            // Also reload profile details since primary profile address is bidirectionally synced
+            const profile = await apiClient.get('/api/profile/me', { headers: { 'X-User-Id': authUser.uid } });
+            if (profile) {
                 setForm({
                     fullName: profile.fullName || '',
                     email: profile.email || authUser.email || '',
@@ -191,10 +148,89 @@ const ProfilePage = ({ authUser }) => {
                     preferredSize: profile.preferredSize || '',
                     styleNotes: profile.styleNotes || ''
                 });
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        if (!authUser) return;
+
+        const loadProfile = async () => {
+            // Pre-fill fallback details from authUser and local storage
+            let initial = {
+                fullName: authUser.displayName || '',
+                email: authUser.email || '',
+                phone: authUser.phoneNumber ? authUser.phoneNumber.replace(/^\+91/, '') : '',
+                address: '',
+                city: '',
+                state: '',
+                zipCode: '',
+                preferredSize: '',
+                styleNotes: ''
+            };
+
+            try {
+                const cached = localStorage.getItem(`tet_profile_${authUser.uid}`) || localStorage.getItem('tet_user_profile');
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (parsed && typeof parsed === 'object') {
+                        initial = {
+                            fullName: parsed.fullName || initial.fullName,
+                            email: parsed.email || initial.email,
+                            phone: parsed.phone || initial.phone,
+                            address: parsed.address || parsed.addressLine || initial.address,
+                            city: parsed.city || initial.city,
+                            state: parsed.state || initial.state,
+                            zipCode: parsed.zipCode || initial.zipCode,
+                            preferredSize: parsed.preferredSize || initial.preferredSize,
+                            styleNotes: parsed.styleNotes || initial.styleNotes
+                        };
+                    }
+                }
+            } catch (e) {}
+
+            let activeForm = { ...initial };
+            let hasData = Boolean(activeForm.fullName || activeForm.email || activeForm.phone || activeForm.address);
+
+            setForm(activeForm);
+            if (hasData) {
                 setMode('edit');
                 setIsEditing(false);
+            }
+
+            try {
+                const profile = await apiClient.get('/api/profile/me', { headers: { 'X-User-Id': authUser.uid } });
+                if (profile) {
+                    const updated = {
+                        fullName: profile.fullName || activeForm.fullName,
+                        email: profile.email || activeForm.email,
+                        phone: profile.phone || activeForm.phone,
+                        address: profile.address || activeForm.address,
+                        city: profile.city || activeForm.city,
+                        state: profile.state || activeForm.state,
+                        zipCode: profile.zipCode || activeForm.zipCode,
+                        preferredSize: profile.preferredSize || activeForm.preferredSize,
+                        styleNotes: profile.styleNotes || activeForm.styleNotes
+                    };
+                    setForm(updated);
+                    localStorage.setItem(`tet_profile_${authUser.uid}`, JSON.stringify(updated));
+                    setMode('edit');
+                    setIsEditing(false);
+                }
             } catch (error) {
-                setMessage({ type: 'error', text: 'We could not load your profile right now.' });
+                if (error.status === 404) {
+                    if (hasData) {
+                        setMode('edit');
+                        setIsEditing(false);
+                    } else {
+                        setMode('create');
+                        setIsEditing(true);
+                    }
+                } else {
+                    console.error("[ProfilePage] Load profile error:", error);
+                }
             } finally {
                 setLoading(false);
             }
@@ -241,32 +277,37 @@ const ProfilePage = ({ authUser }) => {
         setMessage({ type: '', text: '' });
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/me`, {
-                method: mode === 'create' ? 'POST' : 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': authUser.uid
-                },
-                body: JSON.stringify(cleaned)
-            });
+            const profile = await apiClient.post('/api/profile/me', cleaned);
 
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || 'Unable to save profile');
+            if (cleaned.address && cleaned.city && cleaned.state && cleaned.zipCode) {
+                try {
+                    await apiClient.post('/api/profile/addresses', {
+                        fullName: cleaned.fullName,
+                        phone: cleaned.phone,
+                        addressLine: cleaned.address,
+                        city: cleaned.city,
+                        state: cleaned.state,
+                        zipCode: cleaned.zipCode,
+                        isDefault: true
+                    });
+                } catch (addrErr) {
+                    console.warn("[ProfilePage] Address sync notice:", addrErr);
+                }
             }
 
-            const profile = await response.json();
-            setForm({
-                fullName: profile.fullName || '',
-                email: profile.email || authUser.email || '',
-                phone: profile.phone || '',
-                address: profile.address || '',
-                city: profile.city || '',
-                state: profile.state || '',
-                zipCode: profile.zipCode || '',
-                preferredSize: profile.preferredSize || '',
-                styleNotes: profile.styleNotes || ''
-            });
+            const updated = {
+                fullName: profile.fullName || cleaned.fullName,
+                email: profile.email || cleaned.email,
+                phone: profile.phone || cleaned.phone,
+                address: profile.address || cleaned.address,
+                city: profile.city || cleaned.city,
+                state: profile.state || cleaned.state,
+                zipCode: profile.zipCode || cleaned.zipCode,
+                preferredSize: profile.preferredSize || cleaned.preferredSize,
+                styleNotes: profile.styleNotes || cleaned.styleNotes
+            };
+            setForm(updated);
+            localStorage.setItem(`tet_profile_${authUser.uid}`, JSON.stringify(updated));
             setMode('edit');
             setIsEditing(false);
             setSuccessVisible(true);
@@ -612,10 +653,9 @@ const ProfilePage = ({ authUser }) => {
                                         />
                                     </div>
                                     <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Shipping Address Line *</label>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>Shipping Address Line (Optional)</label>
                                         <input 
                                             type="text" 
-                                            required 
                                             placeholder="Apartment, Street Address"
                                             value={form.address}
                                             onChange={e => setForm({ ...form, address: e.target.value })}
@@ -623,10 +663,9 @@ const ProfilePage = ({ authUser }) => {
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>City *</label>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>City (Optional)</label>
                                         <input 
                                             type="text" 
-                                            required 
                                             placeholder="City Name"
                                             value={form.city}
                                             onChange={e => setForm({ ...form, city: e.target.value })}
@@ -634,10 +673,9 @@ const ProfilePage = ({ authUser }) => {
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>State *</label>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>State (Optional)</label>
                                         <input 
                                             type="text" 
-                                            required 
                                             placeholder="State Name"
                                             value={form.state}
                                             onChange={e => setForm({ ...form, state: e.target.value })}
@@ -645,10 +683,9 @@ const ProfilePage = ({ authUser }) => {
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>ZIP / Postal Code *</label>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem', color: '#555' }}>ZIP / Postal Code (Optional)</label>
                                         <input 
                                             type="text" 
-                                            required 
                                             placeholder="6-digit PIN code"
                                             value={form.zipCode}
                                             onChange={e => setForm({ ...form, zipCode: e.target.value })}

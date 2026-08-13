@@ -93,7 +93,7 @@ const AuthRequiredModal = ({ isOpen, onClose, redirectPath = '/checkout' }) => {
                     color: '#2D2A26',
                     margin: '0 0 0.6rem'
                 }}>
-                    Sign In or Sign Up Required
+                    Sign In Required
                 </h3>
 
                 <p style={{
@@ -102,7 +102,7 @@ const AuthRequiredModal = ({ isOpen, onClose, redirectPath = '/checkout' }) => {
                     lineHeight: '1.6',
                     margin: '0 0 1.75rem'
                 }}>
-                    Please sign in to your account or create a new one to complete your purchase. You'll be returned directly to <strong>Checkout</strong> right after!
+                    Please sign in using your Phone Number or Google to complete your purchase. You'll be returned directly to <strong>Checkout</strong> right after!
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
@@ -122,7 +122,7 @@ const AuthRequiredModal = ({ isOpen, onClose, redirectPath = '/checkout' }) => {
                             transition: 'all 0.25s ease'
                         }}
                     >
-                        Sign In / Create Account &rarr;
+                        Proceed to Sign In &rarr;
                     </button>
 
                     <button 
