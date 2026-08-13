@@ -12,6 +12,7 @@ type Profile struct {
 	ZIPCode       string `json:"zipCode"`
 	PreferredSize string `json:"preferredSize,omitempty"`
 	StyleNotes    string `json:"styleNotes,omitempty"`
+	SpinCount     int    `json:"spinCount"`
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 }

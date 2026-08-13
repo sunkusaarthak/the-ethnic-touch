@@ -206,6 +206,7 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                             </svg>
                                         </button>
                                     </div>
+                                </div>
                                 );
                             })}
                         </div>

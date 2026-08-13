@@ -75,6 +75,13 @@ func (m *mockProfileRepo) DeleteAddress(userID string, addressID int) error {
 	return nil
 }
 
+func (m *mockProfileRepo) IncrementSpinCount(userID string) error {
+	if p, ok := m.profiles[userID]; ok {
+		p.SpinCount++
+	}
+	return nil
+}
+
 func TestProfileService_SingleDefaultAddressInvariant(t *testing.T) {
 	repo := newMockProfileRepo()
 	svc := NewProfileService(repo)

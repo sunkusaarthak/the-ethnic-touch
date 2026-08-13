@@ -102,6 +102,7 @@ func runMigrations(db *sql.DB) error {
 			zip_code TEXT NOT NULL,
 			preferred_size TEXT,
 			style_notes TEXT,
+			spin_count INT DEFAULT 0,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
@@ -207,6 +208,7 @@ func runMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured);`,
 		`CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist(user_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_product_reviews_pid_rating ON product_reviews(product_id, rating);`,
+		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS spin_count INT DEFAULT 0;`,
 	}
 	for _, q := range alterQueries {
 		if _, err := db.Exec(q); err != nil {

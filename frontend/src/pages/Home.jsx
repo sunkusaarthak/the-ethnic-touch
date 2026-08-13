@@ -155,6 +155,30 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
                     </div>
                 )}
             </section>
+
+            {/* Spin and Win Floating Button */}
+            <Link 
+                to="/spin-and-win" 
+                style={{
+                    position: 'fixed',
+                    bottom: '30px',
+                    right: '30px',
+                    backgroundColor: 'var(--color-primary)',
+                    color: 'white',
+                    padding: '12px 24px',
+                    borderRadius: '50px',
+                    boxShadow: '0 4px 15px rgba(212, 163, 115, 0.4)',
+                    textDecoration: 'none',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    zIndex: 100,
+                    animation: 'pulse 2s infinite',
+                }}
+            >
+                <span style={{fontSize: '1.2rem'}}>🎁</span> Spin & Win
+            </Link>
         </div>
     );
 };

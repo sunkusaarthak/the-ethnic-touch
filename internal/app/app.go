@@ -61,6 +61,7 @@ func (a *App) setupRoutes() {
 	couponHandler := handlers.NewCouponHandler(couponSvc)
 	profileHandler := handlers.NewProfileHandler(profileSvc)
 	cartHandler := handlers.NewCartHandler(cartSvc)
+	spinHandler := handlers.NewSpinHandler(profileSvc, couponSvc)
 
 	// API Routes (Go 1.22+ stdlib routing)
 	a.Router.HandleFunc("GET /api/products", productHandler.HandleProducts)
@@ -85,6 +86,9 @@ func (a *App) setupRoutes() {
 	// Coupons & Gifting
 	a.Router.HandleFunc("GET /api/gift-tiers", couponHandler.HandleGetGiftTiers)
 	a.Router.HandleFunc("POST /api/coupons/validate", rateLimiter.Limit(http.HandlerFunc(couponHandler.HandleValidateCoupon)).ServeHTTP)
+	
+	// Spin the Wheel
+	a.Router.HandleFunc("POST /api/spin-wheel", rateLimiter.Limit(http.HandlerFunc(spinHandler.HandleSpin)).ServeHTTP)
 	
 	// Admin API Endpoints
 	adminAuth := middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)

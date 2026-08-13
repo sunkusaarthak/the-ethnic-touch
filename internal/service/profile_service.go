@@ -15,6 +15,7 @@ type ProfileService interface {
 	CreateAddress(addr *models.Address) error
 	SetDefaultAddress(userID string, addressID int) error
 	DeleteAddress(userID string, addressID int) error
+	IncrementSpinCount(userID string) error
 }
 
 type profileService struct {
@@ -59,4 +60,8 @@ func (s *profileService) SetDefaultAddress(userID string, addressID int) error {
 
 func (s *profileService) DeleteAddress(userID string, addressID int) error {
 	return s.repo.DeleteAddress(userID, addressID)
+}
+
+func (s *profileService) IncrementSpinCount(userID string) error {
+	return s.repo.IncrementSpinCount(userID)
 }

@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import CompleteProfile from './pages/CompleteProfile';
 import Shop from './pages/Shop';
 import WishlistPage from './pages/WishlistPage';
+import SpinWheel from './pages/SpinWheel';
 import { fallbackProducts, API_BASE_URL } from './data/config';
 import apiClient from './utils/apiClient';
 
@@ -123,6 +124,7 @@ const AppRoutesContent = () => {
                     element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} authLoading={authLoading} />} 
                 />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
+                <Route path="/spin-and-win" element={<SpinWheel />} />
                 <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
                 <Route path="/complete-profile" element={<CompleteProfile authUser={authUser} />} />
                 <Route path="/auth" element={<Auth />} />
