@@ -11,10 +11,11 @@ import (
 
 type ProfileHandler struct {
 	svc service.ProfileService
+	configSvc service.ConfigService
 }
 
-func NewProfileHandler(svc service.ProfileService) *ProfileHandler {
-	return &ProfileHandler{svc: svc}
+func NewProfileHandler(svc service.ProfileService, configSvc service.ConfigService) *ProfileHandler {
+	return &ProfileHandler{svc: svc, configSvc: configSvc}
 }
 
 func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +50,11 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		p.UserID = userID
 
+		isNewProfile := false
+		if _, err := h.svc.GetProfile(userID); err != nil {
+			isNewProfile = true
+		}
+
 		if err := h.svc.UpsertProfile(&p); err != nil {
 			if err == models.ErrEmailAlreadyRegistered || 
 			   err == models.ErrMobileAlreadyRegistered || 
@@ -59,6 +65,12 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		if isNewProfile {
+			h.svc.AddSpinTicket(userID, 1)
+			h.configSvc.IncrementNewUserKurthiCounter()
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(p)
 	} else {

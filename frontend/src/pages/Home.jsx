@@ -1,10 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
+import { Gift } from 'lucide-react';
 import RenderProductCard from '../components/ProductCard';
 import ProductSkeletonGrid from '../components/ProductSkeletonGrid';
+import { auth, API_BASE_URL } from '../data/config';
 import Shop from './Shop';
 
 const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
+    const [spinConfig, setSpinConfig] = useState(null);
+
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/config/spin-wheel`)
+            .then(res => res.json())
+            .then(data => setSpinConfig(data))
+            .catch(console.error);
+    }, []);
     const bestSellers = React.useMemo(() => {
         return (productsGlobal || []).filter(p => p.isBestSeller).slice(0, 4);
     }, [productsGlobal]);
@@ -157,28 +167,30 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
             </section>
 
             {/* Spin and Win Floating Button */}
-            <Link 
-                to="/spin-and-win" 
-                style={{
-                    position: 'fixed',
-                    bottom: '30px',
-                    right: '30px',
-                    backgroundColor: 'var(--color-primary)',
-                    color: 'white',
-                    padding: '12px 24px',
-                    borderRadius: '50px',
-                    boxShadow: '0 4px 15px rgba(212, 163, 115, 0.4)',
-                    textDecoration: 'none',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    zIndex: 100,
-                    animation: 'pulse 2s infinite',
-                }}
-            >
-                <span style={{fontSize: '1.2rem'}}>🎁</span> Spin & Win
-            </Link>
+            {spinConfig && spinConfig.enabled && (
+                <Link 
+                    to="/spin-and-win" 
+                    style={{
+                        position: 'fixed',
+                        bottom: '30px',
+                        right: '30px',
+                        backgroundColor: 'var(--color-primary)',
+                        color: 'white',
+                        padding: '12px 24px',
+                        borderRadius: '50px',
+                        boxShadow: '0 4px 15px rgba(212, 163, 115, 0.4)',
+                        textDecoration: 'none',
+                        fontWeight: 'bold',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        zIndex: 100,
+                        animation: 'pulse 2s infinite',
+                    }}
+                >
+                    <Gift size={18} color="#fff" style={{ marginRight: '0.4rem' }} /> Spin & Win
+                </Link>
+            )}
         </div>
     );
 };

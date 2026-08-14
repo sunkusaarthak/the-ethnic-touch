@@ -202,7 +202,6 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                             boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
                             marginBottom: '1rem',
                             aspectRatio: '3/4',
-                            maxHeight: '65vh',
                             backgroundColor: '#fafafa',
                             position: 'relative',
                             minWidth: 0
@@ -219,6 +218,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                         src={imgUrl} 
                                         alt={`${product.name} - View ${idx + 1}`} 
                                         className="gallery-slide-img" 
+                                        style={{ height: '100%', objectFit: 'contain' }}
                                     />
                                 </div>
                             ))}

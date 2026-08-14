@@ -22,6 +22,7 @@ type OrderService interface {
 	VerifyPayment(req *models.OrderVerifyRequest) error
 	GetOrder(orderID string) (*models.Order, error)
 	GetAllOrders(email string) ([]models.Order, error)
+	ConfirmPickup(orderID string) error
 }
 
 type orderService struct {
@@ -223,4 +224,8 @@ func (s *orderService) GetOrder(orderID string) (*models.Order, error) {
 
 func (s *orderService) GetAllOrders(email string) ([]models.Order, error) {
 	return s.orderRepo.GetAllOrders(email)
+}
+
+func (s *orderService) ConfirmPickup(orderID string) error {
+	return s.orderRepo.UpdateOrderStatus(orderID, "picked_up", "", "", "", "")
 }

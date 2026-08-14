@@ -16,6 +16,8 @@ type ProfileService interface {
 	SetDefaultAddress(userID string, addressID int) error
 	DeleteAddress(userID string, addressID int) error
 	IncrementSpinCount(userID string) error
+	AddSpinTicket(userID string, count int) error
+	ConsumeSpinTicket(userID string) error
 }
 
 type profileService struct {
@@ -64,4 +66,12 @@ func (s *profileService) DeleteAddress(userID string, addressID int) error {
 
 func (s *profileService) IncrementSpinCount(userID string) error {
 	return s.repo.IncrementSpinCount(userID)
+}
+
+func (s *profileService) AddSpinTicket(userID string, count int) error {
+	return s.repo.AddSpinTicket(userID, count)
+}
+
+func (s *profileService) ConsumeSpinTicket(userID string) error {
+	return s.repo.ConsumeSpinTicket(userID)
 }

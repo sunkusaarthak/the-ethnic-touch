@@ -103,6 +103,7 @@ func runMigrations(db *sql.DB) error {
 			preferred_size TEXT,
 			style_notes TEXT,
 			spin_count INT DEFAULT 0,
+			available_spins INT DEFAULT 0,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
@@ -147,6 +148,10 @@ func runMigrations(db *sql.DB) error {
 			quantity INT DEFAULT 1,
 			size TEXT DEFAULT '',
 			UNIQUE(user_id, product_id, size)
+		);`,
+		`CREATE TABLE IF NOT EXISTS system_config (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
 		);`,
 	}
 
@@ -209,6 +214,7 @@ func runMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist(user_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_product_reviews_pid_rating ON product_reviews(product_id, rating);`,
 		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS spin_count INT DEFAULT 0;`,
+		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS available_spins INT DEFAULT 0;`,
 	}
 	for _, q := range alterQueries {
 		if _, err := db.Exec(q); err != nil {
@@ -298,5 +304,23 @@ func seedData(db *sql.DB) error {
 		`
 		db.Exec(seedImgQuery)
 	}
+
+	var configCount int
+	db.QueryRow("SELECT COUNT(*) FROM system_config WHERE key = 'spin_wheel_config'").Scan(&configCount)
+	if configCount == 0 {
+		defaultConfig := `{"enabled":true,"new_user_kurthi_threshold":50,"order_kurthi_threshold":100,"first_time_probs":{"prob_5_off":60,"prob_10_off":40,"prob_better_luck":0},"returning_probs":{"prob_5_off":20,"prob_10_off":5,"prob_better_luck":75}}`
+		db.Exec("INSERT INTO system_config (key, value) VALUES ('spin_wheel_config', $1)", defaultConfig)
+	}
+
+	var statsCount int
+	db.QueryRow("SELECT COUNT(*) FROM system_config WHERE key = 'spin_wheel_stats'").Scan(&statsCount)
+	if statsCount == 0 {
+		defaultStats := `{"new_users_since_last_kurthi":0,"orders_since_last_kurthi":0}`
+		db.Exec("INSERT INTO system_config (key, value) VALUES ('spin_wheel_stats', $1)", defaultStats)
+	}
+
+	// Retroactively grant 1 spin to all existing users who have never spun and have 0 available spins
+	db.Exec("UPDATE profiles SET available_spins = 1 WHERE spin_count = 0 AND available_spins = 0")
+
 	return nil
 }

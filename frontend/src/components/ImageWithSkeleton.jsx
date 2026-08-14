@@ -50,8 +50,8 @@ const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, ...p
                     setLoaded(true);
                 }}
                 style={{
-                    width: '100%',
-                    height: '100%',
+                    width: style.width || '100%',
+                    height: style.height || '100%',
                     objectFit: style.objectFit || 'cover',
                     borderRadius: style.borderRadius || 'inherit',
                     opacity: loaded ? 1 : 0,

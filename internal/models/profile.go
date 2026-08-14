@@ -13,6 +13,7 @@ type Profile struct {
 	PreferredSize string `json:"preferredSize,omitempty"`
 	StyleNotes    string `json:"styleNotes,omitempty"`
 	SpinCount     int    `json:"spinCount"`
+	AvailableSpins int   `json:"availableSpins"`
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 }

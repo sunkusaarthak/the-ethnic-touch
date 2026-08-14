@@ -2640,6 +2640,7 @@ textarea {
     font-size: 1.5rem;
     margin-bottom: 0.25rem;
     font-weight: 400;
+    color: #fff;
 }
 
 .home-category-overlay span {
@@ -2647,6 +2648,7 @@ textarea {
     text-transform: uppercase;
     letter-spacing: 2px;
     opacity: 0.85;
+    color: #fff;
 }
 
 /* Home Section Action Center */
@@ -3381,8 +3383,6 @@ button:active, .btn:active, .size-pill:active, .product-card:active {
     .gallery-main-container {
         order: 1 !important;
         border-radius: 16px !important; /* Premium rounded corners */
-        aspect-ratio: 1/1 !important;
-        max-height: 48vh !important;
         margin: 0 0 0.5rem 0 !important;
         width: 100% !important;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06) !important;
@@ -3656,8 +3656,8 @@ button:active, .btn:active, .size-pill:active, .product-card:active {
 .gallery-slide-img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    object-position: top;
+    object-fit: contain;
+    object-position: center;
     display: block;
     user-select: none;
     -webkit-user-drag: none;

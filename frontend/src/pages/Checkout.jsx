@@ -252,9 +252,8 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         theme: { color: "#B97A66" },
                         handler: async function (response) {
                             try {
-                                const verifyRes = await fetch(`${API_BASE_URL}/api/orders/verify`, {
+                                const verifyRes = await fetchWithAuth(`/api/orders/verify`, {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                         orderId: data.orderId,
                                         razorpayOrderId: response.razorpay_order_id,

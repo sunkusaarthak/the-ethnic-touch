@@ -47,6 +47,7 @@ func (a *App) setupRoutes() {
 	couponRepo := repository.NewCouponRepository(a.DB)
 	profileRepo := repository.NewProfileRepository(a.DB)
 	cartRepo := repository.NewCartRepository(a.DB)
+	configRepo := repository.NewConfigRepository(a.DB)
 
 	// Services
 	productSvc := service.NewProductService(productRepo)
@@ -54,18 +55,22 @@ func (a *App) setupRoutes() {
 	couponSvc := service.NewCouponService(couponRepo)
 	profileSvc := service.NewProfileService(profileRepo)
 	cartSvc := service.NewCartService(cartRepo)
+	configSvc := service.NewConfigService(configRepo)
 
 	// Handlers
 	productHandler := handlers.NewProductHandler(productSvc)
-	orderHandler := handlers.NewOrderHandler(orderSvc, profileSvc)
+	orderHandler := handlers.NewOrderHandler(orderSvc, profileSvc, configSvc)
 	couponHandler := handlers.NewCouponHandler(couponSvc)
-	profileHandler := handlers.NewProfileHandler(profileSvc)
+	profileHandler := handlers.NewProfileHandler(profileSvc, configSvc)
 	cartHandler := handlers.NewCartHandler(cartSvc)
-	spinHandler := handlers.NewSpinHandler(profileSvc, couponSvc)
+	spinHandler := handlers.NewSpinHandler(profileSvc, couponSvc, configSvc)
+	configHandler := handlers.NewConfigHandler(configSvc)
 
 	// API Routes (Go 1.22+ stdlib routing)
 	a.Router.HandleFunc("GET /api/products", productHandler.HandleProducts)
 	a.Router.HandleFunc("POST /api/products", middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)(http.HandlerFunc(productHandler.HandleProducts)).ServeHTTP)
+	a.Router.HandleFunc("PUT /api/products", middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)(http.HandlerFunc(productHandler.HandleProducts)).ServeHTTP)
+	a.Router.HandleFunc("DELETE /api/products/{id}", middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)(http.HandlerFunc(productHandler.HandleDeleteProduct)).ServeHTTP)
 
 	a.Router.HandleFunc("GET /api/products/{id}/reviews", productHandler.HandleProductReviews)
 	a.Router.HandleFunc("POST /api/products/{id}/reviews", productHandler.HandleProductReviews)
@@ -93,11 +98,21 @@ func (a *App) setupRoutes() {
 	// Admin API Endpoints
 	adminAuth := middleware.AdminAuthMiddleware(a.Config.AdminAPIKey)
 	a.Router.HandleFunc("GET /api/admin/orders", adminAuth(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
+	a.Router.HandleFunc("POST /api/admin/orders/confirm-pickup", adminAuth(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
 	a.Router.HandleFunc("GET /api/admin/profiles", adminAuth(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
 	a.Router.HandleFunc("POST /api/admin/profiles/edit", adminAuth(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
 	a.Router.HandleFunc("GET /api/admin/profiles/details", adminAuth(http.HandlerFunc(profileHandler.HandleAdminProfileDetails)).ServeHTTP)
+	a.Router.HandleFunc("POST /api/admin/upload", adminAuth(http.HandlerFunc(productHandler.HandleAdminUpload)).ServeHTTP)
 	a.Router.HandleFunc("GET /api/admin/coupons", adminAuth(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
 	a.Router.HandleFunc("POST /api/admin/coupons", adminAuth(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
+	
+	// Config API Endpoints
+	a.Router.HandleFunc("GET /api/config/spin-wheel", configHandler.HandleGetSpinConfig)
+	a.Router.HandleFunc("PUT /api/admin/config/spin-wheel", adminAuth(http.HandlerFunc(configHandler.HandleUpdateSpinConfig)).ServeHTTP)
+	a.Router.HandleFunc("GET /api/admin/config/spin-wheel/stats", adminAuth(http.HandlerFunc(configHandler.HandleGetSpinStats)).ServeHTTP)
+
+	a.Router.HandleFunc("GET /api/config/auth", configHandler.HandleGetAuthConfig)
+	a.Router.HandleFunc("PUT /api/admin/config/auth", adminAuth(http.HandlerFunc(configHandler.HandleUpdateAuthConfig)).ServeHTTP)
 
 	// User Profiles & Addresses
 	a.Router.HandleFunc("GET /api/profile", profileHandler.HandleProfile)

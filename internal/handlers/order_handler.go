@@ -12,10 +12,11 @@ import (
 type OrderHandler struct {
 	svc        service.OrderService
 	profileSvc service.ProfileService
+	configSvc  service.ConfigService
 }
 
-func NewOrderHandler(svc service.OrderService, profileSvc service.ProfileService) *OrderHandler {
-	return &OrderHandler{svc: svc, profileSvc: profileSvc}
+func NewOrderHandler(svc service.OrderService, profileSvc service.ProfileService, configSvc service.ConfigService) *OrderHandler {
+	return &OrderHandler{svc: svc, profileSvc: profileSvc, configSvc: configSvc}
 }
 
 func (h *OrderHandler) HandleCheckout(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +77,21 @@ func (h *OrderHandler) HandleVerifyPayment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if order, err := h.svc.GetOrder(req.OrderID); err == nil {
+		profiles, _ := h.profileSvc.GetAllProfiles()
+		var userID string
+		for _, p := range profiles {
+			if p.Email == order.CustomerEmail {
+				userID = p.UserID
+				break
+			}
+		}
+		if userID != "" {
+			h.profileSvc.AddSpinTicket(userID, 1)
+		}
+		h.configSvc.IncrementOrderKurthiCounter()
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Payment verified and order finalized successfully"})
 }
@@ -120,4 +136,54 @@ func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(order)
+}
+
+func (h *OrderHandler) HandleConfirmPickup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OrderID string `json:"orderId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Invalid payload"}`))
+		return
+	}
+
+	order, err := h.svc.GetOrder(req.OrderID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"Order not found"}`))
+		return
+	}
+
+	if err := h.svc.ConfirmPickup(req.OrderID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Failed to confirm pickup"}`))
+		return
+	}
+
+	if order.PaymentMethod == "offline_qr" {
+		profiles, _ := h.profileSvc.GetAllProfiles()
+		var userID string
+		for _, p := range profiles {
+			if p.Email == order.CustomerEmail {
+				userID = p.UserID
+				break
+			}
+		}
+		if userID != "" {
+			h.profileSvc.AddSpinTicket(userID, 1)
+		}
+		h.configSvc.IncrementOrderKurthiCounter()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Pickup confirmed successfully"})
 }

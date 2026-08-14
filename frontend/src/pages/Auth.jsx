@@ -15,6 +15,18 @@ const Auth = () => {
     const [confirmationResult, setConfirmationResult] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [phoneAuthEnabled, setPhoneAuthEnabled] = useState(true);
+    
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/config/auth`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && typeof data.phone_auth_enabled === 'boolean') {
+                    setPhoneAuthEnabled(data.phone_auth_enabled);
+                }
+            })
+            .catch(err => console.error('Failed to load auth config:', err));
+    }, []);
     
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
@@ -348,7 +360,7 @@ const Auth = () => {
                             
                             <p style={{ color: '#6C6863', fontSize: '0.8rem', lineHeight: '1.4', margin: '0 auto', maxWidth: '300px' }}>
                                 {step === 'phone' 
-                                    ? 'Enter your mobile number to receive a 6-digit OTP code.' 
+                                    ? (phoneAuthEnabled ? 'Enter your mobile number to receive a 6-digit OTP code.' : 'Continue with Google to access your account.') 
                                     : `Enter the OTP code sent to +91 ${phone.replace(/^\+91/, '')}`}
                             </p>
                         </div>
@@ -383,7 +395,7 @@ const Auth = () => {
                         )}
 
                         {/* Step 1: Phone Input Form */}
-                        {step === 'phone' && (
+                        {phoneAuthEnabled && step === 'phone' && (
                             <form onSubmit={handleSendOTP} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '500', fontSize: '0.78rem', color: '#444' }}>Mobile Number</label>
@@ -496,11 +508,13 @@ const Auth = () => {
                             </form>
                         )}
 
-                        <div style={{ display: 'flex', alignItems: 'center', margin: '1.1rem 0', gap: '0.6rem' }}>
-                            <div style={{ flex: 1, height: '1px', background: '#EAE6E1' }}></div>
-                            <span style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Or continue with</span>
-                            <div style={{ flex: 1, height: '1px', background: '#EAE6E1' }}></div>
-                        </div>
+                        {phoneAuthEnabled && (
+                            <div style={{ display: 'flex', alignItems: 'center', margin: '1.1rem 0', gap: '0.6rem' }}>
+                                <div style={{ flex: 1, height: '1px', background: '#EAE6E1' }}></div>
+                                <span style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Or continue with</span>
+                                <div style={{ flex: 1, height: '1px', background: '#EAE6E1' }}></div>
+                            </div>
+                        )}
 
                         {/* Google Sign-In */}
                         <button 

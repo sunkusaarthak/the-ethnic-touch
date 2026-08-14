@@ -38,6 +38,19 @@ const CompleteProfile = ({ authUser }) => {
     const recaptchaVerifierRef = useRef(null);
 
     const [linkLoading, setLinkLoading] = useState(false);
+    
+    const [phoneAuthEnabled, setPhoneAuthEnabled] = useState(true);
+
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/config/auth`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && typeof data.phone_auth_enabled === 'boolean') {
+                    setPhoneAuthEnabled(data.phone_auth_enabled);
+                }
+            })
+            .catch(err => console.error('Failed to load auth config:', err));
+    }, []);
 
     // Compute updated identity states (in case they change after linking)
     const [currentEmail, setCurrentEmail] = useState(email);
@@ -185,9 +198,16 @@ const CompleteProfile = ({ authUser }) => {
         setFormError('');
 
         if (!fullName.trim()) return setFormError('Please enter your full name.');
-        if (googleLinked && phoneStep !== 'verified' && !phone.trim()) {
+        
+        const cleanPhoneNum = phone.replace(/[^0-9]/g, '');
+        if (cleanPhoneNum.length !== 10) {
+            return setFormError('Please enter a valid 10-digit mobile number.');
+        }
+
+        if (googleLinked && phoneAuthEnabled && phoneStep !== 'verified') {
             return setFormError('Please verify your phone number via OTP.');
         }
+        
         if (phoneLinked && !googleLinked && !currentEmail.trim()) {
             return setFormError('Please verify your Gmail account to continue.');
         }
@@ -499,7 +519,7 @@ const CompleteProfile = ({ authUser }) => {
                                 maxLength={10}
                                 style={{ height: '40px', fontSize: '0.88rem', flex: 1, backgroundColor: phoneLinked ? '#FAF8F5' : '#fff' }}
                             />
-                            {googleLinked && !phoneLinked && phoneStep !== 'verified' && (
+                            {phoneAuthEnabled && googleLinked && !phoneLinked && phoneStep !== 'verified' && (
                                 <button
                                     type="button"
                                     onClick={handleSendPhoneOTP}
@@ -523,7 +543,7 @@ const CompleteProfile = ({ authUser }) => {
                         </div>
 
                         {/* OTP Verification Box for Google Users */}
-                        {phoneStep === 'otp_sent' && !phoneLinked && (
+                        {phoneAuthEnabled && phoneStep === 'otp_sent' && !phoneLinked && (
                             <div style={{ marginTop: '0.65rem', padding: '0.75rem 0.85rem', backgroundColor: '#FAF7F2', borderRadius: '12px', border: '1px solid rgba(212, 163, 115, 0.4)' }}>
                                 <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', color: '#8F5E36', fontWeight: '500' }}>
                                     Enter 6-digit OTP sent to +91 {phone}
@@ -620,15 +640,15 @@ const CompleteProfile = ({ authUser }) => {
                     {/* Submit Button */}
                     <button 
                         type="submit" 
-                        disabled={submitting || (googleLinked && phoneStep !== 'verified') || (phoneLinked && !googleLinked)}
+                        disabled={submitting || (googleLinked && phoneAuthEnabled && phoneStep !== 'verified') || (phoneLinked && !googleLinked)}
                         style={{
                             width: '100%',
                             height: '42px',
                             marginTop: '0.5rem',
                             fontSize: '0.88rem',
                             borderRadius: '50px',
-                            opacity: (submitting || (googleLinked && phoneStep !== 'verified') || (phoneLinked && !googleLinked)) ? 0.65 : 1,
-                            cursor: (submitting || (googleLinked && phoneStep !== 'verified') || (phoneLinked && !googleLinked)) ? 'not-allowed' : 'pointer',
+                            opacity: (submitting || (googleLinked && phoneAuthEnabled && phoneStep !== 'verified') || (phoneLinked && !googleLinked)) ? 0.65 : 1,
+                            cursor: (submitting || (googleLinked && phoneAuthEnabled && phoneStep !== 'verified') || (phoneLinked && !googleLinked)) ? 'not-allowed' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',

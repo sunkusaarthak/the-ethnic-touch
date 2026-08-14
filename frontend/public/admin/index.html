@@ -21,7 +21,8 @@
                 <li data-tab="orders">View Orders</li>
                 <li data-tab="profiles">Manage Users</li>
                 <li data-tab="coupons">Marketing Coupons</li>
-                <li data-tab="settings">Gift Settings</li>
+                <li data-tab="settings">General Settings</li>
+                <li data-tab="spinwin">Spin & Win</li>
                 <li data-tab="pickup-scanner">Verify Store Pickups</li>
             </ul>
         </nav>
@@ -137,6 +138,24 @@
 
         <!-- Settings Tab -->
         <div id="tab-settings" class="tab-content">
+            <!-- Authentication Settings -->
+            <div style="background: #FFF; padding: 2.5rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.01); width: 100%; margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="font-family: var(--font-heading); font-size: 1.4rem;">Authentication Settings</h3>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="auth_phone_enabled" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                        Enable Phone (OTP) Login
+                    </label>
+                </div>
+                <p style="color: var(--color-text-light); font-size: 0.95rem; line-height: 1.5;">
+                    If disabled, users will only be able to sign in via Google. Phone number collection during profile completion will skip SMS verification.
+                </p>
+                <div style="text-align: right; margin-top: 2rem;">
+                    <button type="button" class="btn" onclick="saveAuthConfig()">Save Auth Settings</button>
+                </div>
+            </div>
+
+            <!-- Gift Settings -->
             <div style="background: #FFF; padding: 2.5rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.01); width: 100%;">
                 <p style="color: var(--color-text-light); margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.5;">
                     Manage order value thresholds. Customers whose cart exceeds each specified limit will unlock either a customizable digital coupon or a physical promotional gift of your choice.
@@ -228,6 +247,80 @@
                         </div>
                     </form>
                 </div>
+            </div>
+        </div>
+
+        <!-- Spin & Win Tab -->
+        <div id="tab-spinwin" class="tab-content">
+            <div style="background: #FFF; padding: 2.5rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.01); max-width: 900px; margin: 0 auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h3 style="font-family: var(--font-heading); font-size: 1.4rem;">Spin & Win Settings</h3>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="sw_enabled" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                        Enable Spin & Win Feature
+                    </label>
+                </div>
+
+                <form id="spinWinForm">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                        <div style="background: #fafafa; padding: 1.5rem; border-radius: 8px; border: 1px solid #eee;">
+                            <h4 style="margin-bottom: 1rem;">Free Kurthi Triggers</h4>
+                            <p style="font-size: 0.85rem; color: #666; margin-bottom: 1rem;">Configure after how many signups/orders to guarantee a Free Kurthi win.</p>
+                            
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">New User Signups Threshold</label>
+                                <input type="number" id="sw_new_user_threshold" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                            
+                            <div>
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">Orders Threshold</label>
+                                <input type="number" id="sw_order_threshold" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                        <div style="background: #fafafa; padding: 1.5rem; border-radius: 8px; border: 1px solid #eee;">
+                            <h4 style="margin-bottom: 1rem;">First-Time Spinner Probabilities</h4>
+                            <p style="font-size: 0.85rem; color: #666; margin-bottom: 1rem;">Relative weights (e.g. 50, 30, 20)</p>
+                            
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">5% Off Weight</label>
+                                <input type="number" id="sw_ft_5" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">10% Off Weight</label>
+                                <input type="number" id="sw_ft_10" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">Better Luck Weight</label>
+                                <input type="number" id="sw_ft_fail" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                        </div>
+
+                        <div style="background: #fafafa; padding: 1.5rem; border-radius: 8px; border: 1px solid #eee;">
+                            <h4 style="margin-bottom: 1rem;">Returning Spinner Probabilities</h4>
+                            <p style="font-size: 0.85rem; color: #666; margin-bottom: 1rem;">Relative weights (e.g. 10, 5, 85)</p>
+                            
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">5% Off Weight</label>
+                                <input type="number" id="sw_ret_5" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">10% Off Weight</label>
+                                <input type="number" id="sw_ret_10" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.9rem; margin-bottom: 0.5rem;">Better Luck Weight</label>
+                                <input type="number" id="sw_ret_fail" required style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end;">
+                        <button type="submit" class="btn-primary" style="padding: 0.8rem 3rem;">Save Config</button>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -553,6 +646,6 @@
         </div>
     </div>
 
-    <script src="admin.js"></script>
+    <script src="admin.js?v=3"></script>
 </body>
 </html>

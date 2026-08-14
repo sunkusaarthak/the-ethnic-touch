@@ -37,13 +37,42 @@ const SpinWheel = () => {
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
 
+    const [config, setConfig] = useState(null);
+    const [profile, setProfile] = useState(null);
+    const [loadingConfig, setLoadingConfig] = useState(true);
+
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged((user) => {
+        // Fetch config
+        fetch(`${API_BASE_URL}/api/config/spin-wheel`)
+            .then(res => res.json())
+            .then(data => {
+                setConfig(data);
+                setLoadingConfig(false);
+            })
+            .catch(err => {
+                console.error(err);
+                setLoadingConfig(false);
+            });
+
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
             if (!user) {
                 // If not logged in, prompt or redirect
                 setError('Please log in to spin the wheel.');
+                setProfile(null);
             } else {
                 setError('');
+                // Fetch profile to get spins
+                user.getIdToken().then(token => {
+                    fetch(`${API_BASE_URL}/api/profile/me`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'X-User-Id': user.uid
+                        }
+                    })
+                    .then(res => res.json())
+                    .then(data => setProfile(data))
+                    .catch(console.error);
+                });
             }
         });
         return () => unsubscribe();
@@ -109,6 +138,12 @@ const SpinWheel = () => {
                         colors: ['#D4A373', '#FAEDCD', '#E9EDC9']
                     });
                 }
+                
+                // Deduct spin visually
+                if (profile) {
+                    setProfile({...profile, availableSpins: Math.max(0, profile.availableSpins - 1)});
+                }
+
                 setShowModal(true);
             }, 4000);
 
@@ -136,9 +171,25 @@ const SpinWheel = () => {
             </div>
 
             <h1 style={{fontSize: '2.5rem', fontFamily: 'var(--font-heading)', color: 'var(--color-primary)', textAlign: 'center', marginBottom: '0.5rem'}}>Spin & Win!</h1>
-            <p style={{color: 'var(--color-text-light)', textAlign: 'center', marginBottom: '3rem', maxWidth: '500px'}}>
-                Try your luck today. You could win a free Kurthi or an exclusive discount coupon on your next order!
-            </p>
+            
+            {loadingConfig ? (
+                <div style={{textAlign: 'center', padding: '2rem'}}><Loader2 className="spinner" size={32} color="var(--color-primary)" /></div>
+            ) : config && !config.enabled ? (
+                <div style={{textAlign: 'center', padding: '3rem', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', maxWidth: '500px', width: '100%', margin: '0 auto'}}>
+                    <h2 style={{color: 'var(--color-text)', marginBottom: '1rem'}}>Currently Unavailable</h2>
+                    <p style={{color: 'var(--color-text-light)'}}>The Spin & Win feature is taking a short break. Please check back later!</p>
+                </div>
+            ) : (
+                <>
+                    <p style={{color: 'var(--color-text-light)', textAlign: 'center', marginBottom: '1rem', maxWidth: '500px'}}>
+                        Try your luck today. You could win a free Kurthi or an exclusive discount coupon on your next order!
+                    </p>
+                    
+                    {profile && (
+                        <div style={{textAlign: 'center', marginBottom: '2rem', padding: '0.75rem 1.5rem', backgroundColor: '#FAEDCD', borderRadius: '50px', display: 'inline-block', fontWeight: 'bold', color: 'var(--color-primary)', border: '2px solid var(--color-primary)'}}>
+                            Available Spins: {profile.availableSpins || 0}
+                        </div>
+                    )}
 
             {error && (
                 <div style={{backgroundColor: '#ffebee', color: '#c62828', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem'}}>
@@ -221,7 +272,7 @@ const SpinWheel = () => {
 
             <button 
                 onClick={handleSpin} 
-                disabled={isSpinning || !!error}
+                disabled={isSpinning || !!error || (profile && profile.availableSpins <= 0)}
                 style={{
                     marginTop: '3rem',
                     padding: '1rem 3rem',
@@ -231,19 +282,23 @@ const SpinWheel = () => {
                     color: 'white',
                     border: 'none',
                     borderRadius: '50px',
-                    cursor: isSpinning || error ? 'not-allowed' : 'pointer',
+                    cursor: isSpinning || error || (profile && profile.availableSpins <= 0) ? 'not-allowed' : 'pointer',
                     boxShadow: '0 4px 15px rgba(212, 163, 115, 0.4)',
                     transition: 'transform 0.2s, box-shadow 0.2s',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.5rem',
-                    opacity: isSpinning || error ? 0.7 : 1
+                    opacity: isSpinning || error || (profile && profile.availableSpins <= 0) ? 0.7 : 1
                 }}
             >
                 {isSpinning ? (
                     <><Loader2 size={20} className="spinner" /> Spinning...</>
                 ) : 'SPIN THE WHEEL'}
             </button>
+            
+            {profile && profile.availableSpins <= 0 && !error && !isSpinning && (
+                <p style={{marginTop: '1rem', color: '#c62828', fontWeight: '500'}}>You have 0 spins left. Place an order to earn more!</p>
+            )}
 
             {/* Result Modal */}
             {showModal && result && (
@@ -334,6 +389,8 @@ const SpinWheel = () => {
                         )}
                     </div>
                 </div>
+            )}
+            </>
             )}
         </div>
     );

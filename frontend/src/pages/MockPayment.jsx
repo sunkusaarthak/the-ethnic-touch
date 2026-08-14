@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 
 import { API_BASE_URL } from '../data/config';
+import { fetchWithAuth } from '../utils/apiClient';
 
 const MockPayment = ({ onPaymentSuccess }) => {
     const [searchParams] = useState(() => {
@@ -23,9 +24,8 @@ const MockPayment = ({ onPaymentSuccess }) => {
     const handlePay = async () => {
         setPaying(true);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/orders/verify`, {
+            const res = await fetchWithAuth(`/api/orders/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     orderId: orderId,
                     mock: true

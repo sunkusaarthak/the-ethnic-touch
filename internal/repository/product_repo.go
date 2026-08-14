@@ -14,6 +14,8 @@ import (
 type ProductRepository interface {
 	GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error)
 	CreateProduct(p *models.Product) error
+	UpdateProduct(p *models.Product) error
+	DeleteProduct(id string) error
 	GetReviews(productID string) ([]models.ProductReview, error)
 	CreateReview(rev *models.ProductReview) error
 }
@@ -414,6 +416,76 @@ func (r *postgresProductRepo) CreateProduct(p *models.Product) error {
 		r.db.Exec("INSERT INTO product_images (product_id, image_url) VALUES ($1, $2)", p.ID, trimmed)
 	}
 
+	return nil
+}
+
+func (r *postgresProductRepo) UpdateProduct(p *models.Product) error {
+	sizesStr := strings.Join(p.Sizes, ",")
+	sizesStockBytes, _ := json.Marshal(p.SizesStock)
+	sizesStockStr := string(sizesStockBytes)
+	if sizesStockStr == "" || sizesStockStr == "null" {
+		sizesStockStr = "{}"
+	}
+
+	totalStock := 0
+	for _, qty := range p.SizesStock {
+		totalStock += qty
+	}
+	if totalStock > 0 {
+		p.Stock = totalStock
+	}
+
+	_, err := r.db.Exec(`
+		UPDATE products SET 
+			name = $1, description = $2, price = $3, image_url = $4, sizes = $5, sizes_stock = $6, stock = $7, 
+			category = $8, collection = $9, fabric = $10, color = $11, sleeve_type = $12, neck_type = $13, 
+			pattern = $14, occasion = $15, sku = $16, tags = $17, original_price = $18, is_new_arrival = $19, 
+			is_best_seller = $20, is_featured = $21
+		WHERE id = $22`,
+		p.Name, p.Description, p.Price, p.ImageURL, sizesStr, sizesStockStr, p.Stock,
+		p.Category, p.Collection, p.Fabric, p.Color, p.SleeveType, p.NeckType,
+		p.Pattern, p.Occasion, p.SKU, p.Tags, p.OriginalPrice, p.IsNewArrival,
+		p.IsBestSeller, p.IsFeatured, p.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update product: %w", err)
+	}
+
+	// Update gallery images (delete old, insert new)
+	_, err = r.db.Exec("DELETE FROM product_images WHERE product_id = $1", p.ID)
+	if err != nil {
+		return fmt.Errorf("failed to delete old gallery images: %w", err)
+	}
+
+	for i, gImg := range p.GalleryImages {
+		if i == 0 {
+			continue // Main image is already in the products table
+		}
+		trimmed := strings.TrimSpace(gImg)
+		if trimmed == "" {
+			continue
+		}
+		_, err := r.db.Exec("INSERT INTO product_images (product_id, image_url) VALUES ($1, $2)", p.ID, trimmed)
+		if err != nil {
+			return fmt.Errorf("failed to insert gallery image: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *postgresProductRepo) DeleteProduct(id string) error {
+	// First, remove the foreign key reference from historical order items 
+	// (so we don't break past orders that purchased this product)
+	_, err := r.db.Exec("UPDATE order_items SET product_id = NULL WHERE product_id = $1", id)
+	if err != nil {
+		return fmt.Errorf("failed to detach product from order items: %w", err)
+	}
+
+	// Now we can safely delete the product (cascade will handle images, reviews, etc.)
+	_, err = r.db.Exec("DELETE FROM products WHERE id = $1", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete product: %w", err)
+	}
 	return nil
 }
 

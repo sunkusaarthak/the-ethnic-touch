@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/repository"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 type ProductService interface {
 	GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error)
 	CreateProduct(p *models.Product) error
+	UpdateProduct(p *models.Product) error
+	DeleteProduct(id string) error
 	GetReviews(productID string) ([]models.ProductReview, error)
 	CreateReview(rev *models.ProductReview) error
 }
@@ -39,6 +42,20 @@ func (s *productService) CreateProduct(p *models.Product) error {
 	p.CreatedAt = now
 
 	return s.repo.CreateProduct(p)
+}
+
+func (s *productService) UpdateProduct(p *models.Product) error {
+	if p.ID == "" {
+		return errors.New("product ID is required for update")
+	}
+	return s.repo.UpdateProduct(p)
+}
+
+func (s *productService) DeleteProduct(id string) error {
+	if id == "" {
+		return errors.New("product ID is required for deletion")
+	}
+	return s.repo.DeleteProduct(id)
 }
 
 func (s *productService) GetReviews(productID string) ([]models.ProductReview, error) {

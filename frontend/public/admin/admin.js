@@ -6,8 +6,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Form Submissions
     console.log("[SETTINGS DIAG] Hooking submit events...");
-    document.getElementById('productForm').addEventListener('submit', handleAddProduct);
-    document.getElementById('couponForm').addEventListener('submit', handleAddCoupon);
+    const pf = document.getElementById('productForm');
+    if (pf) pf.addEventListener('submit', handleAddProduct);
+    
+    const cf = document.getElementById('couponForm');
+    if (cf) cf.addEventListener('submit', handleAddCoupon);
     
     const tf = document.getElementById('tierForm');
     if (tf) {
@@ -15,6 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
         tf.addEventListener('submit', handleSaveTier);
     } else {
         console.error("[SETTINGS DIAG] ERROR: Could not find tierForm by ID!");
+    }
+
+    const swf = document.getElementById('spinWinForm');
+    if (swf) {
+        swf.addEventListener('submit', handleSaveSpinWinConfig);
     }
     
     const logout = document.getElementById('logoutBtn');
@@ -344,6 +352,7 @@ async function loadTabData(tab) {
     if (tab === 'orders') loadOrders();
     if (tab === 'coupons') loadCoupons();
     if (tab === 'settings') loadSettings();
+    if (tab === 'spinwin') loadSpinWin();
     if (tab === 'profiles') loadProfiles();
     if (tab === 'pickup-scanner') {
         const card = document.getElementById('pickupOrderCard');
@@ -407,6 +416,7 @@ async function loadProducts() {
                 <td style="font-size:0.8rem; color:#888;">${imageCount} photo${imageCount !== 1 ? 's' : ''}</td>
                 <td style="text-align:right;">
                     <button type="button" class="btn-sm" style="background:#2D2A26; color:#fff; border:none; padding:4px 12px; border-radius:6px; cursor:pointer; font-weight:500; font-size:0.76rem;" onclick="openEditProductModal('${p.id}')">Edit</button>
+                    <button type="button" class="btn-sm" style="background:#e53e3e; color:#fff; border:none; padding:4px 12px; border-radius:6px; cursor:pointer; font-weight:500; font-size:0.76rem; margin-left: 0.5rem;" onclick="deleteProduct('${p.id}')">Delete</button>
                 </td>
             `;
             body.appendChild(tr);
@@ -743,6 +753,10 @@ let currentTiers = [];
 
 async function loadSettings() {
     console.log("[SETTINGS DIAG] loadSettings function started execution.");
+    
+    // Load auth settings
+    await loadAuthConfig();
+    
     const body = document.querySelector('#tiersTable tbody');
     if (!body) {
         console.error("[SETTINGS DIAG] ERROR: Element '#tiersTable tbody' not found in DOM!");
@@ -1191,6 +1205,72 @@ async function saveProfileFromAdmin(e, userId) {
     }
 }
 
+// ----------------------------------------------------
+// Spin & Win Settings Logic
+// ----------------------------------------------------
+
+async function loadSpinWin() {
+    try {
+        const res = await fetch('/api/config/spin-wheel');
+        if (!res.ok) throw new Error("Failed to load Spin & Win config");
+        const data = await res.json();
+        
+        document.getElementById('sw_enabled').checked = data.enabled || false;
+        
+        document.getElementById('sw_new_user_threshold').value = data.new_user_kurthi_threshold || 10;
+        document.getElementById('sw_order_threshold').value = data.order_kurthi_threshold || 50;
+        
+        const ft = data.first_time_probs || {};
+        document.getElementById('sw_ft_5').value = ft.prob_5_off || 50;
+        document.getElementById('sw_ft_10').value = ft.prob_10_off || 30;
+        document.getElementById('sw_ft_fail').value = ft.prob_better_luck || 20;
+        
+        const ret = data.returning_probs || {};
+        document.getElementById('sw_ret_5').value = ret.prob_5_off || 30;
+        document.getElementById('sw_ret_10').value = ret.prob_10_off || 10;
+        document.getElementById('sw_ret_fail').value = ret.prob_better_luck || 60;
+        
+    } catch (err) {
+        showAdminAlert(err.message, 'Config Error', 'error');
+    }
+}
+
+async function handleSaveSpinWinConfig(e) {
+    e.preventDefault();
+    
+    const payload = {
+        enabled: document.getElementById('sw_enabled').checked,
+        new_user_kurthi_threshold: parseInt(document.getElementById('sw_new_user_threshold').value) || 0,
+        order_kurthi_threshold: parseInt(document.getElementById('sw_order_threshold').value) || 0,
+        first_time_probs: {
+            prob_5_off: parseInt(document.getElementById('sw_ft_5').value) || 0,
+            prob_10_off: parseInt(document.getElementById('sw_ft_10').value) || 0,
+            prob_better_luck: parseInt(document.getElementById('sw_ft_fail').value) || 0
+        },
+        returning_probs: {
+            prob_5_off: parseInt(document.getElementById('sw_ret_5').value) || 0,
+            prob_10_off: parseInt(document.getElementById('sw_ret_10').value) || 0,
+            prob_better_luck: parseInt(document.getElementById('sw_ret_fail').value) || 0
+        }
+    };
+    
+    try {
+        const res = await fetch('/api/admin/config/spin-wheel', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) throw new Error("Failed to update config");
+        showAdminAlert('Spin & Win settings updated!', 'Success', 'success');
+    } catch (err) {
+        showAdminAlert(err.message, 'Save Error', 'error');
+    }
+}
+
 // Bind to window context for raw inline onclick HTML elements
 window.toggleRewardTypeInputs = toggleRewardTypeInputs;
 window.editTier = editTier;
@@ -1198,6 +1278,27 @@ window.deleteTier = deleteTier;
 window.resetTierForm = resetTierForm;
 window.handleSaveTier = handleSaveTier;
 window.viewProfileDetails = viewProfileDetails;
+async function deleteProduct(productId) {
+    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) return;
+
+    try {
+        const res = await fetch(`/api/products/${productId}`, {
+            method: 'DELETE',
+            headers: getAuthHeader()
+        });
+        if (res.ok) {
+            showAdminAlert('Product deleted successfully', 'Deleted', 'success');
+            loadProducts();
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            showAdminAlert(errData.error || 'Failed to delete product', 'Delete Error', 'error');
+        }
+    } catch (err) {
+        showAdminAlert('Network error while deleting product', 'Error', 'error');
+    }
+}
+
+window.deleteProduct = deleteProduct;
 window.saveProfileFromAdmin = saveProfileFromAdmin;
 window.loadProfiles = loadProfiles;
 window.addGalleryImageField = addGalleryImageField;
@@ -1410,3 +1511,40 @@ window.triggerSearchPickupOrder = triggerSearchPickupOrder;
 window.searchPickupOrder = searchPickupOrder;
 window.confirmStorePickup = confirmStorePickup;
 window.handleUrlHashChange = handleUrlHashChange;
+
+async function loadAuthConfig() {
+    try {
+        const res = await fetch('/api/config/auth');
+        if (res.ok) {
+            const data = await res.json();
+            document.getElementById('auth_phone_enabled').checked = data.phone_auth_enabled;
+        }
+    } catch (err) {
+        console.error("Failed to load auth config:", err);
+    }
+}
+
+async function saveAuthConfig() {
+    try {
+        const payload = {
+            phone_auth_enabled: document.getElementById('auth_phone_enabled').checked
+        };
+        const res = await fetch('/api/admin/config/auth', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) throw new Error("Failed to update auth config");
+        showAdminAlert('Authentication settings updated!', 'Success', 'success');
+    } catch (err) {
+        console.error("Failed to save auth config:", err);
+        showAdminAlert(err.message, 'Error', 'error');
+    }
+}
+
+window.loadAuthConfig = loadAuthConfig;
+window.saveAuthConfig = saveAuthConfig;

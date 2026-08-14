@@ -55,7 +55,7 @@ func (r *postgresOrderRepo) GetOrder(orderID string) (*models.Order, error) {
 
 func (r *postgresOrderRepo) getOrderItems(orderID string) ([]models.OrderItem, error) {
 	rows, err := r.db.Query(`
-		SELECT oi.product_id, oi.quantity, oi.price_at_qty, COALESCE(p.name, ''), COALESCE(oi.size, '')
+		SELECT COALESCE(oi.product_id, ''), oi.quantity, oi.price_at_qty, COALESCE(p.name, ''), COALESCE(oi.size, '')
 		FROM order_items oi
 		LEFT JOIN products p ON oi.product_id = p.id
 		WHERE oi.order_id = $1`, orderID)

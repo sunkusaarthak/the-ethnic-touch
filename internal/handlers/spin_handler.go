@@ -14,12 +14,14 @@ import (
 type SpinHandler struct {
 	profileSvc service.ProfileService
 	couponSvc  service.CouponService
+	configSvc  service.ConfigService
 }
 
-func NewSpinHandler(profileSvc service.ProfileService, couponSvc service.CouponService) *SpinHandler {
+func NewSpinHandler(profileSvc service.ProfileService, couponSvc service.CouponService, configSvc service.ConfigService) *SpinHandler {
 	return &SpinHandler{
 		profileSvc: profileSvc,
 		couponSvc:  couponSvc,
+		configSvc:  configSvc,
 	}
 }
 
@@ -42,47 +44,86 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 
 	profile, err := h.profileSvc.GetProfile(userID)
 	if err != nil {
-		// Create a stub profile if missing so we can track spin count
-		profile = &models.Profile{
-			UserID:   userID,
-			FullName: "Guest",
-			Phone:    "",
-		}
-		h.profileSvc.UpsertProfile(profile)
+		http.Error(w, "Profile not found", http.StatusNotFound)
+		return
+	}
+
+	config, err := h.configSvc.GetSpinWheelConfig()
+	if err != nil || !config.Enabled {
+		http.Error(w, "Spin & Win is currently disabled", http.StatusForbidden)
+		return
+	}
+
+	if profile.AvailableSpins <= 0 {
+		http.Error(w, "No spins available. Place an order to earn more spins!", http.StatusForbidden)
+		return
 	}
 
 	isFirstTime := profile.SpinCount == 0
+	stats, _ := h.configSvc.GetSpinWheelStats()
 
-	// Segments: 0: Free Kurthi, 1: 5% off, 2: 10% off, 3: Better luck next time
-	var probabilities []int
-	if isFirstTime {
-		// 0% free kurthi, 60% 5% off, 40% 10% off, 0% better luck
-		probabilities = []int{0, 60, 40, 0}
-	} else {
-		// 0% free kurthi, 20% 5% off, 5% 10% off, 75% better luck
-		probabilities = []int{0, 20, 5, 75}
-	}
-
-	rand.Seed(time.Now().UnixNano())
-	roll := rand.Intn(100)
-	sum := 0
 	segmentIndex := -1
-	for i, p := range probabilities {
-		sum += p
-		if roll < sum {
-			segmentIndex = i
-			break
-		}
-	}
 	
-	// Fallback in case of weird probability array
-	if segmentIndex == -1 {
-		segmentIndex = 3
+	// Check triggers for Free Kurthi
+	triggeredFreeKurthi := false
+	if stats.NewUsersSinceLastKurthi >= config.NewUserKurthiThreshold && config.NewUserKurthiThreshold > 0 {
+		triggeredFreeKurthi = true
+		h.configSvc.ResetNewUserKurthiCounter()
+	} else if stats.OrdersSinceLastKurthi >= config.OrderKurthiThreshold && config.OrderKurthiThreshold > 0 {
+		triggeredFreeKurthi = true
+		h.configSvc.ResetOrderKurthiCounter()
+	}
+
+	if triggeredFreeKurthi {
+		segmentIndex = 0 // 0 = Free Kurthi
+	} else {
+		// Pure Probabilities
+		var probs models.SpinWheelProbs
+		if isFirstTime {
+			probs = config.FirstTimeProbs
+		} else {
+			probs = config.ReturningProbs
+		}
+		
+		probabilities := []int{0, probs.Prob5Off, probs.Prob10Off, probs.ProbBetterLuck}
+		
+		rand.Seed(time.Now().UnixNano())
+		roll := rand.Intn(100)
+		sum := 0
+		for i, p := range probabilities {
+			sum += p
+			if roll < sum {
+				segmentIndex = i
+				break
+			}
+		}
+		
+		if segmentIndex == -1 {
+			segmentIndex = 3 // Fallback to Better Luck
+		}
 	}
 
 	var generatedCoupon *models.Coupon
 
-	if segmentIndex == 1 || segmentIndex == 2 {
+	if segmentIndex == 0 {
+		// Generate 100% off coupon for Kurthi (or a physical coupon as a placeholder)
+		code := fmt.Sprintf("SPIN-FREEKURTHI-%d", rand.Intn(90000)+10000)
+		expiry := time.Now().AddDate(0, 0, 7).Format("2006-01-02")
+		c := &models.Coupon{
+			ID:         fmt.Sprintf("cpn_spin_%d", time.Now().UnixNano()),
+			Code:       code,
+			Type:       "percentage",
+			Value:      100.0,
+			MinOrder:   0,
+			ExpiryDate: expiry,
+			IsActive:   true,
+			UsageLimit: 1,
+			UsedCount:  0,
+		}
+		if err := h.couponSvc.CreateCoupon(c); err == nil {
+			generatedCoupon = c
+		}
+	} else if segmentIndex == 1 || segmentIndex == 2 {
 		// Create a coupon
 		var discount float64
 		if segmentIndex == 1 {
@@ -111,8 +152,8 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Increment spin count
-	h.profileSvc.IncrementSpinCount(userID)
+	// Consume ticket and increment spin count
+	h.profileSvc.ConsumeSpinTicket(userID)
 
 	resp := SpinResponse{
 		SegmentIndex: segmentIndex,
