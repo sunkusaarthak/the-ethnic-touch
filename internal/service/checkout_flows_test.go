@@ -51,6 +51,8 @@ func (m *mockProductRepoForCheckoutFlows) GetProducts(filters map[string]string)
 }
 
 func (m *mockProductRepoForCheckoutFlows) CreateProduct(p *models.Product) error { return nil }
+func (m *mockProductRepoForCheckoutFlows) UpdateProduct(p *models.Product) error { return nil }
+func (m *mockProductRepoForCheckoutFlows) DeleteProduct(id string) error { return nil }
 func (m *mockProductRepoForCheckoutFlows) GetReviews(productID string) ([]models.ProductReview, error) { return nil, nil }
 func (m *mockProductRepoForCheckoutFlows) CreateReview(rev *models.ProductReview) error { return nil }
 

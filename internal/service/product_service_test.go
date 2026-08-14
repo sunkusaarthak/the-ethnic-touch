@@ -28,6 +28,14 @@ func (m *mockProductRepo) CreateProduct(p *models.Product) error {
 	return nil
 }
 
+func (m *mockProductRepo) DeleteProduct(id string) error {
+	return nil
+}
+
+func (m *mockProductRepo) UpdateProduct(p *models.Product) error {
+	return nil
+}
+
 func (m *mockProductRepo) GetReviews(productID string) ([]models.ProductReview, error) {
 	return m.reviews[productID], nil
 }

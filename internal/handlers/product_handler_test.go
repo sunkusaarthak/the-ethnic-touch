@@ -15,6 +15,14 @@ func (m *mockProductService) GetProducts(filters map[string]string) ([]models.Pr
 	return m.products, map[string]interface{}{"total": len(m.products)}, nil
 }
 
+func (m *mockProductService) DeleteProduct(id string) error {
+	return nil
+}
+
+func (m *mockProductService) UpdateProduct(p *models.Product) error {
+	return nil
+}
+
 func (m *mockProductService) CreateProduct(p *models.Product) error {
 	m.products = append(m.products, *p)
 	return nil

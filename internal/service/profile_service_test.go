@@ -82,6 +82,14 @@ func (m *mockProfileRepo) IncrementSpinCount(userID string) error {
 	return nil
 }
 
+func (m *mockProfileRepo) AddSpinTicket(userID string, count int) error {
+	return nil
+}
+
+func (m *mockProfileRepo) ConsumeSpinTicket(userID string) error {
+	return nil
+}
+
 func TestProfileService_SingleDefaultAddressInvariant(t *testing.T) {
 	repo := newMockProfileRepo()
 	svc := NewProfileService(repo)
