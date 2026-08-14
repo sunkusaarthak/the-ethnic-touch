@@ -63,7 +63,8 @@ func runMigrations(db *sql.DB) error {
 			expiry_date TEXT,
 			is_active BOOLEAN DEFAULT TRUE,
 			usage_limit INTEGER,
-			used_count INTEGER DEFAULT 0
+			used_count INTEGER DEFAULT 0,
+			user_id TEXT DEFAULT ''
 		);`,
 		`CREATE TABLE IF NOT EXISTS orders (
 			id TEXT PRIMARY KEY,
@@ -215,6 +216,7 @@ func runMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_product_reviews_pid_rating ON product_reviews(product_id, rating);`,
 		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS spin_count INT DEFAULT 0;`,
 		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS available_spins INT DEFAULT 0;`,
+		`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT '';`,
 	}
 	for _, q := range alterQueries {
 		if _, err := db.Exec(q); err != nil {

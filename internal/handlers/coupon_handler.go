@@ -101,9 +101,11 @@ func (h *CouponHandler) HandleUserCoupons(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	reqUserID := r.Header.Get("X-User-Id")
+
 	var userCoupons []map[string]interface{}
 	for _, c := range coupons {
-		if c.IsActive {
+		if c.IsActive && (c.UserID == "" || c.UserID == reqUserID) {
 			userCoupons = append(userCoupons, map[string]interface{}{
 				"id":         c.ID,
 				"code":       c.Code,
@@ -111,6 +113,9 @@ func (h *CouponHandler) HandleUserCoupons(w http.ResponseWriter, r *http.Request
 				"value":      c.Value,
 				"minOrder":   c.MinOrder,
 				"expiryDate": c.ExpiryDate,
+				"isActive":   c.IsActive,
+				"usageLimit": c.UsageLimit,
+				"usedCount":  c.UsedCount,
 			})
 		}
 	}

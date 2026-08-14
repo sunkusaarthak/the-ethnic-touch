@@ -119,6 +119,7 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 			IsActive:   true,
 			UsageLimit: 1,
 			UsedCount:  0,
+			UserID:     userID,
 		}
 		if err := h.couponSvc.CreateCoupon(c); err == nil {
 			generatedCoupon = c
@@ -145,6 +146,7 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 			IsActive:   true,
 			UsageLimit: 1,
 			UsedCount:  0,
+			UserID:     userID,
 		}
 
 		if err := h.couponSvc.CreateCoupon(c); err == nil {

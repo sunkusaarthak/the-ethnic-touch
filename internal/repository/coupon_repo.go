@@ -24,9 +24,9 @@ func NewCouponRepository(db *sql.DB) CouponRepository {
 func (r *postgresCouponRepo) GetByCode(code string) (*models.Coupon, error) {
 	var c models.Coupon
 	err := r.db.QueryRow(`
-		SELECT id, code, type, value, min_order, COALESCE(expiry_date, ''), is_active, usage_limit, used_count 
+		SELECT id, code, type, value, min_order, COALESCE(expiry_date, ''), is_active, usage_limit, used_count, user_id
 		FROM coupons WHERE UPPER(TRIM(code)) = UPPER(TRIM($1)) AND is_active = TRUE`, code).
-		Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &c.ExpiryDate, &c.IsActive, &c.UsageLimit, &c.UsedCount)
+		Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &c.ExpiryDate, &c.IsActive, &c.UsageLimit, &c.UsedCount, &c.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func (r *postgresCouponRepo) GetByCode(code string) (*models.Coupon, error) {
 
 func (r *postgresCouponRepo) GetAllCoupons() ([]models.Coupon, error) {
 	rows, err := r.db.Query(`
-		SELECT id, code, type, value, min_order, expiry_date, is_active, usage_limit, used_count 
+		SELECT id, code, type, value, min_order, expiry_date, is_active, usage_limit, used_count, user_id
 		FROM coupons ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func (r *postgresCouponRepo) GetAllCoupons() ([]models.Coupon, error) {
 	var coupons []models.Coupon
 	for rows.Next() {
 		var c models.Coupon
-		if err := rows.Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &c.ExpiryDate, &c.IsActive, &c.UsageLimit, &c.UsedCount); err == nil {
+		if err := rows.Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &c.ExpiryDate, &c.IsActive, &c.UsageLimit, &c.UsedCount, &c.UserID); err == nil {
 			coupons = append(coupons, c)
 		}
 	}
@@ -54,9 +54,9 @@ func (r *postgresCouponRepo) GetAllCoupons() ([]models.Coupon, error) {
 
 func (r *postgresCouponRepo) CreateCoupon(c *models.Coupon) error {
 	_, err := r.db.Exec(`
-		INSERT INTO coupons (id, code, type, value, min_order, expiry_date, is_active, usage_limit, used_count)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		c.ID, c.Code, c.Type, c.Value, c.MinOrder, c.ExpiryDate, c.IsActive, c.UsageLimit, c.UsedCount)
+		INSERT INTO coupons (id, code, type, value, min_order, expiry_date, is_active, usage_limit, used_count, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		c.ID, c.Code, c.Type, c.Value, c.MinOrder, c.ExpiryDate, c.IsActive, c.UsageLimit, c.UsedCount, c.UserID)
 	return err
 }
 

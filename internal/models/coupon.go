@@ -11,6 +11,7 @@ type Coupon struct {
 	IsActive   bool    `json:"isActive"`
 	UsageLimit int     `json:"usageLimit"`
 	UsedCount  int     `json:"usedCount"`
+	UserID     string  `json:"userId"`
 }
 
 // GiftTier represents a configured reward tier
