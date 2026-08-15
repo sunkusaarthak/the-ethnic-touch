@@ -12,7 +12,7 @@ const showAlert = (message, title = "Notice", type = "warning") => {
     }
 };
 
-const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
+const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfileIncomplete }) => {
     const [email, setEmail] = useState('');
     const [addresses, setAddresses] = useState([]);
     const [selectedAddressID, setSelectedAddressID] = useState(null);
@@ -138,6 +138,10 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                 const data = await response.json();
                 setAddresses(data);
                 
+                if (setProfileIncomplete) {
+                    setProfileIncomplete(data.length === 0);
+                }
+
                 const def = data.find(a => a.isDefault);
                 if (def) {
                     setSelectedAddressID(def.id);
@@ -873,6 +877,28 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                             <strong style={{fontSize: '1.1rem', color: '#8F5E36', fontFamily: 'var(--font-body)'}}>₹{finalTotal.toLocaleString('en-IN')}</strong>
                         </div>
                     </div>
+
+                    {checkoutType !== 'pickup' && addresses.length === 0 && (
+                        <div style={{
+                            marginTop: '1rem',
+                            padding: '0.65rem 0.85rem',
+                            background: '#FDF2F2',
+                            border: '1px solid #F8D7DA',
+                            borderRadius: '8px',
+                            color: '#721C24',
+                            fontSize: '0.8rem',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '8px'
+                        }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink: 0, marginTop: '2px'}}>
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="8" x2="12" y2="12" />
+                                <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            <span>Please add a delivery address to proceed to payment.</span>
+                        </div>
+                    )}
 
                     <button 
                         onClick={placeOrder} 

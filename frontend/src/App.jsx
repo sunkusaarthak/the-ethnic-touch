@@ -39,6 +39,7 @@ const AppRoutesContent = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [globalSearch, setGlobalSearch] = useState('');
+    const [profileIncomplete, setProfileIncomplete] = useState(false);
 
     const { authUser, authLoading } = useAuth();
     const { 
@@ -67,9 +68,26 @@ const AppRoutesContent = () => {
             })
             .catch(err => {
                 setProducts(fallbackProducts);
+                setProducts(fallbackProducts);
                 setLoading(false);
             });
     }, []);
+
+    useEffect(() => {
+        if (authUser) {
+            apiClient.get('/api/profile/addresses', { headers: { 'X-User-Id': authUser.uid } })
+                .then(data => {
+                    if (Array.isArray(data) && data.length === 0) {
+                        setProfileIncomplete(true);
+                    } else {
+                        setProfileIncomplete(false);
+                    }
+                })
+                .catch(err => console.error('Failed to load addresses for navbar', err));
+        } else {
+            setProfileIncomplete(false);
+        }
+    }, [authUser]);
 
     const handleSearchSubmit = (q) => {
         setGlobalSearch(q);
@@ -92,6 +110,7 @@ const AppRoutesContent = () => {
                 onSearchSubmit={handleSearchSubmit}
                 globalSearch={globalSearch}
                 setGlobalSearch={setGlobalSearch}
+                profileIncomplete={profileIncomplete}
             />
             <Routes>
                 <Route 
@@ -118,14 +137,14 @@ const AppRoutesContent = () => {
                 />
 
                 <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} wishlist={wishlist} toggleWishlist={toggleWishlist} authUser={authUser} />} />
-                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} wishlist={wishlist} toggleWishlist={toggleWishlist} />} />
+                <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} wishlist={wishlist} toggleWishlist={toggleWishlist} profileIncomplete={profileIncomplete} />} />
                 <Route 
                     path="/checkout" 
-                    element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} authLoading={authLoading} />} 
+                    element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} authLoading={authLoading} setProfileIncomplete={setProfileIncomplete} />} 
                 />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
                 <Route path="/spin-and-win" element={<SpinWheel />} />
-                <Route path="/profile" element={<ProfilePage authUser={authUser} />} />
+                <Route path="/profile" element={<ProfilePage authUser={authUser} setProfileIncomplete={setProfileIncomplete} />} />
                 <Route path="/complete-profile" element={<CompleteProfile authUser={authUser} />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route 

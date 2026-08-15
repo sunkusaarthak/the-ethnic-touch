@@ -5,8 +5,9 @@ import { signOut } from 'firebase/auth';
 import { auth, API_BASE_URL } from '../data/config';
 import apiClient from '../utils/apiClient';
 
-const ProfilePage = ({ authUser }) => {
+const ProfilePage = ({ authUser, setProfileIncomplete }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [mode, setMode] = useState('create');
@@ -72,6 +73,9 @@ const ProfilePage = ({ authUser }) => {
             const data = await apiClient.get('/api/profile/addresses', { headers: { 'X-User-Id': authUser.uid } });
             if (Array.isArray(data)) {
                 setAddresses(data);
+                if (setProfileIncomplete) {
+                    setProfileIncomplete(data.length === 0);
+                }
                 if (data.length > 0) {
                     const def = data.find(a => a.isDefault) || data[0];
                     setForm(prev => ({
@@ -114,7 +118,14 @@ const ProfilePage = ({ authUser }) => {
             await apiClient.post('/api/profile/addresses', addressForm, { headers: { 'X-User-Id': authUser.uid } });
             setAddressForm({ id: 0, fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
             setShowAddressForm(false);
-            loadAddresses();
+            
+            const params = new URLSearchParams(location.search);
+            const redirectPath = params.get('redirect');
+            if (redirectPath) {
+                navigate(redirectPath);
+            } else {
+                loadAddresses();
+            }
         } catch (err) {
             setAddressMessage(err.message || 'Failed to save address');
         }
@@ -172,7 +183,7 @@ const ProfilePage = ({ authUser }) => {
             };
 
             try {
-                const cached = localStorage.getItem(`tet_profile_${authUser.uid}`) || localStorage.getItem('tet_user_profile');
+                const cached = localStorage.getItem(`tet_profile_${authUser.uid}`);
                 if (cached) {
                     const parsed = JSON.parse(cached);
                     if (parsed && typeof parsed === 'object') {
@@ -240,6 +251,14 @@ const ProfilePage = ({ authUser }) => {
         loadAddresses();
         loadOrdersAndCoupons();
     }, [authUser]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        if (params.get('action') === 'add_address') {
+            setActiveTab('addresses');
+            setShowAddressForm(true);
+        }
+    }, [location.search]);
 
     useEffect(() => () => {
         if (redirectTimer.current) {

@@ -19,11 +19,7 @@ const CompleteProfile = ({ authUser }) => {
     const [email, setEmail] = useState(authUser?.email || '');
     const [phone, setPhone] = useState(authUser?.phoneNumber ? authUser.phoneNumber.replace(/^\+91/, '') : '');
     
-    // Address fields
-    const [addressLine, setAddressLine] = useState('');
-    const [city, setCity] = useState('');
-    const [state, setState] = useState('');
-    const [zipCode, setZipCode] = useState('');
+
 
     // Phone verification state for Google users
     const [phoneStep, setPhoneStep] = useState(isPhoneUser ? 'verified' : 'input'); // 'input' | 'otp_sent' | 'verified'
@@ -214,9 +210,7 @@ const CompleteProfile = ({ authUser }) => {
         if (!currentEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentEmail.trim())) {
             return setFormError('Please enter a valid email address.');
         }
-        if (!addressLine.trim() || !city.trim() || !state.trim() || !zipCode.trim()) {
-            return setFormError('Please complete your shipping address details.');
-        }
+
 
         setSubmitting(true);
         try {
@@ -229,15 +223,14 @@ const CompleteProfile = ({ authUser }) => {
 
             const fullPhoneFormatted = phone.startsWith('+') ? phone : `+91${phone.trim()}`;
 
-            // 1. Save Profile
             const profilePayload = {
                 fullName: fullName.trim(),
                 email: currentEmail.trim(),
                 phone: fullPhoneFormatted,
-                address: addressLine.trim(),
-                city: city.trim(),
-                state: state.trim(),
-                zipCode: zipCode.trim()
+                address: '',
+                city: '',
+                state: '',
+                zipCode: ''
             };
 
             const profRes = await fetch(`${API_BASE_URL}/api/profile/me`, {
@@ -253,24 +246,9 @@ const CompleteProfile = ({ authUser }) => {
 
             try {
                 localStorage.setItem(`tet_profile_${authUser.uid}`, JSON.stringify(profilePayload));
-                localStorage.setItem('tet_user_profile', JSON.stringify(profilePayload));
             } catch (e) {}
 
-            // 2. Save Default Address
-            const addrPayload = {
-                fullName: fullName.trim(),
-                phone: fullPhoneFormatted,
-                addressLine: addressLine.trim(),
-                city: city.trim(),
-                state: state.trim(),
-                zipCode: zipCode.trim()
-            };
 
-            await fetch(`${API_BASE_URL}/api/profile/addresses`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(addrPayload)
-            });
 
             // Redirect to destination
             navigate(redirectPath);
@@ -574,68 +552,6 @@ const CompleteProfile = ({ authUser }) => {
                         )}
                     </div>
 
-                    {/* Divider */}
-                    <div style={{ display: 'flex', alignItems: 'center', margin: '0.4rem 0', gap: '0.6rem' }}>
-                        <div style={{ flex: 1, height: '1px', background: '#EAE6E1' }}></div>
-                        <span style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Default Delivery Address</span>
-                        <div style={{ flex: 1, height: '1px', background: '#EAE6E1' }}></div>
-                    </div>
-
-                    {/* Street Address */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '500', fontSize: '0.8rem', color: '#444' }}>Street Address *</label>
-                        <input 
-                            type="text" 
-                            required 
-                            className="auth-input"
-                            value={addressLine}
-                            onChange={(e) => setAddressLine(e.target.value)}
-                            placeholder="Flat/House No., Building Name, Street"
-                            style={{ height: '40px', fontSize: '0.88rem' }}
-                        />
-                    </div>
-
-                    {/* City & State Row */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '500', fontSize: '0.8rem', color: '#444' }}>City *</label>
-                            <input 
-                                type="text" 
-                                required 
-                                className="auth-input"
-                                value={city}
-                                onChange={(e) => setCity(e.target.value)}
-                                placeholder="City Name"
-                                style={{ height: '40px', fontSize: '0.88rem' }}
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '500', fontSize: '0.8rem', color: '#444' }}>State *</label>
-                            <input 
-                                type="text" 
-                                required 
-                                className="auth-input"
-                                value={state}
-                                onChange={(e) => setState(e.target.value)}
-                                placeholder="State Name"
-                                style={{ height: '40px', fontSize: '0.88rem' }}
-                            />
-                        </div>
-                    </div>
-
-                    {/* ZIP Code */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '500', fontSize: '0.8rem', color: '#444' }}>ZIP / Postal Code *</label>
-                        <input 
-                            type="text" 
-                            required 
-                            className="auth-input"
-                            value={zipCode}
-                            onChange={(e) => setZipCode(e.target.value)}
-                            placeholder="6-digit ZIP code"
-                            style={{ height: '40px', fontSize: '0.88rem' }}
-                        />
-                    </div>
 
                     {/* Submit Button */}
                     <button 

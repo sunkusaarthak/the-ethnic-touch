@@ -5,7 +5,7 @@ import Cart from '../pages/Cart';
 import Home from '../pages/Home';
 import Shop from '../pages/Shop';
 
-const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onSearchSubmit, globalSearch, setGlobalSearch }) => {
+const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onSearchSubmit, globalSearch, setGlobalSearch, profileIncomplete }) => {
     const [animateCart, setAnimateCart] = useState(false);
     const [animateWishlist, setAnimateWishlist] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
@@ -13,7 +13,19 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
     const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
     const overlayRef = useRef(null);
+    const profileMenuRef = useRef(null);
     const navigate = useNavigate();
+    const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+                setProfileMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     useEffect(() => {
         if (cartCount > 0) {
@@ -215,12 +227,43 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
 
                     {/* Profile / Account Badge */}
                     {authUser ? (
-                        <Link to="/profile" className="desktop-icon-badge" title="Profile">
-                            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                            </svg>
-                        </Link>
+                        <div className="desktop-icon-badge" style={{ position: 'relative', cursor: 'pointer', overflow: 'visible' }} ref={profileMenuRef} title={profileIncomplete ? "Profile Incomplete - Add Address" : "Profile"}>
+                            <div onClick={() => setProfileMenuOpen(!profileMenuOpen)} style={{ display: 'flex', alignItems: 'center' }}>
+                                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                    <circle cx="12" cy="7" r="4" />
+                                </svg>
+                                {profileIncomplete && <span className="desktop-badge-dot"></span>}
+                            </div>
+                            
+                            {profileMenuOpen && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '130%',
+                                    right: '-10px',
+                                    background: '#fff',
+                                    borderRadius: '12px',
+                                    boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                                    width: '220px',
+                                    zIndex: 100,
+                                    border: '1px solid #EAE6E1',
+                                    padding: '0.5rem 0'
+                                }}>
+                                    <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f0f0f0', marginBottom: '0.25rem' }}>
+                                        <div style={{ fontSize: '0.8rem', color: '#8F5E36', fontWeight: 600 }}>Hi, {authUser.displayName?.split(' ')[0] || 'There'}</div>
+                                    </div>
+                                    <Link to="/profile" onClick={() => setProfileMenuOpen(false)} style={{ display: 'block', padding: '0.65rem 1rem', fontSize: '0.85rem', color: '#2D2A26', textDecoration: 'none' }}>
+                                        My Profile & Orders
+                                    </Link>
+                                    {profileIncomplete && (
+                                        <Link to="/profile?action=add_address" onClick={() => setProfileMenuOpen(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 1rem', fontSize: '0.85rem', color: '#d32f2f', textDecoration: 'none', background: '#FDF5F5', fontWeight: 500 }}>
+                                            Add Address
+                                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#d32f2f' }}></span>
+                                        </Link>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     ) : (
                         <Link to="/auth" style={{ fontSize: '0.82rem', fontWeight: '600', textDecoration: 'none', color: 'var(--color-primary)', border: '1.5px solid var(--color-primary)', padding: '0.35rem 0.9rem', borderRadius: '50px', whiteSpace: 'nowrap' }}>
                             Sign In

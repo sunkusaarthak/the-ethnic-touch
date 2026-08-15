@@ -137,7 +137,7 @@ func (r *postgresProfileRepo) GetAddresses(userID string) ([]models.Address, err
 	}
 	defer rows.Close()
 
-	var addresses []models.Address
+	addresses := []models.Address{}
 	for rows.Next() {
 		var a models.Address
 		if err := rows.Scan(&a.ID, &a.UserID, &a.FullName, &a.Phone, &a.AddressLine, &a.City, &a.State, &a.ZIPCode, &a.IsDefault, &a.CreatedAt, &a.UpdatedAt); err == nil {

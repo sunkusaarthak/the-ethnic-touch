@@ -4,7 +4,7 @@ import Checkout from './Checkout';
 import AuthRequiredModal from '../components/AuthRequiredModal';
 import { API_BASE_URL } from '../data/config';
 
-const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser, wishlist = [], toggleWishlist }) => {
+const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser, wishlist = [], toggleWishlist, profileIncomplete }) => {
     const navigate = useNavigate();
     const [couponCode, setCouponCode] = useState('');
     const [msg, setMsg] = useState('');
@@ -416,6 +416,8 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                 onClick={() => {
                                     if (!authUser) {
                                         setShowAuthModal(true);
+                                    } else if (profileIncomplete) {
+                                        navigate('/profile?action=add_address&redirect=/checkout');
                                     } else {
                                         navigate('/checkout');
                                     }
