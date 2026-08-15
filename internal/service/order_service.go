@@ -227,5 +227,5 @@ func (s *orderService) GetAllOrders(email string) ([]models.Order, error) {
 }
 
 func (s *orderService) ConfirmPickup(orderID string) error {
-	return s.orderRepo.UpdateOrderStatus(orderID, "picked_up", "", "", "", "")
+	return s.orderRepo.ConfirmStorePickup(orderID)
 }

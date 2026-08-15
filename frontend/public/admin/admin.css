@@ -25,7 +25,7 @@
 
 body {
     zoom: 0.88; /* Clean native 88% scale */
-    background-color: var(--color-bg);
+    background: linear-gradient(to right, #FFF 0%, #FFF 280px, var(--color-bg) 280px, var(--color-bg) 100%);
     color: var(--color-text);
     font-family: var(--font-body);
     display: flex;
@@ -43,7 +43,9 @@ body {
     display: flex;
     flex-direction: column;
     position: fixed;
-    height: 100vh;
+    top: 0;
+    bottom: 0;
+    min-height: 100vh;
 }
 
 .logo {
@@ -59,8 +61,22 @@ body {
     font-weight: 600;
 }
 
+nav {
+    flex: 1;
+    overflow-y: auto;
+}
+
+nav::-webkit-scrollbar {
+    width: 6px;
+}
+nav::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.1);
+    border-radius: 4px;
+}
+
 nav ul {
     list-style: none;
+    padding-bottom: 2rem;
 }
 
 nav li {

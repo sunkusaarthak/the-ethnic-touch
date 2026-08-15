@@ -14,7 +14,7 @@ type Config struct {
 	DBPassword        string
 	DBName            string
 	DBSSLMode         string
-	AdminAPIKey       string
+	SuperAdminEmail   string
 	PaymentProvider   string
 	RazorpayKeyID     string
 	RazorpayKeySecret string
@@ -50,10 +50,10 @@ func LoadConfig() *Config {
 		sslmode = "disable"
 	}
 
-	adminKey := os.Getenv("ADMIN_API_KEY")
-	if adminKey == "" {
-		adminKey = "admin_secret_token_123"
-		log.Println("WARNING [SECURITY]: ADMIN_API_KEY environment variable is not set! Using default key.")
+	superAdminEmail := os.Getenv("SUPER_ADMIN_EMAIL")
+	if superAdminEmail == "" {
+		superAdminEmail = "admin@ethnictouch.com"
+		log.Println("WARNING [SECURITY]: SUPER_ADMIN_EMAIL environment variable is not set! Using default: admin@ethnictouch.com")
 	}
 
 	paymentProvider := os.Getenv("PAYMENT_PROVIDER")
@@ -73,7 +73,7 @@ func LoadConfig() *Config {
 		DBPassword:        password,
 		DBName:            dbname,
 		DBSSLMode:         sslmode,
-		AdminAPIKey:       adminKey,
+		SuperAdminEmail:   superAdminEmail,
 		PaymentProvider:   paymentProvider,
 		RazorpayKeyID:     os.Getenv("RAZORPAY_KEY_ID"),
 		RazorpayKeySecret: os.Getenv("RAZORPAY_KEY_SECRET"),

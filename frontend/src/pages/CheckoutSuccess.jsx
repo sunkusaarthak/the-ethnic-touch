@@ -105,7 +105,7 @@ const CheckoutSuccess = () => {
                 letterSpacing: '-0.01em',
                 lineHeight: '1.25'
             }}>
-                {isOffline ? "Boutique Order Reserved!" : "Order Placed Successfully!"}
+                {isOffline ? "In-Store Order Reserved!" : "Order Placed Successfully!"}
             </h1>
             <p style={{fontSize: '0.88rem', color: '#6C6863', marginBottom: '1.5rem', padding: '0 0.5rem'}}>Thank you for choosing luxury, custom Indo-Western aesthetics.</p>
             
@@ -136,7 +136,7 @@ const CheckoutSuccess = () => {
                     whiteSpace: 'nowrap',
                     zIndex: 2
                 }}>
-                    Boutique Receipt
+                    In-Store Receipt
                 </div>
 
                 {/* Responsive Order Reference Pill */}
@@ -168,9 +168,9 @@ const CheckoutSuccess = () => {
                     {isOffline 
                         ? `Please present the verification pass QR code below at the reception counter to finalize payments of ₹${(amount || 0).toLocaleString('en-IN')} and collect your bespoke kurthi garments.` 
                         : isPickup 
-                        ? "Your boutique collection checkout is complete and fully paid. Keep this code handy for scanning at the retail checkout."
+                        ? "Your store collection checkout is complete and fully paid. Keep this code handy for scanning at the retail checkout."
                         : tracking && (tracking.startsWith('RAPIDO-INSTANT-') || tracking.startsWith('UBER-INSTANT-'))
-                        ? "Registered for direct instant courier shipping. Your designer styles are prepared, steamed, and dispatched from Jubilee Hills via direct courier."
+                        ? "Registered for direct instant courier shipping. Your designer styles are prepared, steamed, and dispatched from Khajaguda via direct courier."
                         : "Your designer packaging is ready and handed over to express delivery trackers for prompt dispatch to your wardrobe."
                     }
                 </p>
@@ -189,7 +189,7 @@ const CheckoutSuccess = () => {
                         boxShadow: '0 8px 20px rgba(212,163,115,0.08)'
                     }}>
                         <p style={{margin: '0 0 1rem', fontSize: '0.78rem', color: '#8F5E36', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.08em'}}>
-                            Boutique Verification Scanner Pass
+                            Store Verification Scanner Pass
                         </p>
                         <div style={{
                             padding: '8px',

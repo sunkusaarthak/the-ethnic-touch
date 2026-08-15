@@ -154,6 +154,11 @@ func runMigrations(db *sql.DB) error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS admin_users (
+			email TEXT PRIMARY KEY,
+			role TEXT NOT NULL DEFAULT 'employee',
+			created_at TEXT DEFAULT CURRENT_TIMESTAMP
+		);`,
 	}
 
 	for _, q := range queries {

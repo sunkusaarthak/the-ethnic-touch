@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "oxlint",
     "preview": "vite preview",
+    "build:run": "npm run build && npm run preview",
+    "start:full": "npm run build && cd .. && go run main.go",
+    "lint": "oxlint",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

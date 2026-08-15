@@ -16,6 +16,14 @@ func (m *mockOrderRepoForCheckoutFlows) GetOrder(orderID string) (*models.Order,
 	return nil, models.ErrNotFound
 }
 
+func (m *mockOrderRepoForCheckoutFlows) UpdateOrderPaymentMethod(orderID, method string) error {
+	return nil
+}
+
+func (m *mockOrderRepoForCheckoutFlows) ConfirmStorePickup(orderID string) error {
+	return nil
+}
+
 func (m *mockOrderRepoForCheckoutFlows) GetAllOrders(email string) ([]models.Order, error) {
 	return nil, nil
 }

@@ -13,8 +13,8 @@ func TestApp_InitializationAndShutdown(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg := &config.Config{
 		DBHost:      "localhost",
-		DBPort:      "5432",
-		AdminAPIKey: "test_key",
+		DBPort:          "5432",
+		SuperAdminEmail: "test_admin@example.com",
 	}
 
 	appInstance := &App{

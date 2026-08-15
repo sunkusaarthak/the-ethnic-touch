@@ -8,7 +8,7 @@ import (
 func TestLoadConfig_Defaults(t *testing.T) {
 	os.Unsetenv("DB_HOST")
 	os.Unsetenv("DB_PORT")
-	os.Unsetenv("ADMIN_API_KEY")
+	os.Unsetenv("SUPER_ADMIN_EMAIL")
 
 	cfg := LoadConfig()
 
@@ -20,19 +20,19 @@ func TestLoadConfig_Defaults(t *testing.T) {
 		t.Errorf("Expected default DBPort '5432', got %s", cfg.DBPort)
 	}
 
-	if cfg.AdminAPIKey != "admin_secret_token_123" {
-		t.Errorf("Expected default AdminAPIKey 'admin_secret_token_123', got %s", cfg.AdminAPIKey)
+	if cfg.SuperAdminEmail != "admin@ethnictouch.com" {
+		t.Errorf("Expected default SuperAdminEmail 'admin@ethnictouch.com', got %s", cfg.SuperAdminEmail)
 	}
 }
 
 func TestLoadConfig_CustomEnvironment(t *testing.T) {
 	os.Setenv("DB_HOST", "custom-db.render.com")
 	os.Setenv("DB_PORT", "5433")
-	os.Setenv("ADMIN_API_KEY", "prod_admin_secret_99")
+	os.Setenv("SUPER_ADMIN_EMAIL", "test@ethnictouch.com")
 	defer func() {
 		os.Unsetenv("DB_HOST")
 		os.Unsetenv("DB_PORT")
-		os.Unsetenv("ADMIN_API_KEY")
+		os.Unsetenv("SUPER_ADMIN_EMAIL")
 	}()
 
 	cfg := LoadConfig()
@@ -45,7 +45,7 @@ func TestLoadConfig_CustomEnvironment(t *testing.T) {
 		t.Errorf("Expected DBPort '5433', got %s", cfg.DBPort)
 	}
 
-	if cfg.AdminAPIKey != "prod_admin_secret_99" {
-		t.Errorf("Expected AdminAPIKey 'prod_admin_secret_99', got %s", cfg.AdminAPIKey)
+	if cfg.SuperAdminEmail != "test@ethnictouch.com" {
+		t.Errorf("Expected SuperAdminEmail 'test@ethnictouch.com', got %s", cfg.SuperAdminEmail)
 	}
 }

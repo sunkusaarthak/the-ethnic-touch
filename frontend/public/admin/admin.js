@@ -1,5 +1,30 @@
+let currentUserRole = null;
+let currentUserEmail = null;
+
+// Firebase Configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8",
+    authDomain: "the-ethnic-touch.firebaseapp.com",
+    projectId: "the-ethnic-touch",
+    storageBucket: "the-ethnic-touch.firebasestorage.app",
+    messagingSenderId: "565024605742",
+    appId: "1:565024605742:web:0452b9b88a65be9d67c1bf"
+};
+
+let auth;
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log("[SETTINGS DIAG] Page Loaded. Initializing tabs and listeners.");
+    
+    // Initialize Firebase
+    if (typeof firebase !== 'undefined') {
+        firebase.initializeApp(firebaseConfig);
+        auth = firebase.auth();
+        initAuthFlow();
+    } else {
+        console.error("Firebase SDK not loaded!");
+    }
+
     initTabs();
     loadDashboard();
     initProductModal(); // Build size checkboxes on load
@@ -25,15 +50,112 @@ document.addEventListener('DOMContentLoaded', () => {
         swf.addEventListener('submit', handleSaveSpinWinConfig);
     }
     
+    const staffF = document.getElementById('staffForm');
+    if (staffF) {
+        staffF.addEventListener('submit', handleAddStaff);
+    }
+    
+    const logoutAdmin = document.getElementById('logoutAdminBtn');
+    if (logoutAdmin) {
+        logoutAdmin.addEventListener('click', () => {
+            if (auth) auth.signOut();
+            localStorage.removeItem('adminToken');
+            window.location.reload();
+        });
+    }
+
     const logout = document.getElementById('logoutBtn');
     if (logout) {
-        logout.addEventListener('click', () => window.location.href = '/');
+        logout.addEventListener('click', () => {
+            // "Back to store" shouldn't necessarily log them out of the frontend, just redirect.
+            // But if they want it to, we leave it. Let's just redirect to home.
+            window.location.href = '/';
+        });
     }
 
     // Monitor url hashes for scanner scanning trigger
     handleUrlHashChange();
     window.addEventListener('hashchange', handleUrlHashChange);
 });
+
+// ==========================================
+// STAFF MANAGEMENT (RBAC)
+// ==========================================
+async function loadStaff() {
+    const tbody = document.querySelector('#staffTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>';
+    
+    try {
+        const res = await fetch('/api/admin/staff', { headers: getAuthHeader() });
+        if (!res.ok) throw new Error("Failed to load staff");
+        const staff = await res.json();
+        
+        tbody.innerHTML = '';
+        if (!staff || staff.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No staff members found.</td></tr>';
+            return;
+        }
+        
+        staff.forEach(s => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${s.email}</strong></td>
+                <td><span style="background: ${s.role === 'admin' ? '#e1f5fe' : '#f5f5f5'}; color: ${s.role === 'admin' ? '#0277bd' : '#666'}; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">${s.role.toUpperCase()}</span></td>
+                <td>${s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '-'}</td>
+                <td style="text-align:right;">
+                    <button class="btn-sm" style="background:#e53e3e; color:#fff; border:none; padding:4px 12px; border-radius:6px; cursor:pointer;" onclick="deleteStaff('${s.email}')">Remove</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:red;">${err.message}</td></tr>`;
+    }
+}
+
+async function handleAddStaff(e) {
+    e.preventDefault();
+    const email = document.getElementById('staffEmail').value.trim();
+    const role = document.getElementById('staffRole').value;
+    
+    try {
+        const res = await fetch('/api/admin/staff', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify({ email, role })
+        });
+        
+        if (!res.ok) throw new Error("Failed to add/update staff");
+        showAdminAlert('Team member added successfully', 'Success', 'success');
+        document.getElementById('staffForm').reset();
+        loadStaff();
+    } catch (err) {
+        showAdminAlert(err.message, 'Error', 'error');
+    }
+}
+
+async function deleteStaff(email) {
+    if (!confirm(`Are you sure you want to remove access for ${email}?`)) return;
+    
+    try {
+        const res = await fetch(`/api/admin/staff?email=${encodeURIComponent(email)}`, {
+            method: 'DELETE',
+            headers: getAuthHeader()
+        });
+        if (!res.ok) throw new Error("Failed to remove staff");
+        showAdminAlert('Team member removed', 'Success', 'success');
+        loadStaff();
+    } catch (err) {
+        showAdminAlert(err.message, 'Error', 'error');
+    }
+}
+
+window.deleteStaff = deleteStaff;
 
 function copyTextToClipboard(text, btnElement) {
     if (!text) return;
@@ -46,16 +168,18 @@ function copyTextToClipboard(text, btnElement) {
             btnElement.style.color = '#2e7d32';
             btnElement.style.borderColor = '#81c784';
             setTimeout(() => {
-                btnElement.innerHTML = originalHTML;
-                btnElement.style.backgroundColor = '';
-                btnElement.style.color = '';
-                btnElement.style.borderColor = '';
+                if (btnElement) {
+                    btnElement.innerHTML = originalHTML;
+                    btnElement.style.backgroundColor = '';
+                    btnElement.style.color = '';
+                    btnElement.style.borderColor = '';
+                }
             }, 2000);
         }
     };
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(textToCopy).then(onSuccess).catch(() => fallbackCopyAdmin(textToCopy, onSuccess));
+        navigator.clipboard.writeText(textToCopy).then(onSuccess).catch(err => console.error("Copy failed", err));
     } else {
         fallbackCopyAdmin(textToCopy, onSuccess);
     }
@@ -266,12 +390,12 @@ async function uploadGalleryRowFile(event, fileInputElement) {
     }
 }
 
-// Helper to assemble Auth headers dynamically
+// ==========================================
+// AUTHENTICATION & RBAC LOGIC
+// ==========================================
 function getAuthHeader() {
-    const adminKey = localStorage.getItem('adminApiKey') || 'admin_secret_token_123';
-    return {
-        'Authorization': `Bearer ${adminKey}`
-    };
+    const token = localStorage.getItem('adminToken') || '';
+    return { 'Authorization': `Bearer ${token}` };
 }
 
 async function fetchJsonSafe(url, options = {}) {
@@ -305,12 +429,90 @@ async function fetchJsonSafe(url, options = {}) {
     }
 }
 
+function initAuthFlow() {
+    const loginBtn = document.getElementById('adminGoogleLoginBtn');
+    const overlay = document.getElementById('adminLoginOverlay');
+    const errorMsg = document.getElementById('loginErrorMsg');
+
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            try {
+                const token = await user.getIdToken();
+                localStorage.setItem('adminToken', token);
+                
+                // Verify with backend and get role
+                const res = await fetch('/api/admin/me', { headers: getAuthHeader() });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentUserRole = data.role;
+                    currentUserEmail = data.email;
+                    
+                    // Hide overlay
+                    overlay.style.display = 'none';
+                    
+                    // Apply RBAC UI
+                    applyRoleBasedUI();
+                    
+                    // Load default tab
+                    loadDashboard();
+                } else {
+                    // Unauthorized
+                    auth.signOut();
+                    localStorage.removeItem('adminToken');
+                    errorMsg.innerText = "Access Denied. You do not have permission to view the Admin Portal.";
+                    errorMsg.style.display = 'block';
+                    overlay.style.display = 'flex';
+                }
+            } catch (err) {
+                console.error("Auth error", err);
+                errorMsg.innerText = "An error occurred during authentication.";
+                errorMsg.style.display = 'block';
+                overlay.style.display = 'flex';
+            }
+        } else {
+            // Not logged in
+            localStorage.removeItem('adminToken');
+            overlay.style.display = 'flex';
+        }
+    });
+
+    if (loginBtn) {
+        loginBtn.addEventListener('click', async () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try {
+                await auth.signInWithPopup(provider);
+            } catch (err) {
+                console.error("Google Login Failed", err);
+                errorMsg.innerText = err.message;
+                errorMsg.style.display = 'block';
+            }
+        });
+    }
+}
+
+function applyRoleBasedUI() {
+    if (currentUserRole === 'employee') {
+        const adminElements = document.querySelectorAll('.admin-only');
+        adminElements.forEach(el => el.style.display = 'none');
+        
+        // Force them to a safe tab if they were on an admin-only tab
+        const activeTab = document.querySelector('.nav-menu li.active');
+        if (activeTab && activeTab.classList.contains('admin-only')) {
+            const dashboardTab = document.querySelector('.nav-menu li[data-tab="dashboard"]');
+            if (dashboardTab) dashboardTab.click();
+        }
+    }
+}
+
+// ==========================================
+// TABS & NAVIGATION
+// ==========================================
 function initTabs() {
     const tabs = document.querySelectorAll('nav li');
     const contents = document.querySelectorAll('.tab-content');
 
     tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
+        tab.addEventListener('click', (e) => {
             const target = tab.getAttribute('data-tab');
             
             tabs.forEach(t => t.classList.remove('active'));
@@ -319,7 +521,7 @@ function initTabs() {
             contents.forEach(c => c.classList.remove('active'));
             document.getElementById(`tab-${target}`).classList.add('active');
             
-            document.getElementById('pageTitle').innerText = tab.innerText;
+            document.getElementById('pageTitle').innerText = e.target.innerText;
             
             updateHeaderActions(target);
             loadTabData(target);
@@ -346,15 +548,16 @@ function updateHeaderActions(tab) {
     }
 }
 
-async function loadTabData(tab) {
-    if (tab === 'dashboard') loadDashboard();
-    if (tab === 'products') loadProducts();
-    if (tab === 'orders') loadOrders();
-    if (tab === 'coupons') loadCoupons();
-    if (tab === 'settings') loadSettings();
-    if (tab === 'spinwin') loadSpinWin();
-    if (tab === 'profiles') loadProfiles();
-    if (tab === 'pickup-scanner') {
+async function loadTabData(target) {
+    if (target === 'dashboard') loadDashboard();
+    if (target === 'products') loadProducts();
+    if (target === 'orders') loadOrders();
+    if (target === 'coupons') loadCoupons();
+    if (target === 'settings') loadSettings();
+    if (target === 'spinwin') loadSpinWin();
+    if (target === 'profiles') loadProfiles();
+    if (target === 'staff') loadStaff();
+    if (target === 'pickup-scanner') {
         const card = document.getElementById('pickupOrderCard');
         const msg = document.getElementById('scannerMessage');
         const inp = document.getElementById('scannerOrderIdInput');
@@ -380,6 +583,10 @@ async function loadDashboard() {
         document.getElementById('stat-revenue').innerText = `₹${revenue.toLocaleString('en-IN')}`;
         document.getElementById('stat-orders').innerText = orderList.length;
         document.getElementById('stat-coupons').innerText = couponList.length;
+        
+        const pendingPickups = orderList.filter(o => o.checkoutType === 'pickup' && o.paymentMethod === 'offline_qr' && o.status === 'pending_payment').length;
+        const pendingEl = document.getElementById('stat-pending-pickups');
+        if (pendingEl) pendingEl.innerText = pendingPickups;
     } catch (err) {
         console.error("Dashboard load failed", err);
     }
@@ -1328,6 +1535,56 @@ function showScannerMessage(text, color, bgColor) {
     msgEl.style.display = 'block';
 }
 
+let html5QrcodeScanner = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const startBtn = document.getElementById('startQrScanBtn');
+    const stopBtn = document.getElementById('stopQrScanBtn');
+    const container = document.getElementById('qrReaderContainer');
+
+    if (startBtn) {
+        startBtn.addEventListener('click', () => {
+            container.style.display = 'block';
+            if (!html5QrcodeScanner) {
+                html5QrcodeScanner = new Html5Qrcode("qr-reader");
+            }
+            html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                (decodedText, decodedResult) => {
+                    // Success!
+                    console.log(`Scan result: ${decodedText}`);
+                    document.getElementById('scannerOrderIdInput').value = decodedText;
+                    
+                    html5QrcodeScanner.stop().then(() => {
+                        container.style.display = 'none';
+                        triggerSearchPickupOrder();
+                    }).catch(err => {
+                        console.error("Failed to stop scanner", err);
+                    });
+                },
+                (errorMessage) => {
+                    // parse error, ignore
+                }
+            ).catch(err => {
+                showScannerMessage(`Unable to start camera: ${err}`, "red", "#fff5f5");
+            });
+        });
+    }
+
+    if (stopBtn) {
+        stopBtn.addEventListener('click', () => {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then(() => {
+                    container.style.display = 'none';
+                }).catch(err => console.error(err));
+            } else {
+                container.style.display = 'none';
+            }
+        });
+    }
+});
+
 async function searchPickupOrder(orderId) {
     const msgEl = document.getElementById('scannerMessage');
     const cardEl = document.getElementById('pickupOrderCard');
@@ -1344,13 +1601,13 @@ async function searchPickupOrder(orderId) {
             return;
         }
 
-        const orders = await res.json();
-        if (!orders || orders.length === 0) {
+        const data = await res.json();
+        if (!data || (Array.isArray(data) && data.length === 0) || (!Array.isArray(data) && !data.id)) {
             showScannerMessage(`Order Reference "${orderId}" not found in database.`, "red", "#fff5f5");
             return;
         }
 
-        const order = orders[0];
+        const order = Array.isArray(data) ? data[0] : data;
         displayPickupOrderDetails(order);
 
     } catch (err) {

@@ -42,7 +42,7 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
             <section className="home-section" style={{ backgroundColor: '#FAF8F5', paddingTop: '4rem', paddingBottom: '4rem' }}>
                 <div className="home-section-header">
                     <h2>Shop by Category</h2>
-                    <p>Discover boutique silhouettes, tailored for every occasion and style preference</p>
+                    <p>Discover designer silhouettes, tailored for every occasion and style preference</p>
                 </div>
                 <div className="home-category-grid">
                     {[
@@ -68,7 +68,7 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
             <section className="home-section">
                 <div className="home-section-header">
                     <h2>Most Coveted Styles</h2>
-                    <p>Highly sought-after silhouettes curated by our boutique designers for timeless appeal</p>
+                    <p>Highly sought-after silhouettes curated by our designers for timeless appeal</p>
                 </div>
                 {bestSellers.length === 0 ? (
                     <ProductSkeletonGrid count={4} />
@@ -101,7 +101,7 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
                         <img src="./images/login_art.png" alt="Detail of fine tailoring and pastel embroidery" />
                     </div>
                     <div className="brand-story-text">
-                        <span className="brand-story-tag">The Boutique Philosophy</span>
+                        <span className="brand-story-tag">The Ethnic Touch Philosophy</span>
                         <h2>Honoring Slow Fashion & Indian Aesthetics</h2>
                         <p>At The Ethnic Touch, we discard mass production rules. Every garment is treated as a piece of art, starting from premium handpicked cotton and linens to natural mineral dyes and elegant embroidery details.</p>
                         

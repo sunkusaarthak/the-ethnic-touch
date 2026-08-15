@@ -126,7 +126,7 @@ const MockPayment = ({ onPaymentSuccess }) => {
                         <span style={{ fontSize: '0.82rem', fontWeight: '600', letterSpacing: '0.5px', color: '#93C5FD' }}>RAZORPAY CHECKOUT</span>
                     </div>
                     <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500', fontFamily: 'var(--font-heading)' }}>
-                        The Ethnic Touch Boutique
+                        The Ethnic Touch
                     </h3>
                     <p style={{ margin: '0.3rem 0 0', fontSize: '0.78rem', color: '#CBD5E1' }}>
                         Ref: <strong style={{ fontFamily: 'monospace', color: '#FFF' }}>#{orderId}</strong>

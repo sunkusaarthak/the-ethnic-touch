@@ -16,6 +16,7 @@ type OrderRepository interface {
 	GetAdminOrders(orderID string) ([]models.Order, error)
 	CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
+	ConfirmStorePickup(orderID string) error
 }
 
 type postgresOrderRepo struct {
@@ -72,6 +73,83 @@ func (r *postgresOrderRepo) getOrderItems(orderID string) ([]models.OrderItem, e
 		}
 	}
 	return items, nil
+}
+
+func (r *postgresOrderRepo) ConfirmStorePickup(orderID string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start order transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Fetch order items
+	rows, err := tx.Query(`SELECT product_id, quantity, COALESCE(size, '') FROM order_items WHERE order_id = $1`, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch order items: %w", err)
+	}
+	defer rows.Close()
+
+	type itemData struct {
+		ProductID string
+		Quantity  int
+		Size      string
+	}
+	var items []itemData
+	for rows.Next() {
+		var it itemData
+		if err := rows.Scan(&it.ProductID, &it.Quantity, &it.Size); err != nil {
+			return err
+		}
+		items = append(items, it)
+	}
+	rows.Close()
+
+	// 2. Lock and deduct stock
+	for _, item := range items {
+		var prodName string
+		var totalStock int
+		var sizesStockStr string
+
+		err := tx.QueryRow("SELECT name, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
+			Scan(&prodName, &totalStock, &sizesStockStr)
+		if err != nil {
+			return fmt.Errorf("failed to lock product %s: %w", item.ProductID, err)
+		}
+
+		var sizesStock map[string]int
+		json.Unmarshal([]byte(sizesStockStr), &sizesStock)
+		if sizesStock == nil {
+			sizesStock = map[string]int{}
+		}
+
+		if item.Size != "" && len(sizesStock) > 0 {
+			if curr, ok := sizesStock[item.Size]; ok {
+				if curr < item.Quantity {
+					return fmt.Errorf("insufficient stock for product %s size %s. Online stock ran out before pickup.", prodName, item.Size)
+				}
+				sizesStock[item.Size] = curr - item.Quantity
+			}
+		}
+
+		newTotalStock := totalStock - item.Quantity
+		if newTotalStock < 0 {
+			return fmt.Errorf("insufficient stock for product %s. Online stock ran out before pickup.", prodName)
+		}
+
+		sizesStockBytes, _ := json.Marshal(sizesStock)
+		_, err = tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3", newTotalStock, string(sizesStockBytes), item.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to update stock for product %s: %w", item.ProductID, err)
+		}
+	}
+
+	// 3. Update order status
+	_, err = tx.Exec("UPDATE orders SET status = 'picked_up' WHERE id = $1", orderID)
+	if err != nil {
+		return fmt.Errorf("failed to update order status: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func (r *postgresOrderRepo) GetAllOrders(email string) ([]models.Order, error) {
@@ -142,42 +220,46 @@ func (r *postgresOrderRepo) CreateOrderWithTransaction(order *models.Order, stoc
 	}
 	defer tx.Rollback()
 
-	// 1. Lock and update product stocks
-	for _, item := range order.Items {
-		var prodName string
-		var totalStock int
-		var sizesStockStr string
+	// 1. Lock and update product stocks (SKIP for pending store pickups)
+	isPendingPickup := order.CheckoutType == "pickup" && order.PaymentMethod == "offline_qr" && order.Status == "pending_payment"
+	
+	if !isPendingPickup {
+		for _, item := range order.Items {
+			var prodName string
+			var totalStock int
+			var sizesStockStr string
 
-		err := tx.QueryRow("SELECT name, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
-			Scan(&prodName, &totalStock, &sizesStockStr)
-		if err != nil {
-			return fmt.Errorf("failed to lock product %s: %w", item.ProductID, err)
-		}
-
-		var sizesStock map[string]int
-		json.Unmarshal([]byte(sizesStockStr), &sizesStock)
-		if sizesStock == nil {
-			sizesStock = map[string]int{}
-		}
-
-		if item.Size != "" && len(sizesStock) > 0 {
-			if curr, ok := sizesStock[item.Size]; ok {
-				if curr < item.Quantity {
-					return fmt.Errorf("insufficient stock for product %s size %s", prodName, item.Size)
-				}
-				sizesStock[item.Size] = curr - item.Quantity
+			err := tx.QueryRow("SELECT name, stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
+				Scan(&prodName, &totalStock, &sizesStockStr)
+			if err != nil {
+				return fmt.Errorf("failed to lock product %s: %w", item.ProductID, err)
 			}
-		}
 
-		newTotalStock := totalStock - item.Quantity
-		if newTotalStock < 0 {
-			newTotalStock = 0
-		}
+			var sizesStock map[string]int
+			json.Unmarshal([]byte(sizesStockStr), &sizesStock)
+			if sizesStock == nil {
+				sizesStock = map[string]int{}
+			}
 
-		sizesStockBytes, _ := json.Marshal(sizesStock)
-		_, err = tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3", newTotalStock, string(sizesStockBytes), item.ProductID)
-		if err != nil {
-			return fmt.Errorf("failed to update stock for product %s: %w", item.ProductID, err)
+			if item.Size != "" && len(sizesStock) > 0 {
+				if curr, ok := sizesStock[item.Size]; ok {
+					if curr < item.Quantity {
+						return fmt.Errorf("insufficient stock for product %s size %s", prodName, item.Size)
+					}
+					sizesStock[item.Size] = curr - item.Quantity
+				}
+			}
+
+			newTotalStock := totalStock - item.Quantity
+			if newTotalStock < 0 {
+				newTotalStock = 0
+			}
+
+			sizesStockBytes, _ := json.Marshal(sizesStock)
+			_, err = tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3", newTotalStock, string(sizesStockBytes), item.ProductID)
+			if err != nil {
+				return fmt.Errorf("failed to update stock for product %s: %w", item.ProductID, err)
+			}
 		}
 	}
 

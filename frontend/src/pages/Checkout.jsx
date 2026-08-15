@@ -166,7 +166,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                 paymentMethod: paymentMethod,
                 shippingName: "Store Pickup Customer",
                 shippingPhone: authUser?.phone || "0000000000",
-                shippingAddress: "Jubilee Hills boutique pickup",
+                shippingAddress: "The Ethnic Touch pickup",
                 shippingCity: "Hyderabad",
                 shippingState: "Telangana",
                 shippingZipCode: "500033"
@@ -247,7 +247,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         amount: Math.round(data.amount * 100),
                         currency: "INR",
                         name: "The Ethnic Touch",
-                        description: `Boutique Order #${data.orderId}`,
+                        description: `Store Order #${data.orderId}`,
                         prefill: { email: email },
                         theme: { color: "#B97A66" },
                         handler: async function (response) {
@@ -280,7 +280,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                                         } 
                                     });
                                 } else {
-                                    showAlert("Payment verification failed. Please contact boutique support.", "Payment Error", "error");
+                                    showAlert("Payment verification failed. Please contact store support.", "Payment Error", "error");
                                     setOrdering(false);
                                 }
                             } catch (e) {
@@ -479,13 +479,12 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                                 <polyline points="9 22 9 12 15 12 15 22" />
                             </svg>
-                            Jubilee Hills Boutique Collection
+                            The Ethnic Touch Collection
                         </h4>
-                        <p style={{fontSize: '0.95rem', color: '#2D2A26', fontWeight: 600, margin: '0 0 0.4rem'}}>The Ethnic Touch Boutique</p>
+                        <p style={{fontSize: '0.95rem', color: '#2D2A26', fontWeight: 600, margin: '0 0 0.4rem'}}>The Ethnic Touch</p>
                         <p style={{fontSize: '0.88rem', color: '#6C6863', margin: '0 0 0.8rem', lineHeight: '1.5'}}>
-                            Road No. 36, Near Jubilee Hills Check Post,<br/>
-                            Hyderabad, Telangana - 500033<br/>
-                            Assistant Desk: <strong>+91 98765 43210</strong>
+                            ESCI Road, Khajaguda, Manikonda, Gacibowli, Hyderabad, Telangana - 500032<br/>
+                            Assistant Desk: <strong>+91 76748 55289</strong>
                         </p>
                         <p style={{fontSize: '0.85rem', color: '#8F5E36', fontStyle: 'italic', margin: 0, borderTop: '1px solid rgba(212,163,115,0.2)', paddingTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px'}}>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36', flexShrink: 0}}>
@@ -548,7 +547,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                                     <line x1="12" y1="18" x2="12.01" y2="18" />
                                 </svg>
                                 <span style={{fontSize: '0.98rem', fontWeight: 600, color: '#2D2A26'}}>Pay In-Store</span>
-                                <span style={{fontSize: '0.75rem', color: '#6C6863', textAlign: 'center'}}>Book now, scan pass at boutique</span>
+                                <span style={{fontSize: '0.75rem', color: '#6C6863', textAlign: 'center'}}>Book now, scan pass at store</span>
                             </div>
                         </div>
                     </div>
@@ -597,7 +596,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                     </svg>
                     <div>
-                        <strong>Local courier dispatch:</strong> Delivered within <strong>2-4 hours</strong> via instant courier (Uber/Rapido) direct from Road No. 36 boutique.
+                        <strong>Local courier dispatch:</strong> Delivered within <strong>2-4 hours</strong> via instant courier (Uber/Rapido) direct from Khajaguda store.
                     </div>
                 </div>
             )}
@@ -724,7 +723,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                             <div>
                                 <strong>Local Instant Courier Blocked:</strong> Your shipping address city ({activeAddr?.city || 'Selected location'}) is outside the Hyderabad/Secunderabad delivery radius.<br/>
                                 <span style={{fontSize: '0.85rem', color: '#90242E', marginTop: '0.4rem', display: 'block'}}>
-                                    To proceed, select standard nationwide delivery, pick up in boutique, or update your shipping address.
+                                    To proceed, select standard nationwide delivery, pick up in store, or update your shipping address.
                                 </span>
                             </div>
                         </div>

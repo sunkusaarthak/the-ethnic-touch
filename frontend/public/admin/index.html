@@ -7,26 +7,44 @@
     <link rel="stylesheet" href="admin.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 </head>
 <body>
+    <!-- Google Login Overlay -->
+    <div id="adminLoginOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <h1 style="font-family:'Playfair Display', serif; font-size:2.5rem; margin-bottom:1rem; color:#2D2A26;">Admin Portal</h1>
+        <p style="color:#6C6863; margin-bottom:2rem;">Secure access restricted to authorized personnel.</p>
+        <button id="adminGoogleLoginBtn" class="btn-primary" style="padding:1rem 2rem; font-size:1.1rem; border-radius:8px; display:flex; align-items:center; gap:0.8rem;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Sign in with Google
+        </button>
+        <div id="loginErrorMsg" style="color:#e53e3e; margin-top:1.5rem; font-weight:500; display:none;"></div>
+    </div>
+
     <aside class="sidebar">
         <div class="logo">
             The Ethnic <span>Touch</span>
         </div>
         <nav>
-            <ul>
+            <ul class="nav-menu">
                 <li class="active" data-tab="dashboard">Dashboard</li>
-                <li data-tab="products">Manage Products</li>
-                <li data-tab="orders">View Orders</li>
-                <li data-tab="profiles">Manage Users</li>
-                <li data-tab="coupons">Marketing Coupons</li>
-                <li data-tab="settings">General Settings</li>
-                <li data-tab="spinwin">Spin & Win</li>
-                <li data-tab="pickup-scanner">Verify Store Pickups</li>
+                <li data-tab="orders">Orders & Fulfillment</li>
+                <li data-tab="pickup-scanner">Pickup Scanner</li>
+                <li data-tab="products" class="admin-only">Products & Inventory</li>
+                <li data-tab="coupons" class="admin-only">Discount & Gift Coupons</li>
+                <li data-tab="spinwin" class="admin-only">Spin & Win Config</li>
+                <li data-tab="profiles" class="admin-only">Customer Profiles</li>
+                <li data-tab="staff" class="admin-only">Team & Access</li>
+                <li data-tab="settings" class="admin-only">Platform Settings</li>
             </ul>
         </nav>
         <div class="sidebar-footer">
+            <button id="logoutAdminBtn" style="width:100%; padding:0.8rem; margin-bottom:0.8rem; border:1px solid #fca5a5; background:#fef2f2; color:#ef4444; border-radius:50px; cursor:pointer; font-family:var(--font-body); transition:var(--transition-fast);">Log Out of Admin</button>
             <button id="logoutBtn">Back to Store</button>
         </div>
     </aside>
@@ -53,6 +71,10 @@
                 <div class="stat-card">
                     <h3>Coupons Active</h3>
                     <p class="value" id="stat-coupons">0</p>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #f59e0b; background: #fffbeb;">
+                    <h3 style="color: #b45309;">Pending Pickups</h3>
+                    <p class="value" id="stat-pending-pickups" style="color: #d97706;">0</p>
                 </div>
             </div>
         </div>
@@ -134,6 +156,41 @@
                     <tbody></tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- Staff Tab -->
+        <div id="tab-staff" class="tab-content">
+            <div style="background: #fff; padding: 2rem; border-radius: 12px; border: 1px solid #eee; margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">Add Team Member</h3>
+                <form id="staffForm" style="display: flex; gap: 1rem; align-items: flex-end; margin-top: 1rem;">
+                    <div style="flex: 2;">
+                        <label>Email Address</label>
+                        <input type="email" id="staffEmail" required placeholder="employee@ethnictouch.com">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Role</label>
+                        <select id="staffRole" required>
+                            <option value="employee">Employee (Orders Only)</option>
+                            <option value="admin">Admin (Full Access)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary" style="height: 44px; padding: 0 2rem;">Add / Update</button>
+                </form>
+            </div>
+            
+            <table class="data-table" id="staffTable">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Added On</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="4" style="text-align:center;">Loading team members...</td></tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- Settings Tab -->
@@ -332,10 +389,22 @@
                     Staff confirmation flow. Enter the order reference pass ID below or verify it from a scanned invoice QR pass.
                 </p>
 
-                <!-- Search Input Form -->
+                <!-- Search Input Form & Scanner -->
                 <div style="display: flex; gap: 0.8rem; margin-bottom: 2rem;">
                     <input type="text" id="scannerOrderIdInput" placeholder="Enter Order ID (e.g. ORD_123456789)" style="flex: 1; padding: 0.85rem 1.2rem; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem;">
                     <button class="btn-primary" onclick="triggerSearchPickupOrder()" style="padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600;">Search Order</button>
+                    <button type="button" id="startQrScanBtn" class="btn-secondary" style="padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h6v6H4z"/><path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/><path d="M14 14h2v2h-2z"/><path d="M18 14h2v2h-2z"/><path d="M14 18h2v2h-2z"/><path d="M18 18h2v2h-2z"/></svg>
+                        Scan QR
+                    </button>
+                </div>
+
+                <div id="qrReaderContainer" style="display: none; margin-bottom: 2rem; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+                    <div style="background: #333; color: white; padding: 0.8rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">Scan QR Pass</span>
+                        <button type="button" id="stopQrScanBtn" style="background: none; border: none; color: white; cursor: pointer;">✕ Close</button>
+                    </div>
+                    <div id="qr-reader" style="width: 100%;"></div>
                 </div>
 
                 <div id="scannerMessage" style="display: none; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: 500;"></div>
