@@ -482,7 +482,7 @@ const ProfilePage = ({ authUser }) => {
                             )}
 
                             {(!isEditing && mode === 'edit') ? (
-                                <div className="form-grid-2">
+                                <div className="form-linear-layout" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     <div className="profile-info-block">
                                         <span className="profile-info-label">Full Name</span>
                                         <p className="profile-info-value">{form.fullName || '-'}</p>
@@ -499,7 +499,7 @@ const ProfilePage = ({ authUser }) => {
                                         <span className="profile-info-label">ZIP / Postal Code</span>
                                         <p className="profile-info-value">{form.zipCode || '-'}</p>
                                     </div>
-                                    <div className="profile-info-block form-span-2">
+                                    <div className="profile-info-block">
                                         <span className="profile-info-label">Primary Shipping Address</span>
                                         <p className="profile-info-value">
                                             {form.address ? `${form.address}, ${form.city}, ${form.state} - ${form.zipCode}` : '-'}
@@ -509,14 +509,14 @@ const ProfilePage = ({ authUser }) => {
                                         <span className="profile-info-label">Preferred Size</span>
                                         <p className="profile-info-value">{form.preferredSize || 'Not set'}</p>
                                     </div>
-                                    <div className="profile-info-block form-span-2">
+                                    <div className="profile-info-block">
                                         <span className="profile-info-label">Style Preferences & Notes</span>
                                         <p className="profile-info-value">{form.styleNotes || 'None added'}</p>
                                     </div>
                                 </div>
                             ) : (
-                                <form onSubmit={handleSubmit} className="form-grid-2">
-                                    <div style={{ gridColumn: 'span 2' }}>
+                                <form onSubmit={handleSubmit} className="form-linear-layout" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                    <div>
                                         <label className="form-label">Email Address (Required)</label>
                                         <input 
                                             type="email" 
@@ -602,7 +602,7 @@ const ProfilePage = ({ authUser }) => {
                                             <option value="XL">XL</option>
                                         </select>
                                     </div>
-                                    <div style={{ gridColumn: 'span 2' }}>
+                                    <div>
                                         <label className="form-label">Style Preferences & Special Instructions</label>
                                         <textarea 
                                             rows="3" 
@@ -612,7 +612,7 @@ const ProfilePage = ({ authUser }) => {
                                             className="form-control"
                                         />
                                     </div>
-                                    <div style={{ gridColumn: 'span 2', marginTop: '0.5rem' }}>
+                                    <div className="form-span-2" style={{ marginTop: '0.5rem' }}>
                                         <button 
                                             type="submit" 
                                             className="btn btn-primary"
@@ -647,18 +647,19 @@ const ProfilePage = ({ authUser }) => {
                             </div>
 
                             {showAddressForm && (
-                                <form onSubmit={handleAddressSubmit} className="form-grid-2" style={{ 
+                                <form onSubmit={handleAddressSubmit} className="form-linear-layout" style={{ 
+                                    display: 'flex', flexDirection: 'column', gap: '1.25rem',
                                     background: '#fafafa', 
                                     padding: '1.5rem', 
                                     borderRadius: '8px', 
                                     border: '1px solid #eee',
                                     marginBottom: '2rem' 
                                 }}>
-                                    <h4 className="subsection-title" style={{ gridColumn: 'span 2', margin: '0 0 0.5rem' }}>
+                                    <h4 className="subsection-title" style={{ margin: '0 0 0.5rem' }}>
                                         {addressForm.id > 0 ? 'Edit Shipping Address' : 'New Shipping Address'}
                                     </h4>
                                     
-                                    {addressMessage && <p style={{ gridColumn: 'span 2', color: 'red', margin: 0, fontSize: 'var(--font-size-sm)' }}>{addressMessage}</p>}
+                                    {addressMessage && <p style={{ color: 'red', margin: 0, fontSize: 'var(--font-size-sm)' }}>{addressMessage}</p>}
 
                                     <div>
                                         <label className="form-label">Full Name *</label>
@@ -668,7 +669,7 @@ const ProfilePage = ({ authUser }) => {
                                         <label className="form-label">Contact Phone *</label>
                                         <input type="text" required value={addressForm.phone} onChange={e => setAddressForm({...addressForm, phone: e.target.value})} className="form-control" />
                                     </div>
-                                    <div style={{ gridColumn: 'span 2' }}>
+                                    <div>
                                         <label className="form-label">Address Line *</label>
                                         <input type="text" required value={addressForm.addressLine} onChange={e => setAddressForm({...addressForm, addressLine: e.target.value})} className="form-control" />
                                     </div>
@@ -684,7 +685,7 @@ const ProfilePage = ({ authUser }) => {
                                         <label className="form-label">ZIP Code *</label>
                                         <input type="text" required value={addressForm.zipCode} onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})} className="form-control" />
                                     </div>
-                                    <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
                                         <button type="button" onClick={() => setShowAddressForm(false)} className="btn-secondary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: 'var(--font-size-sm)' }}>Cancel</button>
                                         <button type="submit" className="btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '4px', fontSize: 'var(--font-size-sm)' }}>Save Address</button>
                                     </div>
