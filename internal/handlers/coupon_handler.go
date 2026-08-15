@@ -23,10 +23,11 @@ func (h *CouponHandler) HandleValidateCoupon(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req struct {
-		Code       string  `json:"code"`
-		OrderTotal float64 `json:"orderTotal"`
-		Total      float64 `json:"total"`
-		Subtotal   float64 `json:"subtotal"`
+		Code       string                `json:"code"`
+		OrderTotal float64               `json:"orderTotal"`
+		Total      float64               `json:"total"`
+		Subtotal   float64               `json:"subtotal"`
+		Items      []models.CartItemInfo `json:"items"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -44,7 +45,7 @@ func (h *CouponHandler) HandleValidateCoupon(w http.ResponseWriter, r *http.Requ
 		total = req.Subtotal
 	}
 
-	coupon, discountAmt, err := h.svc.ValidateCoupon(req.Code, total)
+	coupon, discountAmt, err := h.svc.ValidateCoupon(req.Code, total, req.Items)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)

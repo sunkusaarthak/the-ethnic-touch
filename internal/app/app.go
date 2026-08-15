@@ -19,9 +19,10 @@ import (
 type App struct {
 	DB         *sql.DB
 	Router     *http.ServeMux
-	Config     *config.Config
-	Logger     *slog.Logger
-	HTTPServer *http.Server
+	Config       *config.Config
+	Logger       *slog.Logger
+	HTTPServer   *http.Server
+	OrderService service.OrderService
 }
 
 func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
@@ -32,9 +33,10 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 
 	app := &App{
 		DB:     db,
-		Router: http.NewServeMux(),
-		Config: cfg,
-		Logger: logger,
+		Router:       http.NewServeMux(),
+		Config:       cfg,
+		Logger:       logger,
+		OrderService: nil, // set in setupRoutes
 	}
 
 	app.setupRoutes()
@@ -72,6 +74,8 @@ func (a *App) setupRoutes() {
 
 	adminOnly := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin")
 	adminOrEmployee := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin", "employee")
+
+	a.OrderService = orderSvc
 
 	// API Routes (Manual Method Dispatch for Go 1.21 compatibility on Render)
 	a.Router.HandleFunc("/api/products", func(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +121,7 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/admin/profiles", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/edit", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/details", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDetails)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/profiles/delete", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDelete)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/upload", adminOnly(http.HandlerFunc(productHandler.HandleAdminUpload)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/coupons", adminOnly(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
 	
@@ -226,6 +231,23 @@ func (a *App) Run(port string) error {
 	}
 
 	return a.HTTPServer.ListenAndServe()
+}
+
+func (a *App) StartBackgroundJobs() {
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if a.OrderService != nil {
+				cleaned, err := a.OrderService.CleanupAbandonedOrders(30 * time.Minute)
+				if err != nil {
+					a.Logger.Error("Failed to cleanup abandoned orders", "error", err)
+				} else if cleaned > 0 {
+					a.Logger.Info("Cleaned abandoned orders", "count", cleaned)
+				}
+			}
+		}
+	}()
 }
 
 func (a *App) Shutdown(ctx context.Context) error {

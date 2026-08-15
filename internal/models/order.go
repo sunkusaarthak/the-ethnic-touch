@@ -9,6 +9,14 @@ type OrderItem struct {
 	Size        string  `json:"size,omitempty"`
 }
 
+// CartItemInfo represents the minimal item data sent by the frontend for coupon validation
+type CartItemInfo struct {
+	ProductID string  `json:"id"`
+	Price     float64 `json:"price"`
+	Quantity  int     `json:"quantity"`
+	Name      string  `json:"name"`
+}
+
 // Order represents a customer purchase
 type Order struct {
 	ID                string      `json:"id"`

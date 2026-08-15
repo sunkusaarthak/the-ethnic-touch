@@ -90,6 +90,14 @@ func (m *mockProfileRepo) ConsumeSpinTicket(userID string) error {
 	return nil
 }
 
+func (m *mockProfileRepo) DeleteProfile(userID string) error {
+	if m.profiles == nil {
+		return nil
+	}
+	delete(m.profiles, userID)
+	return nil
+}
+
 func TestProfileService_SingleDefaultAddressInvariant(t *testing.T) {
 	repo := newMockProfileRepo()
 	svc := NewProfileService(repo)

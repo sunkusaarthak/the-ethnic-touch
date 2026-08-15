@@ -79,12 +79,9 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
     const handleThumbnailClick = (index) => {
         setActiveImage(index);
-        if (carouselRef.current) {
-            const container = carouselRef.current;
-            container.scrollTo({
-                left: index * container.clientWidth,
-                behavior: 'smooth'
-            });
+        const slideElement = document.getElementById(`gallery-slide-${index}`);
+        if (slideElement) {
+            slideElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }
     };
 
@@ -175,7 +172,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                             {galleryImages.map((imgUrl, idx) => (
                                 <div 
                                     key={idx} 
-                                    onClick={() => scrollToSlide(idx)}
+                                    onClick={() => handleThumbnailClick(idx)}
                                     className={`gallery-thumbnail ${activeImage === idx ? 'active' : ''}`}
                                     style={{
                                         width: '70px', 
@@ -213,7 +210,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                             onScroll={handleCarouselScroll}
                         >
                             {galleryImages.map((imgUrl, idx) => (
-                                <div key={idx} className="gallery-carousel-slide">
+                                <div key={idx} id={`gallery-slide-${idx}`} className="gallery-carousel-slide">
                                     <ImageWithSkeleton 
                                         src={imgUrl} 
                                         alt={`${product.name} - View ${idx + 1}`} 
@@ -234,7 +231,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                         <div 
                                             key={idx} 
                                             className={`slider-dot ${activeImage === idx ? 'active' : ''}`}
-                                            onClick={() => scrollToSlide(idx)}
+                                            onClick={() => handleThumbnailClick(idx)}
                                         />
                                     ))}
                                 </div>

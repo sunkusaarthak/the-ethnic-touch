@@ -96,6 +96,40 @@ export const CartProvider = ({ children }) => {
         }
     }, [wishlist]);
 
+    // Auto-recalculate discount if cart changes and a coupon is active
+    useEffect(() => {
+        if (discount?.code && cart && cart.length > 0) {
+            const subtotal = cart.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
+            
+            // Re-validate coupon in background to get accurate discount amount
+            apiClient.post('/api/coupons/validate', { code: discount.code, total: subtotal, items: cart })
+            .then(data => {
+                if (data.error) {
+                    // Coupon became invalid (e.g. min order not met), remove it
+                    setDiscount(null);
+                } else {
+                    const coupon = data.coupon || data;
+                    const discountAmount = data.discountAmount !== undefined ? data.discountAmount : (coupon.type === 'fixed' ? coupon.value : (subtotal * coupon.value) / 100);
+                    
+                    setDiscount(prev => {
+                        // Only update if amount changed to prevent infinite loops
+                        if (prev && prev.code === discount.code && prev.amt !== discountAmount) {
+                            return { code: prev.code, amt: discountAmount };
+                        }
+                        return prev;
+                    });
+                }
+            })
+            .catch(err => {
+                console.error("Auto-recalculate discount failed", err);
+                setDiscount(null); // Remove on hard error
+            });
+        } else if (discount?.code && (!cart || cart.length === 0)) {
+            // Remove discount if cart is empty
+            setDiscount(null);
+        }
+    }, [cart, discount?.code]);
+
     // Synchronize guest items and load account data upon login
     useEffect(() => {
         let isMounted = true;

@@ -115,8 +115,8 @@ const SpinWheel = () => {
             // Segment is 60 degrees. Center of segment 0 is at 30 degrees.
             const targetAngle = 360 - (targetSegment * 60 + 30);
             
-            // Randomize slightly within the segment (+/- 35 degrees)
-            const randomOffset = Math.floor(Math.random() * 70) - 35;
+            // Randomize slightly within the segment (+/- 25 degrees) to prevent landing on borders
+            const randomOffset = Math.floor(Math.random() * 50) - 25;
             
             // Calculate absolute rotation so subsequent spins work correctly
             const currentSpins = Math.floor(rotation / 360);
@@ -335,8 +335,13 @@ const SpinWheel = () => {
                                     <Gift size={40} color="var(--color-primary)" />
                                 </div>
                                 <h2 style={{fontFamily: 'var(--font-heading)', color: 'var(--color-primary)', fontSize: '2rem', marginBottom: '0.5rem'}}>Congratulations!</h2>
-                                <p style={{color: 'var(--color-text)', marginBottom: '1.5rem', fontSize: '1.1rem'}}>
+                                <p style={{color: 'var(--color-text)', marginBottom: '0.5rem', fontSize: '1.1rem'}}>
                                     You won <strong>{logicalSegments[result.segmentIndex].label}</strong>!
+                                </p>
+                                <p style={{color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '0.9rem', fontStyle: 'italic'}}>
+                                    {result.coupon.code.includes('KURTHI') ? 
+                                        "(This discount is exclusively applicable to a single Kurthi in your cart.)" : 
+                                        "(This discount is applicable to your entire cart total!)"}
                                 </p>
                                 
                                 <div style={{
@@ -360,7 +365,7 @@ const SpinWheel = () => {
                                 </div>
                                 
                                 <Link 
-                                    to="/products"
+                                    to="/shop"
                                     style={{
                                         display: 'inline-block', padding: '0.8rem 2rem',
                                         backgroundColor: 'var(--color-primary)', color: 'white',

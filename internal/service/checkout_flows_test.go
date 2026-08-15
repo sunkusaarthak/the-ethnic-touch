@@ -45,6 +45,10 @@ func (m *mockOrderRepoForCheckoutFlows) UpdateOrderStatus(orderID, status, payme
 	return nil
 }
 
+func (m *mockOrderRepoForCheckoutFlows) CancelPendingOrder(orderID string) error {
+	return nil
+}
+
 type mockProductRepoForCheckoutFlows struct{}
 
 func (m *mockProductRepoForCheckoutFlows) GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error) {

@@ -87,7 +87,7 @@ func TestCouponService_ValidateCoupon(t *testing.T) {
 	svc := NewCouponService(repo)
 
 	t.Run("Valid Percentage Coupon (Case Insensitive)", func(t *testing.T) {
-		c, discount, err := svc.ValidateCoupon("festive20", 2500.0)
+		c, discount, err := svc.ValidateCoupon("festive20", 2500.0, nil)
 		if err != nil {
 			t.Fatalf("Expected valid coupon, got error: %v", err)
 		}
@@ -100,14 +100,14 @@ func TestCouponService_ValidateCoupon(t *testing.T) {
 	})
 
 	t.Run("Minimum Order Requirement Not Met", func(t *testing.T) {
-		_, _, err := svc.ValidateCoupon("FESTIVE20", 1999.99)
+		_, _, err := svc.ValidateCoupon("FESTIVE20", 1999.99, nil)
 		if err == nil {
 			t.Errorf("Expected minimum order error for subtotal 1999.99, got nil")
 		}
 	})
 
 	t.Run("Usage Limit Depleted Coupon", func(t *testing.T) {
-		_, _, err := svc.ValidateCoupon("DEPLETED50", 1500.0)
+		_, _, err := svc.ValidateCoupon("DEPLETED50", 1500.0, nil)
 		if err == nil {
 			t.Errorf("Expected usage limit error for DEPLETED50, got nil")
 		}

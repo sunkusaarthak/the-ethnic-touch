@@ -18,6 +18,7 @@ type ProfileService interface {
 	IncrementSpinCount(userID string) error
 	AddSpinTicket(userID string, count int) error
 	ConsumeSpinTicket(userID string) error
+	DeleteProfile(userID string) error
 }
 
 type profileService struct {
@@ -74,4 +75,8 @@ func (s *profileService) AddSpinTicket(userID string, count int) error {
 
 func (s *profileService) ConsumeSpinTicket(userID string) error {
 	return s.repo.ConsumeSpinTicket(userID)
+}
+
+func (s *profileService) DeleteProfile(userID string) error {
+	return s.repo.DeleteProfile(userID)
 }

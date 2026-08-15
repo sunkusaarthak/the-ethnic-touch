@@ -133,7 +133,12 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 			discount = 10.0
 		}
 
-		code := fmt.Sprintf("SPIN-%dOFF-%d", int(discount), rand.Intn(90000)+10000)
+		var code string
+		if isFirstTime {
+			code = fmt.Sprintf("SPIN-%dOFF-%d", int(discount), rand.Intn(90000)+10000)
+		} else {
+			code = fmt.Sprintf("SPIN-KURTHI-%dOFF-%d", int(discount), rand.Intn(90000)+10000)
+		}
 		expiry := time.Now().AddDate(0, 0, 7).Format("2006-01-02") // 7 days expiry
 
 		c := &models.Coupon{

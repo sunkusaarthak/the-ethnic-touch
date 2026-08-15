@@ -23,6 +23,7 @@ type OrderService interface {
 	GetOrder(orderID string) (*models.Order, error)
 	GetAllOrders(email string) ([]models.Order, error)
 	ConfirmPickup(orderID string) error
+	CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 }
 
 type orderService struct {
@@ -120,7 +121,33 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 				if c.Type == "fixed" {
 					discountAmt = c.Value
 				} else if c.Type == "percentage" {
-					discountAmt = (subtotal * c.Value) / 100.0
+					if c.Value == 100.0 && len(req.CouponCode) >= 15 && req.CouponCode[:15] == "SPIN-FREEKURTHI" {
+						minPrice := -1.0
+						for _, item := range orderItems {
+							if minPrice == -1.0 || item.PriceAtQty < minPrice {
+								minPrice = item.PriceAtQty
+							}
+						}
+						if minPrice > 0 {
+							discountAmt = minPrice
+						} else {
+							discountAmt = 0
+						}
+					} else if len(req.CouponCode) >= 11 && req.CouponCode[:11] == "SPIN-KURTHI" {
+						minPrice := -1.0
+						for _, item := range orderItems {
+							if minPrice == -1.0 || item.PriceAtQty < minPrice {
+								minPrice = item.PriceAtQty
+							}
+						}
+						if minPrice > 0 {
+							discountAmt = (minPrice * c.Value) / 100.0
+						} else {
+							discountAmt = 0
+						}
+					} else {
+						discountAmt = (subtotal * c.Value) / 100.0
+					}
 				}
 				if discountAmt > subtotal {
 					discountAmt = subtotal
@@ -228,4 +255,26 @@ func (s *orderService) GetAllOrders(email string) ([]models.Order, error) {
 
 func (s *orderService) ConfirmPickup(orderID string) error {
 	return s.orderRepo.ConfirmStorePickup(orderID)
+}
+
+func (s *orderService) CleanupAbandonedOrders(cutoff time.Duration) (int, error) {
+	orders, err := s.orderRepo.GetAllOrders("")
+	if err != nil {
+		return 0, err
+	}
+
+	cleanedCount := 0
+	thresholdTime := time.Now().Add(-cutoff)
+
+	for _, o := range orders {
+		if o.Status == "pending" || o.Status == "pending_payment" {
+			createdAt, parseErr := time.Parse(time.RFC3339, o.CreatedAt)
+			if parseErr == nil && createdAt.Before(thresholdTime) {
+				if cancelErr := s.orderRepo.CancelPendingOrder(o.ID); cancelErr == nil {
+					cleanedCount++
+				}
+			}
+		}
+	}
+	return cleanedCount, nil
 }

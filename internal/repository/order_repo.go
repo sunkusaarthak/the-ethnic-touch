@@ -17,6 +17,7 @@ type OrderRepository interface {
 	CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
 	ConfirmStorePickup(orderID string) error
+	CancelPendingOrder(orderID string) error
 }
 
 type postgresOrderRepo struct {
@@ -336,6 +337,91 @@ func (r *postgresOrderRepo) UpdateOrderStatus(orderID, status, paymentID, tracki
 	args = append(args, orderID)
 
 	_, err = tx.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Get the order and check if it's pending
+	var status, couponCode, checkoutType, paymentMethod string
+	err = tx.QueryRow(`SELECT status, COALESCE(coupon_code, ''), COALESCE(checkout_type, ''), COALESCE(payment_method, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID).
+		Scan(&status, &couponCode, &checkoutType, &paymentMethod)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil // Order doesn't exist
+		}
+		return err
+	}
+
+	if status != "pending" && status != "pending_payment" {
+		return nil // Not pending, so we don't cancel it here
+	}
+
+	// 2. Fetch items to return stock
+	rows, err := tx.Query(`SELECT product_id, quantity, COALESCE(size, '') FROM order_items WHERE order_id = $1`, orderID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type itemData struct {
+		ProductID string
+		Quantity  int
+		Size      string
+	}
+	var items []itemData
+	for rows.Next() {
+		var it itemData
+		if err := rows.Scan(&it.ProductID, &it.Quantity, &it.Size); err == nil {
+			items = append(items, it)
+		}
+	}
+	rows.Close()
+
+	// 3. Revert stock (unless it was a pending store pickup which didn't deduct stock)
+	isPendingPickup := checkoutType == "pickup" && paymentMethod == "offline_qr"
+	if !isPendingPickup {
+		for _, item := range items {
+			var totalStock int
+			var sizesStockStr string
+			err := tx.QueryRow("SELECT stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
+				Scan(&totalStock, &sizesStockStr)
+			if err == nil {
+				var sizesStock map[string]int
+				json.Unmarshal([]byte(sizesStockStr), &sizesStock)
+				if sizesStock == nil {
+					sizesStock = map[string]int{}
+				}
+
+				if item.Size != "" && len(sizesStock) > 0 {
+					if curr, ok := sizesStock[item.Size]; ok {
+						sizesStock[item.Size] = curr + item.Quantity
+					}
+				}
+				newTotalStock := totalStock + item.Quantity
+				sizesStockBytes, _ := json.Marshal(sizesStock)
+				tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3", newTotalStock, string(sizesStockBytes), item.ProductID)
+			}
+		}
+	}
+
+	// 4. Revert coupon usage
+	if couponCode != "" {
+		trimmedCode := strings.TrimSpace(couponCode)
+		tx.Exec("UPDATE coupons SET used_count = GREATEST(0, used_count - 1) WHERE UPPER(TRIM(code)) = UPPER(TRIM($1))", trimmedCode)
+	}
+
+	// 5. Mark as cancelled
+	_, err = tx.Exec("UPDATE orders SET status = 'cancelled' WHERE id = $1", orderID)
 	if err != nil {
 		return err
 	}

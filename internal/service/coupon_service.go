@@ -7,7 +7,7 @@ import (
 )
 
 type CouponService interface {
-	ValidateCoupon(code string, subtotal float64) (*models.Coupon, float64, error)
+	ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo) (*models.Coupon, float64, error)
 	GetAllCoupons() ([]models.Coupon, error)
 	CreateCoupon(c *models.Coupon) error
 	GetGiftTiers() ([]models.GiftTier, error)
@@ -21,7 +21,7 @@ func NewCouponService(repo repository.CouponRepository) CouponService {
 	return &couponService{repo: repo}
 }
 
-func (s *couponService) ValidateCoupon(code string, subtotal float64) (*models.Coupon, float64, error) {
+func (s *couponService) ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo) (*models.Coupon, float64, error) {
 	c, err := s.repo.GetByCode(code)
 	if err != nil {
 		return nil, 0, errors.New("invalid or expired coupon code")
@@ -39,7 +39,35 @@ func (s *couponService) ValidateCoupon(code string, subtotal float64) (*models.C
 	if c.Type == "fixed" {
 		discountAmt = c.Value
 	} else if c.Type == "percentage" {
-		discountAmt = (subtotal * c.Value) / 100.0
+		if c.Value == 100.0 && len(code) >= 15 && code[:15] == "SPIN-FREEKURTHI" {
+			// Find the cheapest item in the cart to make free
+			minPrice := -1.0
+			for _, item := range items {
+				if minPrice == -1.0 || item.Price < minPrice {
+					minPrice = item.Price
+				}
+			}
+			if minPrice > 0 {
+				discountAmt = minPrice
+			} else {
+				discountAmt = 0
+			}
+		} else if len(code) >= 11 && code[:11] == "SPIN-KURTHI" {
+			// Apply percentage discount only to the cheapest item in the cart
+			minPrice := -1.0
+			for _, item := range items {
+				if minPrice == -1.0 || item.Price < minPrice {
+					minPrice = item.Price
+				}
+			}
+			if minPrice > 0 {
+				discountAmt = (minPrice * c.Value) / 100.0
+			} else {
+				discountAmt = 0
+			}
+		} else {
+			discountAmt = (subtotal * c.Value) / 100.0
+		}
 	}
 
 	if discountAmt > subtotal {

@@ -50,7 +50,7 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
             const res = await fetch(`${API_BASE_URL}/api/coupons/validate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: cleanCode, total: subtotal })
+                body: JSON.stringify({ code: cleanCode, total: subtotal, items: cart || [] })
             });
             if (!res.ok) {
                 const err = await res.json();
@@ -62,7 +62,11 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
             const discountAmount = data.discountAmount !== undefined ? data.discountAmount : (coupon.type === 'fixed' ? coupon.value : (subtotal * coupon.value) / 100);
             
             onApplyCoupon({ code: coupon.code, amt: discountAmount });
-            setMsg(`Applied: ₹${discountAmount} off!`);
+            if (coupon.code.includes('KURTHI')) {
+                setMsg(`Applied: ₹${discountAmount} off a single Kurthi!`);
+            } else {
+                setMsg(`Applied: ₹${discountAmount} off your entire cart!`);
+            }
         } catch (err) {
             setMsg('Validation failed');
         }

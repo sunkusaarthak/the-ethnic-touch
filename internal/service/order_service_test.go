@@ -28,6 +28,10 @@ func (m *mockOrderRepoForService) ConfirmStorePickup(orderID string) error {
 	return nil
 }
 
+func (m *mockOrderRepoForService) CancelPendingOrder(orderID string) error {
+	return nil
+}
+
 func (m *mockOrderRepoForService) GetAllOrders(email string) ([]models.Order, error) {
 	return nil, nil
 }

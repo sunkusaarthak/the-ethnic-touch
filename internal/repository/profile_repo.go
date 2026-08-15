@@ -16,6 +16,7 @@ type ProfileRepository interface {
 	IncrementSpinCount(userID string) error
 	AddSpinTicket(userID string, count int) error
 	ConsumeSpinTicket(userID string) error
+	DeleteProfile(userID string) error
 }
 
 type postgresProfileRepo struct {
@@ -205,5 +206,12 @@ func (r *postgresProfileRepo) AddSpinTicket(userID string, count int) error {
 
 func (r *postgresProfileRepo) ConsumeSpinTicket(userID string) error {
 	_, err := r.db.Exec(`UPDATE profiles SET available_spins = available_spins - 1, spin_count = spin_count + 1 WHERE user_id = $1 AND available_spins > 0`, userID)
+	return err
+}
+
+func (r *postgresProfileRepo) DeleteProfile(userID string) error {
+	// First delete related records if any, then delete profile
+	// Assuming cascade on DB side, or we can just delete from profiles directly
+	_, err := r.db.Exec(`DELETE FROM profiles WHERE user_id = $1`, userID)
 	return err
 }

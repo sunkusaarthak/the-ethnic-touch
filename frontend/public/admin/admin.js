@@ -1221,7 +1221,8 @@ async function loadProfiles() {
                 <td>${p.zipCode || 'No ZIP'}</td>
                 <td>${p.preferredSize || 'N/A'}</td>
                 <td>
-                    <button class="btn-primary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 4px;" onclick="viewProfileDetails('${p.userId}')">View Details</button>
+                    <button class="btn-primary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; margin-right: 5px;" onclick="viewProfileDetails('${p.userId}')">View Details</button>
+                    <button class="btn-primary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; background: #e53e3e; border: none; color: white;" onclick="deleteProfile('${p.userId}', '${p.email}')">Delete</button>
                 </td>
             `;
             body.appendChild(tr);
@@ -1231,6 +1232,26 @@ async function loadProfiles() {
         body.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#777; padding: 1.5rem;">No user profiles found or backend API server needs to be restarted.<br><small style="color:#999">Run: go run main.go</small></td></tr>`;
     }
 }
+
+async function deleteProfile(userId, email) {
+    if (!confirm(`Are you sure you want to permanently delete the profile for ${email || userId}? This cannot be undone.`)) return;
+    
+    try {
+        const res = await fetch(`/api/admin/profiles/delete?userId=${encodeURIComponent(userId)}`, {
+            method: 'DELETE',
+            headers: getAuthHeader()
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to delete profile');
+        }
+        showAdminAlert('Profile deleted successfully', 'Success', 'success');
+        loadProfiles(); // Refresh table
+    } catch (err) {
+        showAdminAlert(err.message, 'Error', 'error');
+    }
+}
+window.deleteProfile = deleteProfile;
 
 async function viewProfileDetails(userId) {
     const modal = document.getElementById('profileModal');
