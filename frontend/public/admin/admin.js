@@ -1801,6 +1801,8 @@ async function loadAuthConfig() {
             const data = await res.json();
             document.getElementById('auth_phone_enabled').checked = data.phone_auth_enabled;
         }
+        
+        loadCheckoutConfig();
     } catch (err) {
         console.error("Failed to load auth config:", err);
     }
@@ -1830,3 +1832,46 @@ async function saveAuthConfig() {
 
 window.loadAuthConfig = loadAuthConfig;
 window.saveAuthConfig = saveAuthConfig;
+
+async function loadCheckoutConfig() {
+    try {
+        const res = await fetch('/api/config/checkout');
+        if (res.ok) {
+            const data = await res.json();
+            document.getElementById('chk_standard_delivery').checked = data.standard_delivery_enabled;
+            document.getElementById('chk_hyderabad_instant').checked = data.hyderabad_instant_enabled;
+            document.getElementById('chk_store_pickup_prepay').checked = data.store_pickup_prepay_enabled;
+            document.getElementById('chk_store_pickup_instore').checked = data.store_pickup_pay_in_store_enabled;
+        }
+    } catch (err) {
+        console.error("Failed to load checkout config:", err);
+    }
+}
+
+async function saveCheckoutConfig() {
+    try {
+        const payload = {
+            standard_delivery_enabled: document.getElementById('chk_standard_delivery').checked,
+            hyderabad_instant_enabled: document.getElementById('chk_hyderabad_instant').checked,
+            store_pickup_prepay_enabled: document.getElementById('chk_store_pickup_prepay').checked,
+            store_pickup_pay_in_store_enabled: document.getElementById('chk_store_pickup_instore').checked
+        };
+        const res = await fetch('/api/admin/config/checkout', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) throw new Error("Failed to update checkout config");
+        showAdminAlert('Checkout settings updated!', 'Success', 'success');
+    } catch (err) {
+        console.error("Failed to save checkout config:", err);
+        showAdminAlert(err.message, 'Error', 'error');
+    }
+}
+
+window.loadCheckoutConfig = loadCheckoutConfig;
+window.saveCheckoutConfig = saveCheckoutConfig;

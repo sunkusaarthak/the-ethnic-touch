@@ -35,6 +35,49 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
     const navigate = useNavigate();
     const paymentCompleteRef = useRef(false);
 
+    const [checkoutConfig, setCheckoutConfig] = useState({
+        standard_delivery_enabled: true,
+        hyderabad_instant_enabled: true,
+        store_pickup_prepay_enabled: true,
+        store_pickup_pay_in_store_enabled: true
+    });
+
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/config/checkout`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data) {
+                    setCheckoutConfig(data);
+                    
+                    // Fallback logic if current selection is disabled
+                    let cType = checkoutType;
+                    let pMethod = paymentMethod;
+
+                    if (cType === 'delivery' && !data.standard_delivery_enabled) cType = null;
+                    if (cType === 'hyderabad_instant' && !data.hyderabad_instant_enabled) cType = null;
+                    if (cType === 'pickup') {
+                        if (!data.store_pickup_prepay_enabled && !data.store_pickup_pay_in_store_enabled) {
+                            cType = null;
+                        } else if (pMethod === 'online' && !data.store_pickup_prepay_enabled) {
+                            pMethod = 'offline_qr';
+                        } else if (pMethod === 'offline_qr' && !data.store_pickup_pay_in_store_enabled) {
+                            pMethod = 'online';
+                        }
+                    }
+
+                    if (!cType) {
+                        if (data.standard_delivery_enabled) cType = 'delivery';
+                        else if (data.store_pickup_prepay_enabled || data.store_pickup_pay_in_store_enabled) cType = 'pickup';
+                        else if (data.hyderabad_instant_enabled) cType = 'hyderabad_instant';
+                    }
+                    
+                    if (cType && cType !== checkoutType) setCheckoutType(cType);
+                    if (pMethod && pMethod !== paymentMethod) setPaymentMethod(pMethod);
+                }
+            })
+            .catch(err => console.error("Failed to fetch checkout config", err));
+    }, []);
+
     const handleBackClick = (e) => {
         if (e) e.preventDefault();
         setShowLeaveModal(true);
@@ -356,8 +399,10 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
             }}>
                 <button
                     onClick={() => {
-                        setCheckoutType('delivery');
-                        setPaymentMethod('online');
+                        if (checkoutConfig.standard_delivery_enabled) {
+                            setCheckoutType('delivery');
+                            setPaymentMethod('online');
+                        }
                     }}
                     style={{
                         padding: '8px 6px',
@@ -368,14 +413,16 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         color: checkoutType === 'delivery' ? '#8F5E36' : '#5C5854',
                         fontWeight: '600',
                         fontSize: '0.78rem',
-                        cursor: 'pointer',
+                        cursor: checkoutConfig.standard_delivery_enabled ? 'pointer' : 'not-allowed',
+                        opacity: checkoutConfig.standard_delivery_enabled ? 1 : 0.4,
                         transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         gap: '4px',
                         boxShadow: checkoutType === 'delivery' ? '0 4px 10px rgba(212,163,115,0.12)' : 'none',
-                        outline: 'none'
+                        outline: 'none',
+                        position: 'relative'
                     }}
                 >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -385,12 +432,15 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         <circle cx="18.5" cy="18.5" r="2.5" />
                     </svg>
                     <span style={{fontFamily: 'Inter, sans-serif', letterSpacing: '-0.01em'}}>Standard Delivery</span>
+                    {!checkoutConfig.standard_delivery_enabled && <span style={{fontSize: '0.6rem', color: 'red', position: 'absolute', bottom: '-15px'}}>Unavailable</span>}
                 </button>
 
+                {(checkoutConfig.store_pickup_prepay_enabled || checkoutConfig.store_pickup_pay_in_store_enabled) && (
                 <button
                     onClick={() => {
                         setCheckoutType('pickup');
-                        setPaymentMethod('online');
+                        if (checkoutConfig.store_pickup_prepay_enabled) setPaymentMethod('online');
+                        else if (checkoutConfig.store_pickup_pay_in_store_enabled) setPaymentMethod('offline_qr');
                     }}
                     style={{
                         padding: '8px 6px',
@@ -417,11 +467,14 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                     </svg>
                     <span style={{fontFamily: 'Inter, sans-serif', letterSpacing: '-0.01em'}}>Store Pickup</span>
                 </button>
+                )}
 
                 <button
                     onClick={() => {
-                        setCheckoutType('hyderabad_instant');
-                        setPaymentMethod('online');
+                        if (checkoutConfig.hyderabad_instant_enabled) {
+                            setCheckoutType('hyderabad_instant');
+                            setPaymentMethod('online');
+                        }
                     }}
                     style={{
                         padding: '8px 6px',
@@ -432,20 +485,23 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         color: checkoutType === 'hyderabad_instant' ? '#8F5E36' : '#5C5854',
                         fontWeight: '600',
                         fontSize: '0.78rem',
-                        cursor: 'pointer',
+                        cursor: checkoutConfig.hyderabad_instant_enabled ? 'pointer' : 'not-allowed',
+                        opacity: checkoutConfig.hyderabad_instant_enabled ? 1 : 0.4,
                         transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         gap: '4px',
                         boxShadow: checkoutType === 'hyderabad_instant' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
-                        outline: 'none'
+                        outline: 'none',
+                        position: 'relative'
                     }}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                     </svg>
                     <span style={{fontFamily: 'Inter, sans-serif', letterSpacing: '-0.01em'}}>Hyderabad Instant</span>
+                    {!checkoutConfig.hyderabad_instant_enabled && <span style={{fontSize: '0.6rem', color: 'red', position: 'absolute', bottom: '-15px'}}>Unavailable</span>}
                 </button>
             </div>
 
@@ -501,20 +557,26 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                         <h3 style={{fontSize: '1.1rem', fontWeight: 600, color: '#333', marginBottom: '1.1rem'}}>Select Payment Mode</h3>
                         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
                             <div 
-                                onClick={() => setPaymentMethod('online')}
+                                onClick={() => {
+                                    if (checkoutConfig.store_pickup_prepay_enabled) {
+                                        setPaymentMethod('online');
+                                    }
+                                }}
                                 style={{
                                     border: paymentMethod === 'online' ? '2px solid #D4A373' : '1px solid #E6E4E0',
                                     borderRadius: '12px',
                                     padding: '1.5rem 1rem',
                                     background: paymentMethod === 'online' ? '#FAF3ED' : '#fff',
-                                    cursor: 'pointer',
+                                    cursor: checkoutConfig.store_pickup_prepay_enabled ? 'pointer' : 'not-allowed',
+                                    opacity: checkoutConfig.store_pickup_prepay_enabled ? 1 : 0.4,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     gap: '12px',
                                     transition: 'all 0.3s ease',
-                                    boxShadow: paymentMethod === 'online' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none'
+                                    boxShadow: paymentMethod === 'online' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
+                                    position: 'relative'
                                 }}
                             >
                                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
@@ -523,23 +585,30 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                                 </svg>
                                 <span style={{fontSize: '0.98rem', fontWeight: 600, color: '#2D2A26'}}>Prepay Online</span>
                                 <span style={{fontSize: '0.75rem', color: '#6C6863', textAlign: 'center'}}>Instant checkout verification</span>
+                                {!checkoutConfig.store_pickup_prepay_enabled && <span style={{fontSize: '0.7rem', color: 'red', position: 'absolute', bottom: '10px'}}>Unavailable</span>}
                             </div>
                             
                             <div 
-                                onClick={() => setPaymentMethod('offline_qr')}
+                                onClick={() => {
+                                    if (checkoutConfig.store_pickup_pay_in_store_enabled) {
+                                        setPaymentMethod('offline_qr');
+                                    }
+                                }}
                                 style={{
                                     border: paymentMethod === 'offline_qr' ? '2px solid #D4A373' : '1px solid #E6E4E0',
                                     borderRadius: '12px',
                                     padding: '1.5rem 1rem',
                                     background: paymentMethod === 'offline_qr' ? '#FAF3ED' : '#fff',
-                                    cursor: 'pointer',
+                                    cursor: checkoutConfig.store_pickup_pay_in_store_enabled ? 'pointer' : 'not-allowed',
+                                    opacity: checkoutConfig.store_pickup_pay_in_store_enabled ? 1 : 0.4,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     gap: '12px',
                                     transition: 'all 0.3s ease',
-                                    boxShadow: paymentMethod === 'offline_qr' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none'
+                                    boxShadow: paymentMethod === 'offline_qr' ? '0 6px 15px rgba(212,163,115,0.15)' : 'none',
+                                    position: 'relative'
                                 }}
                             >
                                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: '#8F5E36'}}>
@@ -548,6 +617,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading }) => {
                                 </svg>
                                 <span style={{fontSize: '0.98rem', fontWeight: 600, color: '#2D2A26'}}>Pay In-Store</span>
                                 <span style={{fontSize: '0.75rem', color: '#6C6863', textAlign: 'center'}}>Book now, scan pass at store</span>
+                                {!checkoutConfig.store_pickup_pay_in_store_enabled && <span style={{fontSize: '0.7rem', color: 'red', position: 'absolute', bottom: '10px'}}>Unavailable</span>}
                             </div>
                         </div>
                     </div>

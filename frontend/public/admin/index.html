@@ -212,6 +212,37 @@
                 </div>
             </div>
 
+            <!-- Checkout Settings -->
+            <div style="background: #FFF; padding: 2.5rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.01); width: 100%; margin-bottom: 2rem;">
+                <h3 style="font-family: var(--font-heading); font-size: 1.4rem; margin-bottom: 1.5rem;">Checkout & Delivery Settings</h3>
+                <p style="color: var(--color-text-light); font-size: 0.95rem; line-height: 1.5; margin-bottom: 2rem;">
+                    Toggle which delivery and payment options are available during checkout. Disabled options will appear greyed out to customers.
+                </p>
+
+                <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="chk_standard_delivery" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                        Enable Standard Delivery
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="chk_hyderabad_instant" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                        Enable Hyderabad Instant Delivery
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="chk_store_pickup_prepay" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                        Enable Store Pickup - Prepay Online
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="chk_store_pickup_instore" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                        Enable Store Pickup - Pay In-Store
+                    </label>
+                </div>
+                
+                <div style="text-align: right; margin-top: 2rem;">
+                    <button type="button" class="btn" onclick="saveCheckoutConfig()">Save Checkout Settings</button>
+                </div>
+            </div>
+
             <!-- Gift Settings -->
             <div style="background: #FFF; padding: 2.5rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.01); width: 100%;">
                 <p style="color: var(--color-text-light); margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.5;">

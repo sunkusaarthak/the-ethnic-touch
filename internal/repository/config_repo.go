@@ -14,6 +14,8 @@ type ConfigRepository interface {
 	UpdateSpinWheelStats(stats *models.SpinWheelStats) error
 	GetAuthConfig() (*models.AuthConfig, error)
 	UpdateAuthConfig(config *models.AuthConfig) error
+	GetCheckoutConfig() (*models.CheckoutConfig, error)
+	UpdateCheckoutConfig(config *models.CheckoutConfig) error
 }
 
 type configRepository struct {
@@ -104,6 +106,42 @@ func (r *configRepository) UpdateAuthConfig(config *models.AuthConfig) error {
 
 	_, err = r.db.Exec(`
 		INSERT INTO system_config (key, value) VALUES ('auth_config', $1)
+		ON CONFLICT (key) DO UPDATE SET value = $1
+	`, string(data))
+	return err
+}
+
+func (r *configRepository) GetCheckoutConfig() (*models.CheckoutConfig, error) {
+	var val string
+	err := r.db.QueryRow("SELECT value FROM system_config WHERE key = 'checkout_config'").Scan(&val)
+	if err == sql.ErrNoRows {
+		// Default to all enabled
+		return &models.CheckoutConfig{
+			StandardDeliveryEnabled:      true,
+			HyderabadInstantEnabled:      true,
+			StorePickupPrepayEnabled:     true,
+			StorePickupPayInStoreEnabled: true,
+		}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var config models.CheckoutConfig
+	if err := json.Unmarshal([]byte(val), &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+func (r *configRepository) UpdateCheckoutConfig(config *models.CheckoutConfig) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.Exec(`
+		INSERT INTO system_config (key, value) VALUES ('checkout_config', $1)
 		ON CONFLICT (key) DO UPDATE SET value = $1
 	`, string(data))
 	return err

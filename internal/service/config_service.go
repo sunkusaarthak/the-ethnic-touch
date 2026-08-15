@@ -17,6 +17,9 @@ type ConfigService interface {
 
 	GetAuthConfig() (*models.AuthConfig, error)
 	UpdateAuthConfig(config *models.AuthConfig) error
+
+	GetCheckoutConfig() (*models.CheckoutConfig, error)
+	UpdateCheckoutConfig(config *models.CheckoutConfig) error
 }
 
 type configService struct {
@@ -81,4 +84,12 @@ func (s *configService) GetAuthConfig() (*models.AuthConfig, error) {
 
 func (s *configService) UpdateAuthConfig(config *models.AuthConfig) error {
 	return s.repo.UpdateAuthConfig(config)
+}
+
+func (s *configService) GetCheckoutConfig() (*models.CheckoutConfig, error) {
+	return s.repo.GetCheckoutConfig()
+}
+
+func (s *configService) UpdateCheckoutConfig(config *models.CheckoutConfig) error {
+	return s.repo.UpdateCheckoutConfig(config)
 }

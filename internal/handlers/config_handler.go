@@ -107,3 +107,40 @@ func (h *ConfigHandler) HandleUpdateAuthConfig(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Auth Config updated successfully"})
 }
+
+func (h *ConfigHandler) HandleGetCheckoutConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	config, err := h.configSvc.GetCheckoutConfig()
+	if err != nil {
+		http.Error(w, "Failed to load checkout config", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+func (h *ConfigHandler) HandleUpdateCheckoutConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var config models.CheckoutConfig
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "Invalid input data", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.configSvc.UpdateCheckoutConfig(&config); err != nil {
+		http.Error(w, "Failed to update checkout config", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Checkout Config updated successfully"})
+}

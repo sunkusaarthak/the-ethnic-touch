@@ -152,6 +152,9 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/config/auth", configHandler.HandleGetAuthConfig)
 	a.Router.HandleFunc("/api/admin/config/auth", adminOnly(http.HandlerFunc(configHandler.HandleUpdateAuthConfig)).ServeHTTP)
 
+	a.Router.HandleFunc("/api/config/checkout", configHandler.HandleGetCheckoutConfig)
+	a.Router.HandleFunc("/api/admin/config/checkout", adminOnly(http.HandlerFunc(configHandler.HandleUpdateCheckoutConfig)).ServeHTTP)
+
 	// User Profiles & Addresses
 	a.Router.HandleFunc("/api/profile", profileHandler.HandleProfile)
 	a.Router.HandleFunc("/api/profile/me", profileHandler.HandleProfile)
