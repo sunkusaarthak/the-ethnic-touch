@@ -11,6 +11,8 @@ const firebaseConfig = {
     appId: "1:565024605742:web:0452b9b88a65be9d67c1bf"
 };
 
+const API_BASE_URL = window.location.hostname.includes('onrender.com') ? 'https://the-ethnic-touch-backend.onrender.com' : '';
+
 let auth;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -400,7 +402,8 @@ function getAuthHeader() {
 
 async function fetchJsonSafe(url, options = {}) {
     try {
-        const res = await fetch(url, options);
+        const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+        const res = await fetch(fullUrl, options);
         const contentType = res.headers.get('content-type') || '';
         if (!res.ok) {
             let errText = `HTTP ${res.status}`;
@@ -441,7 +444,8 @@ function initAuthFlow() {
                 localStorage.setItem('adminToken', token);
                 
                 // Verify with backend and get role
-                const res = await fetch('/api/admin/me', { headers: getAuthHeader() });
+                const fullUrl = `${API_BASE_URL}/api/admin/me`;
+                const res = await fetch(fullUrl, { headers: getAuthHeader() });
                 if (res.ok) {
                     const data = await res.json();
                     currentUserRole = data.role;
