@@ -73,53 +73,66 @@ func (a *App) setupRoutes() {
 	adminOnly := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin")
 	adminOrEmployee := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin", "employee")
 
-	// API Routes (Go 1.22+ stdlib routing)
-	a.Router.HandleFunc("GET /api/products", productHandler.HandleProducts)
-	a.Router.HandleFunc("POST /api/products", adminOnly(http.HandlerFunc(productHandler.HandleProducts)).ServeHTTP)
-	a.Router.HandleFunc("PUT /api/products", adminOnly(http.HandlerFunc(productHandler.HandleProducts)).ServeHTTP)
-	a.Router.HandleFunc("DELETE /api/products/{id}", adminOnly(http.HandlerFunc(productHandler.HandleDeleteProduct)).ServeHTTP)
+	// API Routes (Manual Method Dispatch for Go 1.21 compatibility on Render)
+	a.Router.HandleFunc("/api/products", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			productHandler.HandleProducts(w, r)
+		} else {
+			adminOnly(http.HandlerFunc(productHandler.HandleProducts)).ServeHTTP(w, r)
+		}
+	})
 
-	a.Router.HandleFunc("GET /api/products/{id}/reviews", productHandler.HandleProductReviews)
-	a.Router.HandleFunc("POST /api/products/{id}/reviews", productHandler.HandleProductReviews)
+	a.Router.HandleFunc("/api/products/{id}", adminOnly(http.HandlerFunc(productHandler.HandleDeleteProduct)).ServeHTTP)
+	a.Router.HandleFunc("/api/products/{id}/reviews", productHandler.HandleProductReviews)
 
 	rateLimiter := middleware.NewRateLimiter(30, time.Minute)
 
 	// Orders & Checkout
-	a.Router.HandleFunc("POST /api/orders", rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/orders/create", rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/checkout", rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP)
+	a.Router.HandleFunc("/api/orders", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			orderHandler.HandleGetOrder(w, r)
+		} else {
+			rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP(w, r)
+		}
+	})
+	a.Router.HandleFunc("/api/orders/create", rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP)
+	a.Router.HandleFunc("/api/checkout", rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP)
 
-	a.Router.HandleFunc("POST /api/orders/verify", orderHandler.HandleVerifyPayment)
-	a.Router.HandleFunc("POST /api/verify-payment", orderHandler.HandleVerifyPayment)
+	a.Router.HandleFunc("/api/orders/verify", orderHandler.HandleVerifyPayment)
+	a.Router.HandleFunc("/api/verify-payment", orderHandler.HandleVerifyPayment)
 
-	a.Router.HandleFunc("GET /api/orders", orderHandler.HandleGetOrder)
-	a.Router.HandleFunc("GET /api/profile/orders", orderHandler.HandleGetOrder)
+	a.Router.HandleFunc("/api/profile/orders", orderHandler.HandleGetOrder)
 
 	// Coupons & Gifting
-	a.Router.HandleFunc("GET /api/gift-tiers", couponHandler.HandleGetGiftTiers)
-	a.Router.HandleFunc("POST /api/coupons/validate", rateLimiter.Limit(http.HandlerFunc(couponHandler.HandleValidateCoupon)).ServeHTTP)
+	a.Router.HandleFunc("/api/gift-tiers", couponHandler.HandleGetGiftTiers)
+	a.Router.HandleFunc("/api/coupons/validate", rateLimiter.Limit(http.HandlerFunc(couponHandler.HandleValidateCoupon)).ServeHTTP)
 	
 	// Spin the Wheel
-	a.Router.HandleFunc("POST /api/spin-wheel", rateLimiter.Limit(http.HandlerFunc(spinHandler.HandleSpin)).ServeHTTP)
+	a.Router.HandleFunc("/api/spin-wheel", rateLimiter.Limit(http.HandlerFunc(spinHandler.HandleSpin)).ServeHTTP)
 	
 	// Admin API Endpoints
-	a.Router.HandleFunc("GET /api/admin/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/admin/orders/confirm-pickup", adminOrEmployee(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/orders/confirm-pickup", adminOrEmployee(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
 	
-	a.Router.HandleFunc("GET /api/admin/profiles", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/admin/profiles/edit", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
-	a.Router.HandleFunc("GET /api/admin/profiles/details", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDetails)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/admin/upload", adminOnly(http.HandlerFunc(productHandler.HandleAdminUpload)).ServeHTTP)
-	a.Router.HandleFunc("GET /api/admin/coupons", adminOnly(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/admin/coupons", adminOnly(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/profiles", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/profiles/edit", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/profiles/details", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDetails)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/upload", adminOnly(http.HandlerFunc(productHandler.HandleAdminUpload)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/coupons", adminOnly(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
 	
 	// Staff Management
-	a.Router.HandleFunc("GET /api/admin/staff", adminOnly(http.HandlerFunc(staffHandler.HandleGetStaff)).ServeHTTP)
-	a.Router.HandleFunc("POST /api/admin/staff", adminOnly(http.HandlerFunc(staffHandler.HandleAddStaff)).ServeHTTP)
-	a.Router.HandleFunc("DELETE /api/admin/staff", adminOnly(http.HandlerFunc(staffHandler.HandleDeleteStaff)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/staff", adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			staffHandler.HandleGetStaff(w, r)
+		} else if r.Method == http.MethodPost {
+			staffHandler.HandleAddStaff(w, r)
+		} else if r.Method == http.MethodDelete {
+			staffHandler.HandleDeleteStaff(w, r)
+		}
+	})).ServeHTTP)
 	
 	// Staff Identity
-	a.Router.HandleFunc("GET /api/admin/me", adminOrEmployee(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	a.Router.HandleFunc("/api/admin/me", adminOrEmployee(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role := r.Context().Value(middleware.RoleKey).(string)
 		email := r.Context().Value(middleware.EmailKey).(string)
 		w.Header().Set("Content-Type", "application/json")
@@ -127,43 +140,29 @@ func (a *App) setupRoutes() {
 	})).ServeHTTP)
 	
 	// Config API Endpoints
-	a.Router.HandleFunc("GET /api/config/spin-wheel", configHandler.HandleGetSpinConfig)
-	a.Router.HandleFunc("PUT /api/admin/config/spin-wheel", adminOnly(http.HandlerFunc(configHandler.HandleUpdateSpinConfig)).ServeHTTP)
-	a.Router.HandleFunc("GET /api/admin/config/spin-wheel/stats", adminOnly(http.HandlerFunc(configHandler.HandleGetSpinStats)).ServeHTTP)
+	a.Router.HandleFunc("/api/config/spin-wheel", configHandler.HandleGetSpinConfig)
+	a.Router.HandleFunc("/api/admin/config/spin-wheel", adminOnly(http.HandlerFunc(configHandler.HandleUpdateSpinConfig)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/config/spin-wheel/stats", adminOnly(http.HandlerFunc(configHandler.HandleGetSpinStats)).ServeHTTP)
 
-	a.Router.HandleFunc("GET /api/config/auth", configHandler.HandleGetAuthConfig)
-	a.Router.HandleFunc("PUT /api/admin/config/auth", adminOnly(http.HandlerFunc(configHandler.HandleUpdateAuthConfig)).ServeHTTP)
+	a.Router.HandleFunc("/api/config/auth", configHandler.HandleGetAuthConfig)
+	a.Router.HandleFunc("/api/admin/config/auth", adminOnly(http.HandlerFunc(configHandler.HandleUpdateAuthConfig)).ServeHTTP)
 
 	// User Profiles & Addresses
-	a.Router.HandleFunc("GET /api/profile", profileHandler.HandleProfile)
-	a.Router.HandleFunc("POST /api/profile", profileHandler.HandleProfile)
-	a.Router.HandleFunc("GET /api/profile/me", profileHandler.HandleProfile)
-	a.Router.HandleFunc("POST /api/profile/me", profileHandler.HandleProfile)
-	a.Router.HandleFunc("PUT /api/profile/me", profileHandler.HandleProfile)
-	a.Router.HandleFunc("PATCH /api/profile/me", profileHandler.HandleProfile)
-
-	a.Router.HandleFunc("GET /api/addresses", profileHandler.HandleAddresses)
-	a.Router.HandleFunc("POST /api/addresses", profileHandler.HandleAddresses)
-	a.Router.HandleFunc("GET /api/profile/addresses", profileHandler.HandleAddresses)
-	a.Router.HandleFunc("POST /api/profile/addresses", profileHandler.HandleAddresses)
-	a.Router.HandleFunc("PATCH /api/profile/addresses", profileHandler.HandleAddresses)
-	a.Router.HandleFunc("DELETE /api/profile/addresses", profileHandler.HandleAddresses)
-
-	a.Router.HandleFunc("GET /api/profile/coupons", couponHandler.HandleUserCoupons)
+	a.Router.HandleFunc("/api/profile", profileHandler.HandleProfile)
+	a.Router.HandleFunc("/api/profile/me", profileHandler.HandleProfile)
+	a.Router.HandleFunc("/api/addresses", profileHandler.HandleAddresses)
+	a.Router.HandleFunc("/api/profile/addresses", profileHandler.HandleAddresses)
+	a.Router.HandleFunc("/api/profile/coupons", couponHandler.HandleUserCoupons)
 
 	// Cart & Wishlist
-	a.Router.HandleFunc("GET /api/cart", cartHandler.HandleCart)
-	a.Router.HandleFunc("POST /api/cart", cartHandler.HandleCart)
-	a.Router.HandleFunc("DELETE /api/cart", cartHandler.HandleCart)
-	a.Router.HandleFunc("POST /api/cart/merge", cartHandler.HandleCart)
+	a.Router.HandleFunc("/api/cart", cartHandler.HandleCart)
+	a.Router.HandleFunc("/api/cart/merge", cartHandler.HandleCart)
 
-	a.Router.HandleFunc("GET /api/wishlist", cartHandler.HandleWishlist)
-	a.Router.HandleFunc("POST /api/wishlist", cartHandler.HandleWishlist)
-	a.Router.HandleFunc("DELETE /api/wishlist", cartHandler.HandleWishlist)
-	a.Router.HandleFunc("POST /api/wishlist/merge", cartHandler.HandleWishlist)
+	a.Router.HandleFunc("/api/wishlist", cartHandler.HandleWishlist)
+	a.Router.HandleFunc("/api/wishlist/merge", cartHandler.HandleWishlist)
 
 	// Health check endpoint
-	a.Router.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	a.Router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		status := "up"
 		dbStatus := "connected"
 		if err := a.DB.Ping(); err != nil {
