@@ -36,6 +36,15 @@ func (m *mockProductRepo) UpdateProduct(p *models.Product) error {
 	return nil
 }
 
+func (m *mockProductRepo) GetProductByID(id string) (*models.Product, error) {
+	for _, p := range m.products {
+		if p.ID == id {
+			return &p, nil
+		}
+	}
+	return nil, nil // return nil for brevity, or we'd need to import errors
+}
+
 func (m *mockProductRepo) GetReviews(productID string) ([]models.ProductReview, error) {
 	return m.reviews[productID], nil
 }

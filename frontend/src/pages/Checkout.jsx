@@ -901,7 +901,13 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                     )}
 
                     <button 
-                        onClick={placeOrder} 
+                        onClick={() => {
+                            if (checkoutType !== 'pickup' && addresses.length === 0) {
+                                navigate('/profile?action=add_address&redirect=/checkout');
+                            } else {
+                                placeOrder();
+                            }
+                        }} 
                         style={{
                             marginTop: '0.9rem', 
                             width: '100%', 
@@ -921,9 +927,10 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                             boxShadow: '0 4px 15px rgba(212, 163, 115, 0.25)',
                             transition: 'all 0.3s ease'
                         }}
-                        disabled={ordering || (checkoutType !== 'pickup' && addresses.length === 0) || isInstantDeliveryBlocked}
+                        disabled={ordering || isInstantDeliveryBlocked}
                     >
                         {ordering ? "Verifying Stock..." : 
+                         (checkoutType !== 'pickup' && addresses.length === 0) ? "Add Delivery Address" :
                          checkoutType === 'pickup' && paymentMethod === 'offline_qr' ? "Book Store Pickup Pass" : 
                          "Secure Checkout & Prepay"}
                     </button>

@@ -67,6 +67,7 @@ func (m *mockProductRepoForCheckoutFlows) UpdateProduct(p *models.Product) error
 func (m *mockProductRepoForCheckoutFlows) DeleteProduct(id string) error { return nil }
 func (m *mockProductRepoForCheckoutFlows) GetReviews(productID string) ([]models.ProductReview, error) { return nil, nil }
 func (m *mockProductRepoForCheckoutFlows) CreateReview(rev *models.ProductReview) error { return nil }
+func (m *mockProductRepoForCheckoutFlows) GetProductByID(id string) (*models.Product, error) { return nil, nil }
 
 func TestCheckoutFlows_OfflinePickupAndInstantDelivery(t *testing.T) {
 	orderRepo := &mockOrderRepoForCheckoutFlows{orders: make(map[string]*models.Order)}

@@ -416,8 +416,6 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                 onClick={() => {
                                     if (!authUser) {
                                         setShowAuthModal(true);
-                                    } else if (profileIncomplete) {
-                                        navigate('/profile?action=add_address&redirect=/checkout');
                                     } else {
                                         navigate('/checkout');
                                     }

@@ -86,7 +86,13 @@ func (a *App) setupRoutes() {
 		}
 	})
 
-	a.Router.HandleFunc("/api/products/{id}", adminOnly(http.HandlerFunc(productHandler.HandleDeleteProduct)).ServeHTTP)
+	a.Router.HandleFunc("/api/products/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			adminOnly(http.HandlerFunc(productHandler.HandleProductByID)).ServeHTTP(w, r)
+		} else {
+			productHandler.HandleProductByID(w, r)
+		}
+	})
 	a.Router.HandleFunc("/api/products/{id}/reviews", productHandler.HandleProductReviews)
 
 	rateLimiter := middleware.NewRateLimiter(30, time.Minute)

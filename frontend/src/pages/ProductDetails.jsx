@@ -7,7 +7,38 @@ import { API_BASE_URL } from '../data/config';
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const product = products.find(p => p.id === id);
+    const globalProduct = products.find(p => p.id === id);
+    
+    const [localProduct, setLocalProduct] = useState(globalProduct || null);
+    const [isFetchingDelta, setIsFetchingDelta] = useState(!globalProduct);
+    const [notFound, setNotFound] = useState(false);
+
+    useEffect(() => {
+        if (!globalProduct) {
+            setIsFetchingDelta(true);
+            setNotFound(false);
+            fetch(`${API_BASE_URL}/api/products/${id}`)
+                .then(res => {
+                    if (!res.ok) throw new Error("Product not found");
+                    return res.json();
+                })
+                .then(data => {
+                    setLocalProduct(data);
+                    setIsFetchingDelta(false);
+                })
+                .catch(err => {
+                    console.error("Delta fetch failed:", err);
+                    setNotFound(true);
+                    setIsFetchingDelta(false);
+                });
+        } else {
+            setLocalProduct(globalProduct);
+            setIsFetchingDelta(false);
+            setNotFound(false);
+        }
+    }, [id, globalProduct]);
+
+    const product = localProduct;
 
     const [activeImage, setActiveImage] = useState(0);
     const [selectedSize, setSelectedSize] = useState('');
@@ -57,7 +88,18 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         return () => controller.abort();
     }, [product]);
 
-    if (!product) return <div style={{padding: '10rem 5%', textAlign:'center'}}><h2>Product Not Found</h2></div>;
+    if (isFetchingDelta) {
+        return (
+            <div style={{padding: '10rem 5%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+                <div className="loader" style={{marginBottom: '1rem'}}></div>
+                <h3 style={{color: '#8c8883', fontWeight: 500, fontFamily: 'var(--font-heading)'}}>Loading product details...</h3>
+            </div>
+        );
+    }
+
+    if (notFound || !product) {
+        return <div style={{padding: '10rem 5%', textAlign:'center'}}><h2>Product Not Found</h2><p>The item you are looking for may have been removed or does not exist.</p></div>;
+    }
 
     const isWished = wishlist ? wishlist.some(item => item.id === product.id) : false;
 

@@ -105,21 +105,54 @@ func (h *ProductHandler) HandleProducts(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *ProductHandler) HandleDeleteProduct(w http.ResponseWriter, r *http.Request) {
+func (h *ProductHandler) HandleProductByID(w http.ResponseWriter, r *http.Request) {
 	productID := r.PathValue("id")
+	if productID == "" {
+		// Fallback for custom mux if not using 1.22 path values
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) >= 3 {
+			productID = parts[2]
+		}
+	}
+	
 	if productID == "" {
 		http.Error(w, "Product ID is required", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.svc.DeleteProduct(productID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if r.Method == http.MethodGet {
+		product, err := h.svc.GetProductByID(productID)
+		if err != nil {
+			if err.Error() == "product not found" {
+				http.Error(w, "Product not found", http.StatusNotFound)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(product)
+		return
+	} else if r.Method == http.MethodDelete {
+		// DELETE should be guarded by admin middleware at the router level or here
+		// But in this case, the router handles middleware differently.
+		// Wait, if it's the same endpoint, we have to handle auth.
+		// Actually, let's keep the router simple and just let it pass here.
+		// In app.go we will wrap the DELETE method inside the router with adminOnly.
+		if err := h.svc.DeleteProduct(productID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"message": "Product deleted successfully"}`))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "Product deleted successfully"}`))
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
 func (h *ProductHandler) HandleProductReviews(w http.ResponseWriter, r *http.Request) {

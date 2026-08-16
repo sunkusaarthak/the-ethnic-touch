@@ -28,6 +28,15 @@ func (m *mockProductService) CreateProduct(p *models.Product) error {
 	return nil
 }
 
+func (m *mockProductService) GetProductByID(id string) (*models.Product, error) {
+	for _, p := range m.products {
+		if p.ID == id {
+			return &p, nil
+		}
+	}
+	return nil, nil // Return simple nil if not found for simplicity, or we would need to import errors
+}
+
 func (m *mockProductService) GetReviews(productID string) ([]models.ProductReview, error) {
 	return nil, nil
 }

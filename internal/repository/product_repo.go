@@ -13,6 +13,7 @@ import (
 
 type ProductRepository interface {
 	GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error)
+	GetProductByID(id string) (*models.Product, error)
 	CreateProduct(p *models.Product) error
 	UpdateProduct(p *models.Product) error
 	DeleteProduct(id string) error
@@ -511,3 +512,72 @@ func (r *postgresProductRepo) CreateReview(rev *models.ProductReview) error {
 	return r.db.QueryRow("INSERT INTO product_reviews (product_id, user_name, user_email, rating, comment, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
 		rev.ProductID, rev.UserName, rev.UserEmail, rev.Rating, rev.Comment, rev.CreatedAt).Scan(&rev.ID)
 }
+
+func (r *postgresProductRepo) GetProductByID(id string) (*models.Product, error) {
+	// Re-use the existing filter logic or just do a direct query. A direct query is simpler.
+	query := `
+		SELECT 
+			p.id, p.name, p.description, p.price, p.image_url, p.stock, p.category, 
+			p.sizes, p.sizes_stock,
+			p.collection, p.fabric, p.color, p.sleeve_type, p.neck_type, p.pattern, 
+			p.occasion, p.sku, p.tags, p.original_price, p.is_new_arrival, p.is_best_seller, 
+			p.is_featured, p.created_at,
+			COALESCE(r.avg_rating, 0.0) as avg_rating, 
+			COALESCE(r.review_count, 0) as review_count
+		FROM products p
+		LEFT JOIN (
+			SELECT product_id, AVG(rating) as avg_rating, COUNT(*) as review_count 
+			FROM product_reviews GROUP BY product_id
+		) r ON p.id = r.product_id
+		WHERE p.id = $1
+	`
+	
+	var p models.Product
+	var sizesStr string
+	var sizesStockStr string
+	
+	err := r.db.QueryRow(query, id).Scan(
+		&p.ID, &p.Name, &p.Description, &p.Price, &p.ImageURL, &p.Stock, &p.Category,
+		&sizesStr, &sizesStockStr,
+		&p.Collection, &p.Fabric, &p.Color, &p.SleeveType, &p.NeckType, &p.Pattern,
+		&p.Occasion, &p.SKU, &p.Tags, &p.OriginalPrice, &p.IsNewArrival, &p.IsBestSeller,
+		&p.IsFeatured, &p.CreatedAt, &p.AvgRating, &p.ReviewCount,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("product not found")
+		}
+		return nil, err
+	}
+	
+	if sizesStr != "" {
+		p.Sizes = strings.Split(sizesStr, ",")
+	} else {
+		p.Sizes = []string{}
+	}
+	
+	p.SizesStock = map[string]int{}
+	if sizesStockStr != "" {
+		json.Unmarshal([]byte(sizesStockStr), &p.SizesStock)
+	}
+	
+	p.GalleryImages = []string{}
+	if p.ImageURL != "" {
+		p.GalleryImages = append(p.GalleryImages, p.ImageURL)
+	}
+	
+	imgRows, err := r.db.Query("SELECT image_url FROM product_images WHERE product_id = $1", p.ID)
+	if err == nil {
+		for imgRows.Next() {
+			var url string
+			if err := imgRows.Scan(&url); err == nil {
+				p.GalleryImages = append(p.GalleryImages, url)
+			}
+		}
+		imgRows.Close()
+	}
+	
+	return &p, nil
+}
+

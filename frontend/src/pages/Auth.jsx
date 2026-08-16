@@ -146,8 +146,8 @@ const Auth = () => {
             console.error("Profile DB check error:", e);
         }
 
-        // No profile found in DB — send to onboarding
-        navigate(`/complete-profile?redirect=${encodeURIComponent(redirectPath)}`);
+        // Send user directly to their intended destination instead of forcing onboarding
+        navigate(redirectPath);
     };
 
     const handleSendOTP = async (e) => {

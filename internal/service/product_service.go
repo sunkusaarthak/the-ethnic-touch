@@ -10,6 +10,7 @@ import (
 
 type ProductService interface {
 	GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error)
+	GetProductByID(id string) (*models.Product, error)
 	CreateProduct(p *models.Product) error
 	UpdateProduct(p *models.Product) error
 	DeleteProduct(id string) error
@@ -27,6 +28,10 @@ func NewProductService(repo repository.ProductRepository) ProductService {
 
 func (s *productService) GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error) {
 	return s.repo.GetProducts(filters)
+}
+
+func (s *productService) GetProductByID(id string) (*models.Product, error) {
+	return s.repo.GetProductByID(id)
 }
 
 func (s *productService) CreateProduct(p *models.Product) error {
