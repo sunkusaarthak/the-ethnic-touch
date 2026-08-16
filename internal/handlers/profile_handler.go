@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
@@ -51,8 +52,16 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 		p.UserID = userID
 
 		isNewProfile := false
-		if _, err := h.svc.GetProfile(userID); err != nil {
+		existingProfile, err := h.svc.GetProfile(userID)
+		if err != nil {
 			isNewProfile = true
+			p.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+			p.UpdatedAt = p.CreatedAt
+		} else {
+			p.CreatedAt = existingProfile.CreatedAt
+			p.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+			p.SpinCount = existingProfile.SpinCount
+			p.AvailableSpins = existingProfile.AvailableSpins
 		}
 
 		if err := h.svc.UpsertProfile(&p); err != nil {

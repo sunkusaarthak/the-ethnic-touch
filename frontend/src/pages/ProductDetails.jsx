@@ -9,33 +9,41 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     const navigate = useNavigate();
     const globalProduct = products.find(p => p.id === id);
     
-    const [localProduct, setLocalProduct] = useState(globalProduct || null);
-    const [isFetchingDelta, setIsFetchingDelta] = useState(!globalProduct);
+    const [localProduct, setLocalProduct] = useState(null);
+    const [isFetchingDelta, setIsFetchingDelta] = useState(true);
     const [notFound, setNotFound] = useState(false);
 
     useEffect(() => {
-        if (!globalProduct) {
-            setIsFetchingDelta(true);
-            setNotFound(false);
-            fetch(`${API_BASE_URL}/api/products/${id}`)
-                .then(res => {
-                    if (!res.ok) throw new Error("Product not found");
-                    return res.json();
-                })
-                .then(data => {
-                    setLocalProduct(data);
-                    setIsFetchingDelta(false);
-                })
-                .catch(err => {
+        // Reset state when ID changes
+        setLocalProduct(null);
+        setIsFetchingDelta(true);
+        setNotFound(false);
+
+        if (globalProduct) {
+            setLocalProduct(globalProduct);
+            setIsFetchingDelta(false);
+            return;
+        }
+
+        const controller = new AbortController();
+        fetch(`${API_BASE_URL}/api/products/${id}`, { signal: controller.signal })
+            .then(res => {
+                if (!res.ok) throw new Error("Product not found");
+                return res.json();
+            })
+            .then(data => {
+                setLocalProduct(data);
+                setIsFetchingDelta(false);
+            })
+            .catch(err => {
+                if (err.name !== 'AbortError') {
                     console.error("Delta fetch failed:", err);
                     setNotFound(true);
                     setIsFetchingDelta(false);
-                });
-        } else {
-            setLocalProduct(globalProduct);
-            setIsFetchingDelta(false);
-            setNotFound(false);
-        }
+                }
+            });
+
+        return () => controller.abort();
     }, [id, globalProduct]);
 
     const product = localProduct;
