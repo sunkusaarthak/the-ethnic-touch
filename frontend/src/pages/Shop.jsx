@@ -13,6 +13,8 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
     const [totalProducts, setTotalProducts] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
     const [currentPage, setCurrentPage] = useState(1);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const loader = useRef(null);
     const [sort, setSort] = useState('newest');
 
     const [selectedCategories, setSelectedCategories] = useState([]);
@@ -128,7 +130,8 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
         let active = true;
         
         const fetchFilteredProducts = async () => {
-            setLoading(true);
+            if (currentPage === 1) setLoading(true);
+            else setLoadingMore(true);
             const params = new URLSearchParams();
             params.append('paginated', 'true');
             params.append('page', currentPage.toString());
@@ -190,11 +193,11 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
                 
                 if (active) {
                     if (data && Array.isArray(data.products)) {
-                        setProducts(data.products);
+                        setProducts(prev => currentPage === 1 ? data.products : [...prev, ...data.products]);
                         setTotalProducts(data.total);
-                        setTotalPages(data.pages);
+                        setTotalPages(data.totalPages);
                     } else if (Array.isArray(data)) {
-                        setProducts(data);
+                        setProducts(prev => currentPage === 1 ? data : [...prev, ...data]);
                         setTotalProducts(data.length);
                         setTotalPages(1);
                     }
@@ -270,12 +273,16 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
                     const pages = Math.ceil(total / limit) || 1;
                     const offset = (currentPage - 1) * limit;
                     
-                    setProducts(list.slice(offset, offset + limit));
+                    const newProds = list.slice(offset, offset + limit);
+                    setProducts(prev => currentPage === 1 ? newProds : [...prev, ...newProds]);
                     setTotalProducts(total);
                     setTotalPages(pages);
                 }
             } finally {
-                if (active) setLoading(false);
+                if (active) {
+                    setLoading(false);
+                    setLoadingMore(false);
+                }
             }
         };
 
@@ -341,11 +348,23 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
         setGlobalSearch('');
     };
 
-    const handlePageChange = (p) => {
-        setCurrentPage(p);
-        const el = document.getElementById('shop-top-anchor');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-    };
+    const handleObserver = useCallback((entries) => {
+        const target = entries[0];
+        if (target.isIntersecting && !loading && !loadingMore && currentPage < totalPages) {
+            setCurrentPage((prev) => prev + 1);
+        }
+    }, [loading, loadingMore, currentPage, totalPages]);
+
+    useEffect(() => {
+        const option = {
+            root: null,
+            rootMargin: "200px",
+            threshold: 0
+        };
+        const observer = new IntersectionObserver(handleObserver, option);
+        if (loader.current) observer.observe(loader.current);
+        return () => observer.disconnect();
+    }, [handleObserver]);
 
     return (
         <div>
@@ -438,36 +457,13 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
                                 ))}
                             </div>
 
-                            {/* Pagination Controls */}
-                            {totalPages > 1 && (
-                                <div className="catalog-pagination">
-                                    <button 
-                                        className="pagination-btn"
-                                        disabled={currentPage === 1}
-                                        onClick={() => handlePageChange(currentPage - 1)}
-                                    >
-                                        &larr;
-                                    </button>
-                                    
-                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                                        <button
-                                            key={p}
-                                            className={`pagination-btn ${p === currentPage ? 'active' : ''}`}
-                                            onClick={() => handlePageChange(p)}
-                                        >
-                                            {p}
-                                        </button>
-                                    ))}
-
-                                    <button 
-                                        className="pagination-btn"
-                                        disabled={currentPage === totalPages}
-                                        onClick={() => handlePageChange(currentPage + 1)}
-                                    >
-                                        &rarr;
-                                    </button>
+                            {/* Infinite Scroll Sentinel */}
+                            {loadingMore && (
+                                <div style={{ marginTop: '2rem', marginBottom: '2rem' }}>
+                                    <ProductSkeletonGrid count={4} />
                                 </div>
                             )}
+                            <div ref={loader} style={{ height: '20px' }}></div>
                         </div>
                     )}
                 </main>
