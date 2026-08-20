@@ -14,6 +14,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 		"http://localhost:8080",
 		"https://the-ethnic-touch.onrender.com",
 		"https://the-ethnic-touch-backend.onrender.com",
+		"https://theethnictouch.com",
 	}
 
 	if envOrigins := os.Getenv("ALLOWED_ORIGINS"); envOrigins != "" {
