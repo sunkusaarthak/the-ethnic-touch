@@ -37,13 +37,16 @@ const Policies = () => {
                 <h2 style={headingStyle}>Privacy Policy</h2>
                 <div style={contentStyle}>
                     <p>At The Ethnic Touch, we value and respect your privacy. This policy outlines how we collect, use, and protect your personal information.</p>
-                    <p><strong>Data Collection:</strong> We collect necessary information such as your name, email address, phone number, and shipping details when you create an account, place an order, or contact us.</p>
-                    <p><strong>Data Sharing:</strong> We maintain strict confidentiality of your data. We <strong>do not</strong> sell or share your personal data with any external third parties for marketing purposes. Your data is only shared with our trusted operational partners specifically required to fulfill your order:</p>
                     <ul>
-                        <li><strong>Razorpay:</strong> Our secure payment processor for securely handling your transactions.</li>
-                        <li><strong>Shipping Partners:</strong> Only the necessary delivery details are provided to our shipping partners to ensure your order reaches you safely.</li>
+                        <li style={{ marginBottom: '1rem' }}><strong>Data Collection:</strong> We collect necessary information such as your name, email address, phone number, and shipping details when you create an account, place an order, or contact us.</li>
+                        <li style={{ marginBottom: '1rem' }}><strong>Data Sharing:</strong> We maintain strict confidentiality of your data. We <strong>do not</strong> sell or share your personal data with any external third parties for marketing purposes. Your data is only shared with our trusted operational partners specifically required to fulfill your order:
+                            <ul style={{ marginTop: '0.5rem', listStyleType: 'disc' }}>
+                                <li style={{ marginBottom: '0.5rem' }}><strong>Razorpay:</strong> Our secure payment processor for securely handling your transactions.</li>
+                                <li style={{ marginBottom: '0.5rem' }}><strong>Shipping Partners:</strong> Only the necessary delivery details are provided to our shipping partners to ensure your order reaches you safely.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Data Security:</strong> We implement industry-standard security measures to ensure your personal information is kept safe from unauthorized access.</li>
                     </ul>
-                    <p><strong>Data Security:</strong> We implement industry-standard security measures to ensure your personal information is kept safe from unauthorized access.</p>
                 </div>
             </section>
 

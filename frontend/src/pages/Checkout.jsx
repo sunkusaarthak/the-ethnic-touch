@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, Bro
 import Cart from './Cart';
 import { API_BASE_URL } from '../data/config';
 import { fetchWithAuth } from '../utils/apiClient';
+import { Loader2 } from 'lucide-react';
 
 const showAlert = (message, title = "Notice", type = "warning") => {
     if (window.customAlert) {
@@ -293,11 +294,13 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         key: data.razorpayKey || "rzp_test_mock",
                         amount: Math.round(data.amount * 100),
                         currency: "INR",
+                        order_id: data.razorpayOrderId,
                         name: "The Ethnic Touch",
                         description: `Store Order #${data.orderId}`,
                         prefill: { email: email },
                         theme: { color: "#B97A66" },
                         handler: async function (response) {
+                            setVerifyingPayment(true);
                             try {
                                 const verifyRes = await fetchWithAuth(`/api/orders/verify`, {
                                     method: 'POST',
@@ -328,10 +331,12 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                                     });
                                 } else {
                                     showAlert("Payment verification failed. Please contact store support.", "Payment Error", "error");
+                                    setVerifyingPayment(false);
                                     setOrdering(false);
                                 }
                             } catch (e) {
                                 showAlert("Network error verifying payment.", "Connection Error", "error");
+                                setVerifyingPayment(false);
                                 setOrdering(false);
                             }
                         },
@@ -361,7 +366,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                 navigate(targetUrl);
             }
         } catch (err) {
-            showAlert("Error placing order. Please try again.", "Order Error", "error");
+            showAlert(err.message || "Error placing order. Please try again.", "Order Error", "error");
             setOrdering(false);
         }
     };
@@ -900,6 +905,9 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         </div>
                     )}
 
+                    <style>{`
+                        @keyframes spin-checkout { 100% { transform: rotate(360deg); } }
+                    `}</style>
                     <button 
                         onClick={() => {
                             if (checkoutType !== 'pickup' && addresses.length === 0) {
@@ -920,16 +928,19 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            gap: '0.5rem',
                             background: 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)',
                             color: '#FFF',
                             border: 'none',
-                            cursor: ordering ? 'not-allowed' : 'pointer',
+                            cursor: (ordering || verifyingPayment) ? 'not-allowed' : 'pointer',
                             boxShadow: '0 4px 15px rgba(212, 163, 115, 0.25)',
                             transition: 'all 0.3s ease'
                         }}
-                        disabled={ordering || isInstantDeliveryBlocked}
+                        disabled={ordering || verifyingPayment || isInstantDeliveryBlocked}
                     >
-                        {ordering ? "Verifying Stock..." : 
+                        {(ordering || verifyingPayment) && <Loader2 size={16} color="#FFF" style={{ animation: 'spin-checkout 1s linear infinite' }} />}
+                        {verifyingPayment ? "Processing Payment..." :
+                         ordering ? "Verifying Stock..." : 
                          (checkoutType !== 'pickup' && addresses.length === 0) ? "Add Delivery Address" :
                          checkoutType === 'pickup' && paymentMethod === 'offline_qr' ? "Book Store Pickup Pass" : 
                          "Secure Checkout & Prepay"}

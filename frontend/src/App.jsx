@@ -15,7 +15,9 @@ import CompleteProfile from './pages/CompleteProfile';
 import Shop from './pages/Shop';
 import WishlistPage from './pages/WishlistPage';
 import SpinWheel from './pages/SpinWheel';
-import Policies from './pages/Policies';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import RefundPolicy from './pages/RefundPolicy';
+import ContactUs from './pages/ContactUs';
 import { fallbackProducts, API_BASE_URL } from './data/config';
 import apiClient from './utils/apiClient';
 
@@ -159,7 +161,9 @@ const AppRoutesContent = () => {
                     } />
                 <Route path="/admin" element={<AdminRedirect />} />
                 <Route path="/admin/*" element={<AdminRedirect />} />
-                <Route path="/policies" element={<Policies />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                <Route path="/refund-policy" element={<RefundPolicy />} />
+                <Route path="/contact" element={<ContactUs />} />
             </Routes>
             <AppFooterWrapper />
 

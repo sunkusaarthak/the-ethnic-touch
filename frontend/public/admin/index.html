@@ -34,6 +34,7 @@
             <ul class="nav-menu">
                 <li class="active" data-tab="dashboard">Dashboard</li>
                 <li data-tab="orders">Orders & Fulfillment</li>
+                <li data-tab="support" style="display: flex; align-items: center; justify-content: space-between;">Support Requests <span id="support-badge" style="display: none; background: #ef4444; color: white; font-size: 0.75rem; font-weight: bold; border-radius: 9999px; padding: 2px 6px;"></span></li>
                 <li data-tab="pickup-scanner">Pickup Scanner</li>
                 <li data-tab="products" class="admin-only">Products & Inventory</li>
                 <li data-tab="coupons" class="admin-only">Discount & Gift Coupons</li>
@@ -113,6 +114,26 @@
                             <th>Status</th>
                             <th>Tracking Information</th>
                             <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Support Tab -->
+        <div id="tab-support" class="tab-content">
+            <div class="table-container">
+                <table id="supportTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Customer</th>
+                            <th>Contact Info</th>
+                            <th>Order ID</th>
+                            <th>Message</th>
+                            <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody></tbody>

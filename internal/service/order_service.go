@@ -264,14 +264,26 @@ func (s *orderService) CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 	}
 
 	cleanedCount := 0
-	thresholdTime := time.Now().Add(-cutoff)
+	thresholdTimeStandard := time.Now().Add(-cutoff)
+	thresholdTimePickup := time.Now().Add(-48 * time.Hour)
 
 	for _, o := range orders {
 		if o.Status == "pending" || o.Status == "pending_payment" {
 			createdAt, parseErr := time.Parse(time.RFC3339, o.CreatedAt)
-			if parseErr == nil && createdAt.Before(thresholdTime) {
-				if cancelErr := s.orderRepo.CancelPendingOrder(o.ID); cancelErr == nil {
-					cleanedCount++
+			if parseErr == nil {
+				isPickup := o.CheckoutType == "pickup" || o.PaymentMethod == "offline_qr"
+				
+				shouldCancel := false
+				if isPickup {
+					shouldCancel = createdAt.Before(thresholdTimePickup)
+				} else {
+					shouldCancel = createdAt.Before(thresholdTimeStandard)
+				}
+
+				if shouldCancel {
+					if cancelErr := s.orderRepo.CancelPendingOrder(o.ID); cancelErr == nil {
+						cleanedCount++
+					}
 				}
 			}
 		}

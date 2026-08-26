@@ -242,13 +242,13 @@ func (r *postgresOrderRepo) CreateOrderWithTransaction(order *models.Order, stoc
 				sizesStock = map[string]int{}
 			}
 
-			if item.Size != "" && len(sizesStock) > 0 {
-				if curr, ok := sizesStock[item.Size]; ok {
-					if curr < item.Quantity {
-						return fmt.Errorf("insufficient stock for product %s size %s", prodName, item.Size)
-					}
-					sizesStock[item.Size] = curr - item.Quantity
+			if item.Size != "" {
+				// Must exist and have enough stock
+				curr, ok := sizesStock[item.Size]
+				if !ok || curr < item.Quantity {
+					return fmt.Errorf("insufficient stock for product %s size %s", prodName, item.Size)
 				}
+				sizesStock[item.Size] = curr - item.Quantity
 			}
 
 			newTotalStock := totalStock - item.Quantity

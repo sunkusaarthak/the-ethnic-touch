@@ -51,6 +51,7 @@ func (a *App) setupRoutes() {
 	profileRepo := repository.NewProfileRepository(a.DB)
 	cartRepo := repository.NewCartRepository(a.DB)
 	configRepo := repository.NewConfigRepository(a.DB)
+	contactRepo := repository.NewContactRepository(a.DB)
 
 	// Services
 	productSvc := service.NewProductService(productRepo)
@@ -59,6 +60,7 @@ func (a *App) setupRoutes() {
 	profileSvc := service.NewProfileService(profileRepo)
 	cartSvc := service.NewCartService(cartRepo)
 	configSvc := service.NewConfigService(configRepo)
+	contactSvc := service.NewContactService(contactRepo)
 
 	adminUserRepo := repository.NewAdminUserRepository(a.DB)
 
@@ -71,6 +73,7 @@ func (a *App) setupRoutes() {
 	spinHandler := handlers.NewSpinHandler(profileSvc, couponSvc, configSvc)
 	configHandler := handlers.NewConfigHandler(configSvc)
 	staffHandler := handlers.NewStaffHandler(adminUserRepo)
+	contactHandler := handlers.NewContactHandler(contactSvc)
 
 	adminOnly := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin")
 	adminOrEmployee := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin", "employee")
@@ -139,6 +142,23 @@ func (a *App) setupRoutes() {
 			staffHandler.HandleAddStaff(w, r)
 		} else if r.Method == http.MethodDelete {
 			staffHandler.HandleDeleteStaff(w, r)
+		}
+	})).ServeHTTP)
+	
+	// Contact Us Endpoints
+	a.Router.HandleFunc("/api/contact", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			contactHandler.HandlePostContact(w, r)
+		}
+	})
+	a.Router.HandleFunc("/api/admin/contact", adminOrEmployee(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			contactHandler.HandleAdminGetMessages(w, r)
+		}
+	})).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/contact/{id}/read", adminOrEmployee(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			contactHandler.HandleAdminMarkRead(w, r)
 		}
 	})).ServeHTTP)
 	
@@ -244,11 +264,11 @@ func (a *App) Run(port string) error {
 
 func (a *App) StartBackgroundJobs() {
 	go func() {
-		ticker := time.NewTicker(15 * time.Minute)
+		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
 			if a.OrderService != nil {
-				cleaned, err := a.OrderService.CleanupAbandonedOrders(30 * time.Minute)
+				cleaned, err := a.OrderService.CleanupAbandonedOrders(15 * time.Minute)
 				if err != nil {
 					a.Logger.Error("Failed to cleanup abandoned orders", "error", err)
 				} else if cleaned > 0 {
