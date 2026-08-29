@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import confetti from 'canvas-confetti';
 import { Gift, Copy, X, ArrowLeft, Loader2 } from 'lucide-react';
 import { auth, API_BASE_URL } from '../data/config';
+import { formatError } from '../utils/errors';
 
 const logicalSegments = [
     { label: 'Free Kurthi', color: '#D4A373' }, // index 0
@@ -149,7 +150,7 @@ const SpinWheel = () => {
 
         } catch (err) {
             console.error(err);
-            setError(err.message || 'An error occurred.');
+            setError(formatError(err, 'An error occurred.'));
             setIsSpinning(false);
         }
     };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAlert } from '../context/AlertContext';
 import { User, Mail, Phone, Clipboard, CheckCircle, ChevronRight, Send } from 'lucide-react';
+import { formatError } from '../utils/errors';
 import './ContactUs.css';
 
 const ContactUs = () => {
@@ -94,7 +95,7 @@ const ContactUs = () => {
             const elapsedTime = Date.now() - startTime;
             const remainingTime = Math.max(0, 1000 - elapsedTime);
             setTimeout(() => {
-                showAlert(err.message, "error");
+                showAlert(formatError(err, "Failed to submit request"), "error");
                 setAnimState('idle');
                 setLoading(false);
             }, remainingTime);

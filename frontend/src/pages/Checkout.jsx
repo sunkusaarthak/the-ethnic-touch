@@ -4,6 +4,7 @@ import Cart from './Cart';
 import { API_BASE_URL } from '../data/config';
 import { fetchWithAuth } from '../utils/apiClient';
 import { Loader2 } from 'lucide-react';
+import { formatError } from '../utils/errors';
 
 const showAlert = (message, title = "Notice", type = "warning") => {
     if (window.customAlert) {
@@ -189,7 +190,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                 }
             }
         } catch (err) {
-            setAddressMessage(err.message);
+            setAddressMessage(formatError(err, 'Failed to load addresses'));
         }
     };
 
@@ -366,7 +367,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                 navigate(targetUrl);
             }
         } catch (err) {
-            showAlert(err.message || "Error placing order. Please try again.", "Order Error", "error");
+            showAlert(formatError(err, "Error placing order. Please try again."), "Order Error", "error");
             setOrdering(false);
         }
     };

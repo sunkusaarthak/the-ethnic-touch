@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"ethnictouch/internal/repository"
+	"ethnictouch/internal/utils"
 )
 
 type StaffHandler struct {
@@ -24,7 +25,7 @@ func (h *StaffHandler) HandleGetStaff(w http.ResponseWriter, r *http.Request) {
 
 	users, err := h.repo.GetAllUsers()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -54,7 +55,7 @@ func (h *StaffHandler) HandleAddStaff(w http.ResponseWriter, r *http.Request) {
 
 	email := strings.ToLower(req.Email)
 	if err := h.repo.AddUser(email, req.Role); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -74,7 +75,7 @@ func (h *StaffHandler) HandleDeleteStaff(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.repo.DeleteUser(email); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 		return
 	}
 

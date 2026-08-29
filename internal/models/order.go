@@ -45,6 +45,7 @@ type Order struct {
 // OrderCreateRequest represents storefront payload to initiate booking
 type OrderCreateRequest struct {
 	CustomerEmail   string `json:"customerEmail"`
+	UserID          string `json:"userId"`
 	CouponCode      string `json:"couponCode"`
 	ShippingName    string `json:"shippingName"`
 	ShippingPhone   string `json:"shippingPhone"`

@@ -2,12 +2,14 @@ package service
 
 import (
 	"errors"
+	"time"
+
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/repository"
 )
 
 type CouponService interface {
-	ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo) (*models.Coupon, float64, error)
+	ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo, userID string) (*models.Coupon, float64, error)
 	GetAllCoupons() ([]models.Coupon, error)
 	CreateCoupon(c *models.Coupon) error
 	GetGiftTiers() ([]models.GiftTier, error)
@@ -21,9 +23,28 @@ func NewCouponService(repo repository.CouponRepository) CouponService {
 	return &couponService{repo: repo}
 }
 
-func (s *couponService) ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo) (*models.Coupon, float64, error) {
+func (s *couponService) ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo, userID string) (*models.Coupon, float64, error) {
+	if code == "" {
+		return nil, 0, errors.New("invalid or expired coupon code")
+	}
+
 	c, err := s.repo.GetByCode(code)
 	if err != nil {
+		return nil, 0, errors.New("invalid or expired coupon code")
+	}
+
+	if c.ExpiryDate != "" {
+		expiry, err := time.Parse(time.RFC3339, c.ExpiryDate)
+		if err != nil {
+			// fallback format
+			expiry, err = time.Parse("2006-01-02", c.ExpiryDate)
+		}
+		if err == nil && time.Now().After(expiry) {
+			return nil, 0, errors.New("invalid or expired coupon code")
+		}
+	}
+
+	if c.UserID != "" && c.UserID != userID {
 		return nil, 0, errors.New("invalid or expired coupon code")
 	}
 

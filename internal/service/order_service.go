@@ -117,7 +117,23 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 	if req.CouponCode != "" {
 		c, err := s.couponRepo.GetByCode(req.CouponCode)
 		if err == nil && c.IsActive {
-			if subtotal >= c.MinOrder && (c.UsageLimit == 0 || c.UsedCount < c.UsageLimit) {
+			validCoupon := true
+			
+			if c.ExpiryDate != "" {
+				expiry, err := time.Parse(time.RFC3339, c.ExpiryDate)
+				if err != nil {
+					expiry, err = time.Parse("2006-01-02", c.ExpiryDate)
+				}
+				if err == nil && time.Now().After(expiry) {
+					validCoupon = false
+				}
+			}
+
+			if c.UserID != "" && c.UserID != req.UserID {
+				validCoupon = false
+			}
+
+			if validCoupon && subtotal >= c.MinOrder && (c.UsageLimit == 0 || c.UsedCount < c.UsageLimit) {
 				if c.Type == "fixed" {
 					discountAmt = c.Value
 				} else if c.Type == "percentage" {

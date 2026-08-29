@@ -8,6 +8,7 @@ import {
     signInWithPopup 
 } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
+import { formatError } from '../utils/errors';
 
 const Auth = () => {
     const [step, setStep] = useState('phone'); // 'phone' | 'otp'
@@ -171,8 +172,7 @@ const Auth = () => {
             setConfirmationResult(result);
             setStep('otp');
         } catch (err) {
-            console.error("Phone Auth Error:", err);
-            setError(err.message || 'Failed to send OTP. Please check your phone number and try again.');
+            setError(formatError(err, 'Failed to send OTP. Please check your phone number and try again.'));
             if (recaptchaVerifierRef.current) {
                 try { recaptchaVerifierRef.current.clear(); } catch(e){}
                 recaptchaVerifierRef.current = null;
@@ -199,8 +199,7 @@ const Auth = () => {
             const userCredential = await confirmationResult.confirm(otp.trim());
             await checkNewUserAndNavigate(userCredential);
         } catch (err) {
-            console.error("OTP Verification Error:", err);
-            setError(err.message || 'Invalid OTP code. Please check and try again.');
+            setError(formatError(err, 'Invalid OTP code. Please check and try again.'));
         } finally {
             setLoading(false);
         }
@@ -220,7 +219,7 @@ const Auth = () => {
             await checkNewUserAndNavigate(userCredential);
             // Intentionally not setting loading to false here, so the loader spins until the page redirects
         } catch (err) {
-            setError(err.message || 'Failed to sign in with Google');
+            setError(formatError(err, 'Failed to sign in with Google'));
             setLoading(false);
             setIsGoogleLoading(false);
         }

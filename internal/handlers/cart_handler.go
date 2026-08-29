@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"ethnictouch/internal/service"
+	"ethnictouch/internal/utils"
 )
 
 type CartHandler struct {
@@ -31,7 +32,7 @@ func (h *CartHandler) HandleCart(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		items, err := h.svc.GetCart(userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -59,7 +60,7 @@ func (h *CartHandler) HandleCart(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if req.ProductID != "" {
 			if err := h.svc.AddToCart(userID, req.ProductID, req.Quantity, req.Size); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 				return
 			}
 		}
@@ -96,7 +97,7 @@ func (h *CartHandler) HandleWishlist(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		products, err := h.svc.GetWishlist(userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

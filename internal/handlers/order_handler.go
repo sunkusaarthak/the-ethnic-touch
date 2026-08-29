@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"os"
 
+	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
+	"ethnictouch/internal/utils"
 )
 
 type OrderHandler struct {
@@ -34,11 +36,13 @@ func (h *OrderHandler) HandleCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.UserID = r.Header.Get("X-User-Id")
+
 	order, razorpayOrderID, checkoutURL, err := h.svc.CreateOrder(&req)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
 		return
 	}
 
@@ -73,7 +77,7 @@ func (h *OrderHandler) HandleVerifyPayment(w http.ResponseWriter, r *http.Reques
 	if err := h.svc.VerifyPayment(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
 		return
 	}
 
@@ -116,9 +120,18 @@ func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		if email == "" {
+			role, _ := r.Context().Value(middleware.RoleKey).(string)
+			if role != "admin" && role != "employee" {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode([]models.Order{})
+				return
+			}
+		}
+
 		orders, err := h.svc.GetAllOrders(email)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
