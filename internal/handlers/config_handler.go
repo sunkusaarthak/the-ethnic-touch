@@ -136,6 +136,15 @@ func (h *ConfigHandler) HandleUpdateCheckoutConfig(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if config.ShippingCutoffHour < 0 || config.ShippingCutoffHour > 23 {
+		http.Error(w, "shipping_cutoff_hour must be between 0 and 23", http.StatusBadRequest)
+		return
+	}
+	if config.PickupHoldHours < 0 {
+		http.Error(w, "pickup_hold_hours must be 0 or greater", http.StatusBadRequest)
+		return
+	}
+
 	if err := h.configSvc.UpdateCheckoutConfig(&config); err != nil {
 		http.Error(w, "Failed to update checkout config", http.StatusInternalServerError)
 		return

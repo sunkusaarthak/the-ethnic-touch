@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
 import { API_BASE_URL } from '../data/config';
+import ShippingTimeline from '../components/ShippingTimeline';
 import { fetchWithAuth } from '../utils/apiClient';
 import { Loader2 } from 'lucide-react';
 import { formatError } from '../utils/errors';
@@ -34,6 +35,11 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [pendingPaymentOrder, setPendingPaymentOrder] = useState(null);
     const [verifyingPayment, setVerifyingPayment] = useState(false);
+    const [shippingCost, setShippingCost] = useState(0);
+    const [shippingLoading, setShippingLoading] = useState(false);
+    const [isServiceable, setIsServiceable] = useState(true);
+    const [shippingTimeline, setShippingTimeline] = useState(null);
+    const [debouncedZipCode, setDebouncedZipCode] = useState(null);
     const navigate = useNavigate();
     const paymentCompleteRef = useRef(false);
 
@@ -41,7 +47,8 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
         standard_delivery_enabled: true,
         hyderabad_instant_enabled: true,
         store_pickup_prepay_enabled: true,
-        store_pickup_pay_in_store_enabled: true
+        store_pickup_pay_in_store_enabled: true,
+        free_shipping_threshold: 1449.0
     });
 
     useEffect(() => {
@@ -107,9 +114,53 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
     }, [cart, authUser, authLoading, navigate]);
 
     const subtotal = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
-    const finalTotal = subtotal - (discount?.amt || 0);
+    let finalTotal = subtotal - (discount?.amt || 0);
 
     const activeAddr = authUser && addresses.length > 0 ? addresses.find(a => a.id === selectedAddressID) : null;
+
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/checkout/shipping-timeline`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data) setShippingTimeline(data);
+            })
+            .catch(err => console.error("Failed to fetch timeline", err));
+    }, []);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedZipCode(activeAddr?.zipCode);
+        }, 500);
+        return () => clearTimeout(handler);
+    }, [activeAddr?.zipCode]);
+
+    useEffect(() => {
+        if (checkoutType === 'delivery' && debouncedZipCode) {
+            setShippingLoading(true);
+            const cartSize = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+            fetch(`${API_BASE_URL}/api/checkout/shipping-estimate?pincode=${debouncedZipCode}&cart_size=${cartSize}`)
+                .then(res => res.ok ? res.json() : null)
+                .then(data => {
+                    if (data) {
+                        setIsServiceable(data.serviceable);
+                        setShippingCost(data.charge || 0);
+                    }
+                })
+                .catch(err => console.error("Failed to fetch estimate", err))
+                .finally(() => setShippingLoading(false));
+        } else {
+            setIsServiceable(true);
+            setShippingCost(0);
+            setShippingLoading(false);
+        }
+    }, [checkoutType, debouncedZipCode]);
+
+    const threshold = checkoutConfig.free_shipping_threshold || 1449.0;
+    let applicableShipping = 0;
+    if (checkoutType === 'delivery' && finalTotal < threshold && isServiceable) {
+        applicableShipping = shippingCost;
+    }
+    finalTotal += applicableShipping;
     const isCityHyderabad = activeAddr && (
         activeAddr.city.toLowerCase().trim() === 'hyderabad' ||
         activeAddr.city.toLowerCase().trim() === 'secunderabad'
@@ -872,6 +923,26 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                                 <span>-₹{discount.amt.toLocaleString('en-IN')}</span>
                             </div>
                         )}
+                        {(checkoutType === 'delivery' || checkoutType === 'pickup') && (
+                            <div style={{display: 'flex', justifyContent: 'space-between', color: '#6C6863'}}>
+                                <span>Shipping:</span>
+                                <span style={{fontWeight: '500', color: (checkoutType === 'delivery' && applicableShipping > 0) ? '#2D2A26' : '#2E7D32', display: 'flex', alignItems: 'center'}}>
+                                    {checkoutType === 'pickup' ? 'FREE' : (
+                                        shippingLoading ? (
+                                            <Loader2 size={16} color="#8F5E36" style={{ animation: 'spin-checkout 1s linear infinite' }} />
+                                        ) : (
+                                            applicableShipping > 0 ? `₹${applicableShipping.toLocaleString('en-IN')}` : 'FREE'
+                                        )
+                                    )}
+                                </span>
+                            </div>
+                        )}
+                        {checkoutType !== 'pickup' && <ShippingTimeline cutoffHour={checkoutConfig.shipping_cutoff_hour || 16} />}
+                        {checkoutType === 'pickup' && (
+                            <div style={{marginTop: '0.3rem', padding: '0.5rem', backgroundColor: '#F5F9F1', borderRadius: '4px', fontSize: '0.75rem', color: '#2E7D32', border: '1px solid rgba(46, 125, 50, 0.2)'}}>
+                                <strong>Pickup Timeline:</strong> {paymentMethod === 'offline_qr' ? `You can pick up within ${checkoutConfig.pickup_hold_hours || 48} hours once placed` : 'You can pick up anytime once placed'}
+                            </div>
+                        )}
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#6C6863'}}>
                             <span>Delivery Mode:</span>
                             <span style={{backgroundColor: '#FAF3ED', color: '#8F5E36', padding: '2px 8px', borderRadius: '20px', fontWeight: '600', fontSize: '0.75rem', border: '1px solid rgba(212,163,115,0.25)', textTransform: 'capitalize'}}>
@@ -906,6 +977,23 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         </div>
                     )}
 
+                    {checkoutType === 'delivery' && activeAddr?.zipCode && !isServiceable && (
+                        <div style={{
+                            marginTop: '1rem',
+                            padding: '0.65rem 0.85rem',
+                            background: '#FDF2F2',
+                            border: '1px solid #F8D7DA',
+                            borderRadius: '8px',
+                            color: '#721C24',
+                            fontSize: '0.8rem',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '8px'
+                        }}>
+                            <span>Delivery is not serviceable at this pincode ({activeAddr.zipCode}).</span>
+                        </div>
+                    )}
+
                     <style>{`
                         @keyframes spin-checkout { 100% { transform: rotate(360deg); } }
                     `}</style>
@@ -913,10 +1001,17 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         onClick={() => {
                             if (checkoutType !== 'pickup' && addresses.length === 0) {
                                 navigate('/profile?action=add_address&redirect=/checkout');
-                            } else {
-                                placeOrder();
+                                return;
                             }
+                            if (checkoutType === 'delivery' && !isServiceable) return;
+                            placeOrder();
                         }} 
+                        disabled={
+                            ordering || 
+                            (checkoutType !== 'pickup' && addresses.length === 0) || 
+                            (checkoutType === 'hyderabad_instant' && isInstantDeliveryBlocked) ||
+                            (checkoutType === 'delivery' && !isServiceable)
+                        } 
                         style={{
                             marginTop: '0.9rem', 
                             width: '100%', 

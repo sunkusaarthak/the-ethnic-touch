@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ethnictouch/internal/config"
+	"ethnictouch/internal/cron"
 	"ethnictouch/internal/handlers"
 	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/repository"
@@ -53,20 +54,24 @@ func (a *App) setupRoutes() {
 	configRepo := repository.NewConfigRepository(a.DB)
 	contactRepo := repository.NewContactRepository(a.DB)
 
+	delhiverySvc := service.NewDelhiveryService("dummy_secret")
+	
+	cron.StartDelhiveryCron(orderRepo, delhiverySvc)
+
 	// Services
+	configSvc := service.NewConfigService(configRepo)
 	productSvc := service.NewProductService(productRepo)
-	orderSvc := service.NewOrderService(orderRepo, couponRepo, productRepo)
 	couponSvc := service.NewCouponService(couponRepo)
+	orderSvc := service.NewOrderService(orderRepo, couponSvc, productRepo, configSvc, delhiverySvc)
 	profileSvc := service.NewProfileService(profileRepo)
 	cartSvc := service.NewCartService(cartRepo)
-	configSvc := service.NewConfigService(configRepo)
 	contactSvc := service.NewContactService(contactRepo)
 
 	adminUserRepo := repository.NewAdminUserRepository(a.DB)
 
 	// Handlers
 	productHandler := handlers.NewProductHandler(productSvc)
-	orderHandler := handlers.NewOrderHandler(orderSvc, profileSvc, configSvc)
+	orderHandler := handlers.NewOrderHandler(orderSvc, profileSvc, configSvc, delhiverySvc)
 	couponHandler := handlers.NewCouponHandler(couponSvc)
 	profileHandler := handlers.NewProfileHandler(profileSvc, configSvc)
 	cartHandler := handlers.NewCartHandler(cartSvc)
@@ -101,6 +106,10 @@ func (a *App) setupRoutes() {
 	rateLimiter := middleware.NewRateLimiter(30, time.Minute)
 
 	// Orders & Checkout
+	a.Router.HandleFunc("/api/checkout/shipping-estimate", orderHandler.HandleShippingEstimate)
+	a.Router.HandleFunc("/api/checkout/shipping-timeline", orderHandler.HandleShippingTimeline)
+	a.Router.HandleFunc("/api/webhooks/delhivery", orderHandler.HandleDelhiveryWebhook)
+	
 	a.Router.HandleFunc("/api/orders", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			orderHandler.HandleGetOrder(w, r)

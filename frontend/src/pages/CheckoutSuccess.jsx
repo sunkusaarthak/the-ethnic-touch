@@ -311,7 +311,7 @@ const CheckoutSuccess = () => {
                                     boxSizing: 'border-box',
                                     flexWrap: 'wrap'
                                 }}>
-                                    <strong style={{ fontSize: 'clamp(0.85rem, 3.8vw, 1.05rem)', fontFamily: 'monospace', color: '#8F5E36', letterSpacing: '0.06em', wordBreak: 'break-all' }}>{displayGift}</strong>
+                                    <strong style={{ fontSize: '0.95rem', fontFamily: 'monospace', color: '#8F5E36', letterSpacing: '0.06em', wordBreak: 'break-all' }}>{displayGift}</strong>
                                     <CopyButton text={displayGift} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', flexShrink: 0 }} />
                                 </div>
                                 {giftExpiryDate && (

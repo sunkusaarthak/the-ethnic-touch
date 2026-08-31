@@ -32,6 +32,10 @@ func (m *mockOrderRepoForCheckoutFlows) GetAdminOrders(orderID string) ([]models
 	return nil, nil
 }
 
+func (m *mockOrderRepoForCheckoutFlows) GetPendingDeliveryOrders() ([]models.Order, error) {
+	return nil, nil
+}
+
 func (m *mockOrderRepoForCheckoutFlows) CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error {
 	m.orders[order.ID] = order
 	return nil
@@ -41,6 +45,15 @@ func (m *mockOrderRepoForCheckoutFlows) UpdateOrderStatus(orderID, status, payme
 	if o, ok := m.orders[orderID]; ok {
 		o.Status = status
 		o.RazorpayPaymentID = paymentID
+	}
+	return nil
+}
+
+func (m *mockOrderRepoForCheckoutFlows) UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error {
+	if o, ok := m.orders[orderID]; ok {
+		o.Status = status
+		o.RazorpayPaymentID = paymentID
+		o.UnlockedGift = unlockedGift
 	}
 	return nil
 }
@@ -69,11 +82,37 @@ func (m *mockProductRepoForCheckoutFlows) GetReviews(productID string) ([]models
 func (m *mockProductRepoForCheckoutFlows) CreateReview(rev *models.ProductReview) error { return nil }
 func (m *mockProductRepoForCheckoutFlows) GetProductByID(id string) (*models.Product, error) { return nil, nil }
 
+type mockConfigServiceForCheckout struct{}
+
+func (m *mockConfigServiceForCheckout) GetCheckoutConfig() (*models.CheckoutConfig, error) {
+	return &models.CheckoutConfig{
+		StandardDeliveryEnabled:      true,
+		HyderabadInstantEnabled:      true,
+		StorePickupPrepayEnabled:     true,
+		StorePickupPayInStoreEnabled: true,
+		FreeShippingThreshold:        1449.0,
+	}, nil
+}
+func (m *mockConfigServiceForCheckout) UpdateCheckoutConfig(c *models.CheckoutConfig) error { return nil }
+func (m *mockConfigServiceForCheckout) GetOrderKurthiCounter() (int, error) { return 0, nil }
+func (m *mockConfigServiceForCheckout) IncrementOrderKurthiCounter() error { return nil }
+func (m *mockConfigServiceForCheckout) GetSpinWheelConfig() (*models.SpinWheelConfig, error) { return nil, nil }
+func (m *mockConfigServiceForCheckout) UpdateSpinWheelConfig(config *models.SpinWheelConfig) error { return nil }
+func (m *mockConfigServiceForCheckout) GetSpinWheelStats() (*models.SpinWheelStats, error) { return nil, nil }
+func (m *mockConfigServiceForCheckout) IncrementNewUserKurthiCounter() error { return nil }
+func (m *mockConfigServiceForCheckout) ResetNewUserKurthiCounter() error { return nil }
+func (m *mockConfigServiceForCheckout) ResetOrderKurthiCounter() error { return nil }
+func (m *mockConfigServiceForCheckout) GetAuthConfig() (*models.AuthConfig, error) { return nil, nil }
+func (m *mockConfigServiceForCheckout) UpdateAuthConfig(config *models.AuthConfig) error { return nil }
+
 func TestCheckoutFlows_OfflinePickupAndInstantDelivery(t *testing.T) {
 	orderRepo := &mockOrderRepoForCheckoutFlows{orders: make(map[string]*models.Order)}
-	prodRepo := &mockProductRepoForCheckoutFlows{}
+	productRepo := &mockProductRepoForCheckoutFlows{}
+	
+	configSvc := &mockConfigServiceForCheckout{}
+	delhiverySvc := NewDelhiveryService("dummy")
 
-	svc := NewOrderService(orderRepo, nil, prodRepo)
+	svc := NewOrderService(orderRepo, nil, productRepo, configSvc, delhiverySvc)
 
 	t.Run("Offline Store Pickup Flow", func(t *testing.T) {
 		req := &models.OrderCreateRequest{

@@ -2007,12 +2007,12 @@ textarea {
 /* Coupon Input Text & Placeholder Size */
 .coupon-input {
     font-family: var(--font-body) !important;
-    font-size: var(--font-size-input) !important;
+    font-size: 0.85rem !important;
 }
 
 .coupon-input::placeholder {
     font-family: var(--font-body) !important;
-    font-size: var(--font-size-input) !important;
+    font-size: 0.85rem !important;
     color: #999 !important;
     font-weight: 400 !important;
 }

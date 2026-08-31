@@ -70,3 +70,12 @@ type OrderVerifyRequest struct {
 	RazorpaySignature string `json:"razorpaySignature"`
 	Mock              bool   `json:"mock"`
 }
+
+// OrderVerifyResponse represents the response containing unlocked gift info
+type OrderVerifyResponse struct {
+	Message        string `json:"message"`
+	UnlockedGift   string `json:"unlockedGift,omitempty"`
+	GiftType       string `json:"giftType,omitempty"`
+	GiftCode       string `json:"giftCode,omitempty"`
+	GiftExpiryDate string `json:"giftExpiryDate,omitempty"`
+}

@@ -40,6 +40,10 @@ func (m *mockOrderRepoForService) GetAdminOrders(orderID string) ([]models.Order
 	return nil, nil
 }
 
+func (m *mockOrderRepoForService) GetPendingDeliveryOrders() ([]models.Order, error) {
+	return nil, nil
+}
+
 func (m *mockOrderRepoForService) CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error {
 	m.orders[order.ID] = order
 	return nil
@@ -53,6 +57,21 @@ func (m *mockOrderRepoForService) UpdateOrderStatus(orderID, status, paymentID, 
 	return nil
 }
 
+func (m *mockOrderRepoForService) UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error {
+	if o, ok := m.orders[orderID]; ok {
+		o.Status = status
+		o.RazorpayPaymentID = paymentID
+		o.UnlockedGift = unlockedGift
+	}
+	return nil
+}
+
+type mockCouponServiceForOrder struct{}
+func (m *mockCouponServiceForOrder) ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo, userID string) (*models.Coupon, float64, error) { return nil, 0, nil }
+func (m *mockCouponServiceForOrder) GetAllCoupons() ([]models.Coupon, error) { return nil, nil }
+func (m *mockCouponServiceForOrder) CreateCoupon(c *models.Coupon) error { return nil }
+func (m *mockCouponServiceForOrder) GetGiftTiers() ([]models.GiftTier, error) { return []models.GiftTier{}, nil }
+
 func TestOrderService_VerifyPayment_HMACValidation(t *testing.T) {
 	repo := &mockOrderRepoForService{
 		orders: map[string]*models.Order{
@@ -64,7 +83,10 @@ func TestOrderService_VerifyPayment_HMACValidation(t *testing.T) {
 		},
 	}
 
-	svc := NewOrderService(repo, nil, nil)
+	configSvc := &mockConfigServiceForCheckout{}
+	delhiverySvc := NewDelhiveryService("dummy")
+	couponSvc := &mockCouponServiceForOrder{}
+	svc := NewOrderService(repo, couponSvc, nil, configSvc, delhiverySvc)
 	secret := "test_razorpay_secret_key"
 	os.Setenv("RAZORPAY_KEY_SECRET", secret)
 	defer os.Unsetenv("RAZORPAY_KEY_SECRET")
@@ -88,13 +110,15 @@ func TestOrderService_VerifyPayment_HMACValidation(t *testing.T) {
 			Mock:              false,
 		}
 
-		err := svc.VerifyPayment(req)
+		_, err := svc.VerifyPayment(req)
 		if err != nil {
 			t.Errorf("Expected nil error for valid signature, got: %v", err)
 		}
 	})
 
 	t.Run("Tampered / Invalid Signature Rejection", func(t *testing.T) {
+		repo.orders["ORD_1001"].Status = "pending" // Reset status for next test
+
 		req := &models.OrderVerifyRequest{
 			OrderID:           orderID,
 			RazorpayOrderID:   rzpOrderID,
@@ -103,7 +127,7 @@ func TestOrderService_VerifyPayment_HMACValidation(t *testing.T) {
 			Mock:              false,
 		}
 
-		err := svc.VerifyPayment(req)
+		_, err := svc.VerifyPayment(req)
 		if err == nil {
 			t.Errorf("Expected error for tampered signature, got nil")
 		}

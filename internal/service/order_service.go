@@ -19,24 +19,29 @@ import (
 
 type OrderService interface {
 	CreateOrder(req *models.OrderCreateRequest) (*models.Order, string, string, error)
-	VerifyPayment(req *models.OrderVerifyRequest) error
+	VerifyPayment(req *models.OrderVerifyRequest) (*models.OrderVerifyResponse, error)
 	GetOrder(orderID string) (*models.Order, error)
 	GetAllOrders(email string) ([]models.Order, error)
 	ConfirmPickup(orderID string) error
+	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
 	CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 }
 
 type orderService struct {
 	orderRepo   repository.OrderRepository
-	couponRepo  repository.CouponRepository
+	couponSvc   CouponService
 	productRepo repository.ProductRepository
+	configSvc   ConfigService
+	delhiverySvc DelhiveryService
 }
 
-func NewOrderService(orderRepo repository.OrderRepository, couponRepo repository.CouponRepository, productRepo repository.ProductRepository) OrderService {
+func NewOrderService(orderRepo repository.OrderRepository, couponSvc CouponService, productRepo repository.ProductRepository, configSvc ConfigService, delhiverySvc DelhiveryService) OrderService {
 	return &orderService{
 		orderRepo:   orderRepo,
-		couponRepo:  couponRepo,
+		couponSvc:   couponSvc,
 		productRepo: productRepo,
+		configSvc:   configSvc,
+		delhiverySvc: delhiverySvc,
 	}
 }
 
@@ -115,64 +120,47 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 
 	var discountAmt float64
 	if req.CouponCode != "" {
-		c, err := s.couponRepo.GetByCode(req.CouponCode)
-		if err == nil && c.IsActive {
-			validCoupon := true
-			
-			if c.ExpiryDate != "" {
-				expiry, err := time.Parse(time.RFC3339, c.ExpiryDate)
-				if err != nil {
-					expiry, err = time.Parse("2006-01-02", c.ExpiryDate)
-				}
-				if err == nil && time.Now().After(expiry) {
-					validCoupon = false
-				}
+		cartItemsInfo := make([]models.CartItemInfo, len(orderItems))
+		for i, item := range orderItems {
+			cartItemsInfo[i] = models.CartItemInfo{
+				ProductID: item.ProductID,
+				Price:     item.PriceAtQty,
+				Quantity:  item.Quantity,
 			}
-
-			if c.UserID != "" && c.UserID != req.UserID {
-				validCoupon = false
-			}
-
-			if validCoupon && subtotal >= c.MinOrder && (c.UsageLimit == 0 || c.UsedCount < c.UsageLimit) {
-				if c.Type == "fixed" {
-					discountAmt = c.Value
-				} else if c.Type == "percentage" {
-					if c.Value == 100.0 && len(req.CouponCode) >= 15 && req.CouponCode[:15] == "SPIN-FREEKURTHI" {
-						minPrice := -1.0
-						for _, item := range orderItems {
-							if minPrice == -1.0 || item.PriceAtQty < minPrice {
-								minPrice = item.PriceAtQty
-							}
-						}
-						if minPrice > 0 {
-							discountAmt = minPrice
-						} else {
-							discountAmt = 0
-						}
-					} else if len(req.CouponCode) >= 11 && req.CouponCode[:11] == "SPIN-KURTHI" {
-						minPrice := -1.0
-						for _, item := range orderItems {
-							if minPrice == -1.0 || item.PriceAtQty < minPrice {
-								minPrice = item.PriceAtQty
-							}
-						}
-						if minPrice > 0 {
-							discountAmt = (minPrice * c.Value) / 100.0
-						} else {
-							discountAmt = 0
-						}
-					} else {
-						discountAmt = (subtotal * c.Value) / 100.0
-					}
-				}
-				if discountAmt > subtotal {
-					discountAmt = subtotal
-				}
-			}
+		}
+		
+		_, amt, err := s.couponSvc.ValidateCoupon(req.CouponCode, subtotal, cartItemsInfo, req.UserID)
+		if err == nil {
+			discountAmt = amt
 		}
 	}
 
 	finalTotal := subtotal - discountAmt
+
+	cfg, _ := s.configSvc.GetCheckoutConfig()
+	threshold := cfg.FreeShippingThreshold
+	if threshold == 0 {
+		threshold = 1449.0
+	}
+
+	var shippingCost float64
+	if finalTotal < threshold && req.ShippingZIPCode != "" {
+		totalQuantity := 0
+		for _, item := range req.Items {
+			totalQuantity += item.Quantity
+		}
+		weightGrams := totalQuantity * 500
+
+		serviceable, estCost, err := s.delhiverySvc.CheckServiceability(req.ShippingZIPCode, weightGrams)
+		if err == nil && serviceable {
+			shippingCost = estCost
+			if shippingCost < 59.0 {
+				shippingCost = 59.0
+			}
+		}
+	}
+	finalTotal += shippingCost
+
 	orderID := "ORD_" + fmt.Sprint(time.Now().UnixNano()/1000000)
 
 	var providerOrderID string
@@ -233,10 +221,17 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 	return order, providerOrderID, checkoutURL, nil
 }
 
-func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) error {
+func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) (*models.OrderVerifyResponse, error) {
 	o, err := s.orderRepo.GetOrder(req.OrderID)
 	if err != nil {
-		return fmt.Errorf("order not found: %w", err)
+		return nil, fmt.Errorf("order not found: %w", err)
+	}
+
+	if o.Status == "paid" || o.Status == "shipped" || o.Status == "ready_for_pickup" || o.Status == "dispatched_instant" {
+		return &models.OrderVerifyResponse{
+			Message:      "Payment already verified previously",
+			UnlockedGift: o.UnlockedGift,
+		}, nil
 	}
 
 	if !req.Mock {
@@ -248,7 +243,7 @@ func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) error {
 			generatedSig := hex.EncodeToString(h.Sum(nil))
 
 			if generatedSig != req.RazorpaySignature {
-				return errors.New("invalid Razorpay payment signature")
+				return nil, errors.New("invalid Razorpay payment signature")
 			}
 		}
 	}
@@ -258,7 +253,72 @@ func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) error {
 		payID = "PAY_" + fmt.Sprint(time.Now().Unix())
 	}
 
-	return s.orderRepo.UpdateOrderStatus(o.ID, "paid", payID, "", "", "")
+	var newCoupon *models.Coupon
+
+	// 1. Calculate Gift based on TotalAmount
+	var unlockedGift, giftType, giftCode, giftExpiryDate string
+	tiers, _ := s.couponSvc.GetGiftTiers()
+	
+	// Tiers should be checked to find the highest threshold met
+	var highestTier *models.GiftTier
+	for i := range tiers {
+		if o.TotalAmount >= tiers[i].Threshold {
+			if highestTier == nil || tiers[i].Threshold > highestTier.Threshold {
+				highestTier = &tiers[i]
+			}
+		}
+	}
+
+	if highestTier != nil {
+		if highestTier.RewardType == "physical" {
+			unlockedGift = highestTier.PhysicalName
+			giftType = "physical"
+		} else if highestTier.RewardType == "coupon" {
+			giftType = "coupon"
+			randSuffix := fmt.Sprintf("%04d", time.Now().UnixNano()%10000)
+			format := highestTier.CouponFormat
+			if format == "" {
+				format = "GFT-[RAND]"
+			}
+			giftCode = "" 
+			for i := 0; i < len(format); i++ {
+				if i+6 <= len(format) && format[i:i+6] == "[RAND]" {
+					giftCode += randSuffix
+					i += 5
+				} else {
+					giftCode += string(format[i])
+				}
+			}
+
+			unlockedGift = giftCode
+
+			expiry := time.Now().AddDate(0, 1, 0).Format(time.RFC3339) // 1 month validity
+			giftExpiryDate = expiry
+			newCoupon = &models.Coupon{
+				Code:       giftCode,
+				Type:       highestTier.DiscountType,
+				Value:      highestTier.DiscountValue,
+				MinOrder:   0,
+				UsageLimit: 1,
+				ExpiryDate: expiry,
+				IsActive:   true,
+			}
+		}
+	}
+
+	err = s.orderRepo.UpdateOrderStatusWithGiftTransaction(o.ID, "paid", payID, unlockedGift, newCoupon)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &models.OrderVerifyResponse{
+		Message:        "Payment verified and order finalized successfully",
+		UnlockedGift:   unlockedGift,
+		GiftType:       giftType,
+		GiftCode:       giftCode,
+		GiftExpiryDate: giftExpiryDate,
+	}
+	return resp, nil
 }
 
 func (s *orderService) GetOrder(orderID string) (*models.Order, error) {
@@ -305,4 +365,8 @@ func (s *orderService) CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 		}
 	}
 	return cleanedCount, nil
+}
+
+func (s *orderService) UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error {
+	return s.orderRepo.UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift)
 }

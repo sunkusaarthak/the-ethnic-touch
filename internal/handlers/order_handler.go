@@ -2,8 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/models"
@@ -12,13 +16,14 @@ import (
 )
 
 type OrderHandler struct {
-	svc        service.OrderService
-	profileSvc service.ProfileService
-	configSvc  service.ConfigService
+	svc          service.OrderService
+	profileSvc   service.ProfileService
+	configSvc    service.ConfigService
+	delhiverySvc service.DelhiveryService
 }
 
-func NewOrderHandler(svc service.OrderService, profileSvc service.ProfileService, configSvc service.ConfigService) *OrderHandler {
-	return &OrderHandler{svc: svc, profileSvc: profileSvc, configSvc: configSvc}
+func NewOrderHandler(svc service.OrderService, profileSvc service.ProfileService, configSvc service.ConfigService, delhiverySvc service.DelhiveryService) *OrderHandler {
+	return &OrderHandler{svc: svc, profileSvc: profileSvc, configSvc: configSvc, delhiverySvc: delhiverySvc}
 }
 
 func (h *OrderHandler) HandleCheckout(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +79,8 @@ func (h *OrderHandler) HandleVerifyPayment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.svc.VerifyPayment(&req); err != nil {
+	resp, err := h.svc.VerifyPayment(&req)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
@@ -97,7 +103,7 @@ func (h *OrderHandler) HandleVerifyPayment(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Payment verified and order finalized successfully"})
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
@@ -199,4 +205,135 @@ func (h *OrderHandler) HandleConfirmPickup(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Pickup confirmed successfully"})
+}
+
+func (h *OrderHandler) HandleShippingEstimate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	pincode := r.URL.Query().Get("pincode")
+	if pincode == "" {
+		http.Error(w, "Pincode is required", http.StatusBadRequest)
+		return
+	}
+
+	cartSizeStr := r.URL.Query().Get("cart_size")
+	cartSize := 1
+	if cartSizeStr != "" {
+		parsed, err := strconv.Atoi(cartSizeStr)
+		if err == nil && parsed > 0 {
+			cartSize = parsed
+		}
+	}
+	weightGrams := cartSize * 500
+
+	serviceable, estCost, err := h.delhiverySvc.CheckServiceability(pincode, weightGrams)
+	if err != nil {
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
+		return
+	}
+
+	if !serviceable {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"serviceable": false,
+		})
+		return
+	}
+
+	charge := estCost
+	if charge < 59.0 {
+		charge = 59.0
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"serviceable": true,
+		"charge":      charge,
+	})
+}
+
+func (h *OrderHandler) HandleShippingTimeline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	now := time.Now()
+	cutoff := time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location())
+
+	var message string
+	if now.Before(cutoff) {
+		diff := cutoff.Sub(now)
+		hrs := int(diff.Hours())
+		mins := int(diff.Minutes()) % 60
+		message = fmt.Sprintf("Order within %d hrs %d mins for shipping today", hrs, mins)
+	} else {
+		message = "Order placed after cutoff. Shipping tomorrow"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"cutoffTimestamp": cutoff.Unix(),
+		"currentTime":     now.Unix(),
+		"message":         message,
+	})
+}
+
+func (h *OrderHandler) HandleDelhiveryWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	payload, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	signature := r.Header.Get("X-Delhivery-Signature")
+	if !h.delhiverySvc.ValidateWebhookSignature(payload, signature) {
+		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		return
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(payload, &data); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	orderID, ok := data["order_id"].(string)
+	if !ok {
+		http.Error(w, "Missing order_id", http.StatusBadRequest)
+		return
+	}
+	
+	status, ok := data["status"].(string)
+	if !ok {
+		http.Error(w, "Missing status", http.StatusBadRequest)
+		return
+	}
+
+	internalStatus := "pending"
+	switch status {
+	case "In Transit", "Dispatched", "Picked Up":
+		internalStatus = "shipped"
+	case "Delivered":
+		internalStatus = "delivered"
+	default:
+		internalStatus = "pending"
+	}
+
+	err = h.svc.UpdateOrderStatus(orderID, internalStatus, "", "DLV_UPDATE", time.Now().Format(time.RFC3339), "")
+	if err != nil {
+		http.Error(w, "Failed to update order status", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

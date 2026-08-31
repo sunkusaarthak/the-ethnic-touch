@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Checkout from './Checkout';
 import AuthRequiredModal from '../components/AuthRequiredModal';
+import ShippingTimeline from '../components/ShippingTimeline';
 import { API_BASE_URL } from '../data/config';
 
 const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser, wishlist = [], toggleWishlist, profileIncomplete }) => {
@@ -18,6 +19,8 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
     const [tiers, setTiers] = useState(defaultGiftTiers);
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [removePopup, setRemovePopup] = useState({ show: false, index: null, item: null });
+    const [checkoutConfig, setCheckoutConfig] = useState(null);
+    const [shippingTimeline, setShippingTimeline] = useState(null);
     
     // Added a safety check (cart || []) just in case cart is ever undefined
     const subtotal = (cart || []).reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
@@ -25,18 +28,23 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
 
     useEffect(() => {
         fetch(`${API_BASE_URL}/api/gift-tiers`)
-            .then(res => {
-                if (!res.ok) throw new Error('Failed to fetch gift tiers');
-                return res.json();
-            })
+            .then(res => res.ok ? res.json() : Promise.reject('Failed to fetch gift tiers'))
             .then(data => {
                 if (Array.isArray(data) && data.length > 0) {
                     setTiers(data.sort((a, b) => a.threshold - b.threshold));
                 }
             })
-            .catch(err => {
-                console.warn("Using default gift tiers:", err);
-            });
+            .catch(err => console.warn("Using default gift tiers:", err));
+
+        fetch(`${API_BASE_URL}/api/config/checkout`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data) setCheckoutConfig(data); })
+            .catch(() => {});
+        
+        fetch(`${API_BASE_URL}/api/checkout/shipping-timeline`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data) setShippingTimeline(data); })
+            .catch(() => {});
     }, []);
 
     const handleCoupon = async () => {
@@ -401,10 +409,20 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                     <span>-₹{discount.amt.toLocaleString('en-IN')}</span>
                                 </div>
                             )}
-                            <div style={{display: 'flex', justifyContent: 'space-between', color: '#6C6863'}}>
-                                <span>Estimated Shipping</span>
-                                <span style={{color: '#2E7D32', fontWeight: '600'}}>FREE</span>
-                            </div>
+                            {(() => {
+                                const threshold = checkoutConfig?.free_shipping_threshold || 1449.0;
+                                const amountToFreeShipping = threshold - finalTotal;
+                                return amountToFreeShipping > 0 ? (
+                                    <div style={{display: 'flex', justifyContent: 'space-between', color: '#D32F2F'}}>
+                                        <span style={{fontSize: '0.8rem'}}>Add ₹{amountToFreeShipping.toLocaleString('en-IN')} more for free shipping</span>
+                                    </div>
+                                ) : (
+                                    <div style={{display: 'flex', justifyContent: 'space-between', color: '#2E7D32'}}>
+                                        <span style={{fontSize: '0.8rem'}}>You've unlocked free shipping!</span>
+                                    </div>
+                                );
+                            })()}
+                            <ShippingTimeline />
 
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(212, 163, 115, 0.35)', paddingTop: '0.65rem', marginTop: '0.3rem'}}>
                                 <span style={{fontWeight: 600, color: '#2D2A26', fontSize: '0.92rem'}}>Total Amount</span>

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"ethnictouch/internal/models"
@@ -24,6 +25,7 @@ func NewCouponService(repo repository.CouponRepository) CouponService {
 }
 
 func (s *couponService) ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo, userID string) (*models.Coupon, float64, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
 	if code == "" {
 		return nil, 0, errors.New("invalid or expired coupon code")
 	}
