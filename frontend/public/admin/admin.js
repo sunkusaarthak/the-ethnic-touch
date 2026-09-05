@@ -11,12 +11,11 @@ const firebaseConfig = {
     appId: "1:565024605742:web:0452b9b88a65be9d67c1bf"
 };
 
-const API_BASE_URL = window.location.hostname.includes('onrender.com') ? 'https://the-ethnic-touch-backend.onrender.com' : '';
+const API_BASE_URL = (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('theethnictouch.com')) ? 'https://the-ethnic-touch-backend.onrender.com' : '';
 
 let auth;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("[SETTINGS DIAG] Page Loaded. Initializing tabs and listeners.");
     
     // Initialize Firebase
     if (typeof firebase !== 'undefined') {
@@ -89,7 +88,7 @@ async function loadStaff() {
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>';
     
     try {
-        const res = await fetch('/api/admin/staff', { headers: getAuthHeader() });
+        const res = await fetch(API_BASE_URL + '/api/admin/staff', { headers: getAuthHeader() });
         if (!res.ok) throw new Error("Failed to load staff");
         const staff = await res.json();
         
@@ -123,7 +122,7 @@ async function handleAddStaff(e) {
     const role = document.getElementById('staffRole').value;
     
     try {
-        const res = await fetch('/api/admin/staff', {
+        const res = await fetch(API_BASE_URL + '/api/admin/staff', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -145,7 +144,7 @@ async function deleteStaff(email) {
     if (!confirm(`Are you sure you want to remove access for ${email}?`)) return;
     
     try {
-        const res = await fetch(`/api/admin/staff?email=${encodeURIComponent(email)}`, {
+        const res = await fetch(`${API_BASE_URL}/api/admin/staff?email=${encodeURIComponent(email)}`, {
             method: 'DELETE',
             headers: getAuthHeader()
         });
@@ -327,7 +326,7 @@ async function uploadImageFile(event, targetInputId) {
     formData.append('file', file);
 
     try {
-        const res = await fetch('/api/admin/upload', {
+        const res = await fetch(API_BASE_URL + '/api/admin/upload', {
             method: 'POST',
             headers: {
                 ...getAuthHeader()
@@ -368,7 +367,7 @@ async function uploadGalleryRowFile(event, fileInputElement) {
     formData.append('file', file);
 
     try {
-        const res = await fetch('/api/admin/upload', {
+        const res = await fetch(API_BASE_URL + '/api/admin/upload', {
             method: 'POST',
             headers: {
                 ...getAuthHeader()
@@ -604,7 +603,7 @@ async function loadProducts() {
     body.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
     
     try {
-        const products = await fetch('/api/products').then(r => r.json());
+        const products = await fetch(API_BASE_URL + '/api/products').then(r => r.json());
         loadedProductsMap = {};
         body.innerHTML = '';
         products.forEach(p => {
@@ -712,7 +711,7 @@ async function loadCoupons() {
     body.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
     
     try {
-        const coupons = await fetch('/api/admin/coupons', { headers: getAuthHeader() }).then(r => r.json());
+        const coupons = await fetch(API_BASE_URL + '/api/admin/coupons', { headers: getAuthHeader() }).then(r => r.json());
         body.innerHTML = '';
         coupons.forEach(c => {
             const tr = document.createElement('tr');
@@ -908,7 +907,7 @@ async function handleAddProduct(e) {
 
     const method = isEdit ? 'PUT' : 'POST';
 
-    const res = await fetch('/api/products', {
+    const res = await fetch(API_BASE_URL + '/api/products', {
         method: method,
         headers: { 
             'Content-Type': 'application/json',
@@ -938,7 +937,7 @@ async function handleAddCoupon(e) {
         usageLimit: parseInt(document.getElementById('c_limit').value)
     };
 
-    const res = await fetch('/api/admin/coupons', {
+    const res = await fetch(API_BASE_URL + '/api/admin/coupons', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
@@ -980,7 +979,7 @@ async function loadSettings() {
     
     try {
         console.log("[SETTINGS DIAG] Fetching /api/gift-tiers...");
-        const res = await fetch('/api/gift-tiers');
+        const res = await fetch(API_BASE_URL + '/api/gift-tiers');
         console.log("[SETTINGS DIAG] Fetch /api/gift-tiers completed. Status:", res.status);
         if (!res.ok) throw new Error("Failed to load tiers (HTTP " + res.status + ")");
         
@@ -1173,7 +1172,7 @@ async function saveTiersToServer() {
         };
         console.log("[SETTINGS DIAG] Request Headers:", headers);
         
-        const res = await fetch('/api/admin/gift-tiers', {
+        const res = await fetch(API_BASE_URL + '/api/admin/gift-tiers', {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(currentTiers)
@@ -1238,7 +1237,7 @@ async function deleteProfile(userId, email) {
     if (!confirm(`Are you sure you want to permanently delete the profile for ${email || userId}? This cannot be undone.`)) return;
     
     try {
-        const res = await fetch(`/api/admin/profiles/delete?userId=${encodeURIComponent(userId)}`, {
+        const res = await fetch(`${API_BASE_URL}/api/admin/profiles/delete?userId=${encodeURIComponent(userId)}`, {
             method: 'DELETE',
             headers: getAuthHeader()
         });
@@ -1261,7 +1260,7 @@ async function viewProfileDetails(userId) {
     modal.style.display = 'flex';
     
     try {
-        const res = await fetch(`/api/admin/profiles/details?userId=${userId}`, { headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE_URL}/api/admin/profiles/details?userId=${userId}`, { headers: getAuthHeader() });
         if (!res.ok) throw new Error("HTTP Status " + res.status);
         const data = await res.json();
         
@@ -1416,7 +1415,7 @@ async function saveProfileFromAdmin(e, userId) {
     };
     
     try {
-        const res = await fetch('/api/admin/profiles/edit', {
+        const res = await fetch(API_BASE_URL + '/api/admin/profiles/edit', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1444,7 +1443,7 @@ async function saveProfileFromAdmin(e, userId) {
 
 async function loadSpinWin() {
     try {
-        const res = await fetch('/api/config/spin-wheel');
+        const res = await fetch(API_BASE_URL + '/api/config/spin-wheel');
         if (!res.ok) throw new Error("Failed to load Spin & Win config");
         const data = await res.json();
         
@@ -1488,7 +1487,7 @@ async function handleSaveSpinWinConfig(e) {
     };
     
     try {
-        const res = await fetch('/api/admin/config/spin-wheel', {
+        const res = await fetch(API_BASE_URL + '/api/admin/config/spin-wheel', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -1515,7 +1514,7 @@ async function deleteProduct(productId) {
     if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) return;
 
     try {
-        const res = await fetch(`/api/products/${productId}`, {
+        const res = await fetch(`${API_BASE_URL}/api/products/${productId}`, {
             method: 'DELETE',
             headers: getAuthHeader()
         });
@@ -1618,7 +1617,7 @@ async function searchPickupOrder(orderId) {
     if (cardEl) cardEl.style.display = 'none';
 
     try {
-        const res = await fetch(`/api/admin/orders?orderId=${encodeURIComponent(orderId)}`, {
+        const res = await fetch(`${API_BASE_URL}/api/admin/orders?orderId=${encodeURIComponent(orderId)}`, {
             headers: getAuthHeader()
         });
         if (!res.ok) {
@@ -1729,7 +1728,7 @@ async function confirmStorePickup(orderId) {
     if (!confirm(`Are you sure you want to confirm pickup for Order #${orderId}?`)) return;
 
     try {
-        const res = await fetch('/api/admin/orders/confirm-pickup', {
+        const res = await fetch(API_BASE_URL + '/api/admin/orders/confirm-pickup', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1797,7 +1796,7 @@ window.handleUrlHashChange = handleUrlHashChange;
 
 async function loadAuthConfig() {
     try {
-        const res = await fetch('/api/config/auth');
+        const res = await fetch(API_BASE_URL + '/api/config/auth');
         if (res.ok) {
             const data = await res.json();
             document.getElementById('auth_phone_enabled').checked = data.phone_auth_enabled;
@@ -1814,7 +1813,7 @@ async function saveAuthConfig() {
         const payload = {
             phone_auth_enabled: document.getElementById('auth_phone_enabled').checked
         };
-        const res = await fetch('/api/admin/config/auth', {
+        const res = await fetch(API_BASE_URL + '/api/admin/config/auth', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -1836,7 +1835,7 @@ window.saveAuthConfig = saveAuthConfig;
 
 async function loadCheckoutConfig() {
     try {
-        const res = await fetch('/api/config/checkout');
+        const res = await fetch(API_BASE_URL + '/api/config/checkout');
         if (res.ok) {
             const data = await res.json();
             document.getElementById('chk_standard_delivery').checked = data.standard_delivery_enabled;
@@ -1857,7 +1856,7 @@ async function saveCheckoutConfig() {
             store_pickup_prepay_enabled: document.getElementById('chk_store_pickup_prepay').checked,
             store_pickup_pay_in_store_enabled: document.getElementById('chk_store_pickup_instore').checked
         };
-        const res = await fetch('/api/admin/config/checkout', {
+        const res = await fetch(API_BASE_URL + '/api/admin/config/checkout', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -1885,7 +1884,7 @@ async function loadSupport() {
     tbody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
     try {
         const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch('/api/admin/contact', {
+        const res = await fetch(API_BASE_URL + '/api/admin/contact', {
             headers: { 'Authorization': 'Bearer ' + idToken }
         });
         if (!res.ok) throw new Error("Failed to load support requests");
@@ -1926,7 +1925,7 @@ async function loadSupport() {
 async function markSupportRead(id) {
     try {
         const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch(`/api/admin/contact/${id}/read`, {
+        const res = await fetch(`${API_BASE_URL}/api/admin/contact/${id}/read`, {
             method: 'PUT',
             headers: { 'Authorization': 'Bearer ' + idToken }
         });
@@ -1953,7 +1952,7 @@ async function pollUnreadSupportCount() {
     if (!auth || !auth.currentUser) return;
     try {
         const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch('/api/admin/contact', {
+        const res = await fetch(API_BASE_URL + '/api/admin/contact', {
             headers: { 'Authorization': 'Bearer ' + idToken }
         });
         if (res.ok) {
