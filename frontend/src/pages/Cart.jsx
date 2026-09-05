@@ -4,6 +4,7 @@ import Checkout from './Checkout';
 import AuthRequiredModal from '../components/AuthRequiredModal';
 import ShippingTimeline from '../components/ShippingTimeline';
 import { API_BASE_URL } from '../data/config';
+import { fetchWithAuth } from '../utils/apiClient';
 
 const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser, wishlist = [], toggleWishlist, profileIncomplete }) => {
     const navigate = useNavigate();
@@ -55,16 +56,10 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
         }
 
         try {
-            const res = await fetch(`${API_BASE_URL}/api/coupons/validate`, {
+            const res = await fetchWithAuth(`/api/coupons/validate`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: cleanCode, total: subtotal, items: cart || [] })
             });
-            if (!res.ok) {
-                const err = await res.json();
-                setMsg(err.error || 'Invalid code');
-                return;
-            }
             const data = await res.json();
             const coupon = data.coupon || data;
             const discountAmount = data.discountAmount !== undefined ? data.discountAmount : (coupon.type === 'fixed' ? coupon.value : (subtotal * coupon.value) / 100);
@@ -76,7 +71,7 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                 setMsg(`Applied: ₹${discountAmount} off your entire cart!`);
             }
         } catch (err) {
-            setMsg('Validation failed');
+            setMsg(err.message || 'Validation failed');
         }
     };
 

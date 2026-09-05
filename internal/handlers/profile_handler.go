@@ -79,6 +79,7 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 		if isNewProfile {
 			h.svc.AddSpinTicket(userID, 1)
 			h.configSvc.IncrementNewUserKurthiCounter()
+			p.AvailableSpins = 1
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -5,7 +5,9 @@ import {
     RecaptchaVerifier, 
     signInWithPhoneNumber, 
     GoogleAuthProvider, 
-    signInWithPopup 
+    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult
 } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { formatError } from '../utils/errors';
@@ -46,6 +48,24 @@ const Auth = () => {
             navigate(redirectPath);
         }
     }, [navigate, redirectPath]);
+
+    // Handle redirect result from Google Sign In (for mobile browsers)
+    useEffect(() => {
+        const checkRedirect = async () => {
+            try {
+                const result = await getRedirectResult(auth);
+                if (result && result.user) {
+                    setIsGoogleLoading(true);
+                    await checkNewUserAndNavigate(result);
+                }
+            } catch (err) {
+                console.error("Redirect auth error:", err);
+                setError(formatError(err, 'Failed to sign in with Google'));
+                setIsGoogleLoading(false);
+            }
+        };
+        checkRedirect();
+    }, []);
 
     // Interactive Handcrafted Silk Textile & Gemini-style Shimmer Waves Canvas Animation
     useEffect(() => {
@@ -219,6 +239,16 @@ const Auth = () => {
             await checkNewUserAndNavigate(userCredential);
             // Intentionally not setting loading to false here, so the loader spins until the page redirects
         } catch (err) {
+            if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+                // On mobile browsers, popups are often blocked or cancelled immediately. Fall back to redirect.
+                const provider = new GoogleAuthProvider();
+                signInWithRedirect(auth, provider).catch(redirectErr => {
+                    setError(formatError(redirectErr, 'Failed to initialize Google Sign In'));
+                    setLoading(false);
+                    setIsGoogleLoading(false);
+                });
+                return; // Wait for redirect
+            }
             setError(formatError(err, 'Failed to sign in with Google'));
             setLoading(false);
             setIsGoogleLoading(false);

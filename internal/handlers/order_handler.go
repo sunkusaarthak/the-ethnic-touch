@@ -184,7 +184,7 @@ func (h *OrderHandler) HandleConfirmPickup(w http.ResponseWriter, r *http.Reques
 	if err := h.svc.ConfirmPickup(req.OrderID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"Failed to confirm pickup"}`))
+		w.Write([]byte(fmt.Sprintf(`{"error":"Failed to confirm pickup: %s"}`, err.Error())))
 		return
 	}
 
