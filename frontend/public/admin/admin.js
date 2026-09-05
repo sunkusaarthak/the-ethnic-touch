@@ -1575,11 +1575,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             html5QrcodeScanner.start(
                 { facingMode: "environment" },
-                { fps: 10, qrbox: { width: 250, height: 250 } },
+                { fps: 15, disableFlip: false },
                 (decodedText, decodedResult) => {
                     // Success!
                     console.log(`Scan result: ${decodedText}`);
-                    document.getElementById('scannerOrderIdInput').value = decodedText;
+                    let finalOrderId = decodedText;
+                    if (decodedText.includes('orderId=')) {
+                        finalOrderId = decodedText.split('orderId=')[1].split('&')[0];
+                    }
+                    document.getElementById('scannerOrderIdInput').value = finalOrderId;
                     
                     html5QrcodeScanner.stop().then(() => {
                         container.style.display = 'none';
