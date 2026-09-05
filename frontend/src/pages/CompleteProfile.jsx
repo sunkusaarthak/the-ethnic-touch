@@ -241,7 +241,12 @@ const CompleteProfile = ({ authUser }) => {
 
             if (!profRes.ok) {
                 const text = await profRes.text();
-                throw new Error(text || 'Failed to save profile');
+                let errMsg = text;
+                try {
+                    const parsed = JSON.parse(text);
+                    if (parsed.error) errMsg = parsed.error;
+                } catch(e) {}
+                throw new Error(errMsg || 'Failed to save profile');
             }
 
             try {

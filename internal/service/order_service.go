@@ -146,7 +146,7 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 	}
 
 	var shippingCost float64
-	if finalTotal < threshold && req.ShippingZIPCode != "" {
+	if req.CheckoutType == "delivery" && finalTotal < threshold && req.ShippingZIPCode != "" {
 		totalQuantity := 0
 		for _, item := range req.Items {
 			totalQuantity += item.Quantity
