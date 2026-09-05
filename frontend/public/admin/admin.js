@@ -16,7 +16,7 @@ const API_BASE_URL = (window.location.hostname.includes('onrender.com') || windo
 let auth;
 
 document.addEventListener('DOMContentLoaded', () => {
-    
+
     // Initialize Firebase
     if (typeof firebase !== 'undefined') {
         firebase.initializeApp(firebaseConfig);
@@ -29,15 +29,15 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     loadDashboard();
     initProductModal(); // Build size checkboxes on load
-    
+
     // Form Submissions
     console.log("[SETTINGS DIAG] Hooking submit events...");
     const pf = document.getElementById('productForm');
     if (pf) pf.addEventListener('submit', handleAddProduct);
-    
+
     const cf = document.getElementById('couponForm');
     if (cf) cf.addEventListener('submit', handleAddCoupon);
-    
+
     const tf = document.getElementById('tierForm');
     if (tf) {
         console.log("[SETTINGS DIAG] Found tierForm. Binding submit listener.");
@@ -50,12 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (swf) {
         swf.addEventListener('submit', handleSaveSpinWinConfig);
     }
-    
+
     const staffF = document.getElementById('staffForm');
     if (staffF) {
         staffF.addEventListener('submit', handleAddStaff);
     }
-    
+
     const logoutAdmin = document.getElementById('logoutAdminBtn');
     if (logoutAdmin) {
         logoutAdmin.addEventListener('click', () => {
@@ -86,18 +86,18 @@ async function loadStaff() {
     const tbody = document.querySelector('#staffTable tbody');
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Loading...</td></tr>';
-    
+
     try {
         const res = await fetch(API_BASE_URL + '/api/admin/staff', { headers: getAuthHeader() });
         if (!res.ok) throw new Error("Failed to load staff");
         const staff = await res.json();
-        
+
         tbody.innerHTML = '';
         if (!staff || staff.length === 0) {
             tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No staff members found.</td></tr>';
             return;
         }
-        
+
         staff.forEach(s => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -120,7 +120,7 @@ async function handleAddStaff(e) {
     e.preventDefault();
     const email = document.getElementById('staffEmail').value.trim();
     const role = document.getElementById('staffRole').value;
-    
+
     try {
         const res = await fetch(API_BASE_URL + '/api/admin/staff', {
             method: 'POST',
@@ -130,7 +130,7 @@ async function handleAddStaff(e) {
             },
             body: JSON.stringify({ email, role })
         });
-        
+
         if (!res.ok) throw new Error("Failed to add/update staff");
         showAdminAlert('Team member added successfully', 'Success', 'success');
         document.getElementById('staffForm').reset();
@@ -142,7 +142,7 @@ async function handleAddStaff(e) {
 
 async function deleteStaff(email) {
     if (!confirm(`Are you sure you want to remove access for ${email}?`)) return;
-    
+
     try {
         const res = await fetch(`${API_BASE_URL}/api/admin/staff?email=${encodeURIComponent(email)}`, {
             method: 'DELETE',
@@ -276,7 +276,7 @@ function initProductModal() {
 function updateTotalStockFallback() {
     const totalInput = document.getElementById('p_stock');
     if (!totalInput) return;
-    
+
     let sum = 0;
     const checks = document.querySelectorAll('.size-check');
     checks.forEach(cb => {
@@ -410,7 +410,7 @@ async function fetchJsonSafe(url, options = {}) {
                 try {
                     const j = await res.json();
                     if (j && (j.error || j.message)) errText = j.error || j.message;
-                } catch (_) {}
+                } catch (_) { }
             }
             throw new Error(errText);
         }
@@ -441,7 +441,7 @@ function initAuthFlow() {
             try {
                 const token = await user.getIdToken();
                 localStorage.setItem('adminToken', token);
-                
+
                 // Verify with backend and get role
                 const fullUrl = `${API_BASE_URL}/api/admin/me`;
                 const res = await fetch(fullUrl, { headers: getAuthHeader() });
@@ -449,13 +449,13 @@ function initAuthFlow() {
                     const data = await res.json();
                     currentUserRole = data.role;
                     currentUserEmail = data.email;
-                    
+
                     // Hide overlay
                     overlay.style.display = 'none';
-                    
+
                     // Apply RBAC UI
                     applyRoleBasedUI();
-                    
+
                     // Load default tab
                     loadDashboard();
                 } else {
@@ -497,7 +497,7 @@ function applyRoleBasedUI() {
     if (currentUserRole === 'employee') {
         const adminElements = document.querySelectorAll('.admin-only');
         adminElements.forEach(el => el.style.display = 'none');
-        
+
         // Force them to a safe tab if they were on an admin-only tab
         const activeTab = document.querySelector('.nav-menu li.active');
         if (activeTab && activeTab.classList.contains('admin-only')) {
@@ -517,15 +517,15 @@ function initTabs() {
     tabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
             const target = tab.getAttribute('data-tab');
-            
+
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            
+
             contents.forEach(c => c.classList.remove('active'));
             document.getElementById(`tab-${target}`).classList.add('active');
-            
+
             document.getElementById('pageTitle').innerText = e.target.innerText;
-            
+
             updateHeaderActions(target);
             loadTabData(target);
         });
@@ -535,7 +535,7 @@ function initTabs() {
 function updateHeaderActions(tab) {
     const container = document.getElementById('headerActions');
     container.innerHTML = '';
-    
+
     if (tab === 'products') {
         const btn = document.createElement('button');
         btn.className = 'btn-primary';
@@ -583,11 +583,11 @@ async function loadDashboard() {
         const couponList = Array.isArray(coupons) ? coupons : [];
 
         const revenue = orderList.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-        
+
         document.getElementById('stat-revenue').innerText = `₹${revenue.toLocaleString('en-IN')}`;
         document.getElementById('stat-orders').innerText = orderList.length;
         document.getElementById('stat-coupons').innerText = couponList.length;
-        
+
         const pendingPickups = orderList.filter(o => o.checkoutType === 'pickup' && o.paymentMethod === 'offline_qr' && o.status === 'pending_payment').length;
         const pendingEl = document.getElementById('stat-pending-pickups');
         if (pendingEl) pendingEl.innerText = pendingPickups;
@@ -601,7 +601,7 @@ let loadedProductsMap = {};
 async function loadProducts() {
     const body = document.querySelector('#productsTable tbody');
     body.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
-    
+
     try {
         const products = await fetch(API_BASE_URL + '/api/products').then(r => r.json());
         loadedProductsMap = {};
@@ -637,60 +637,102 @@ async function loadProducts() {
     }
 }
 
+let allAdminOrders = [];
+
 async function loadOrders() {
     const body = document.querySelector('#ordersTable tbody');
     body.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
-    
+
     try {
-        const orders = await fetchJsonSafe('/api/admin/orders', { headers: getAuthHeader() });
-        body.innerHTML = '';
-        if (!Array.isArray(orders) || orders.length === 0) {
-            body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999">No orders placed yet.</td></tr>';
-            return;
+        allAdminOrders = await fetchJsonSafe('/api/admin/orders', { headers: getAuthHeader() });
+        renderOrders();
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="7" style="color:red">Failed to load orders or Unauthorized. Error: ' + err.message + '</td></tr>';
+    }
+}
+
+function renderOrders() {
+    const body = document.querySelector('#ordersTable tbody');
+    body.innerHTML = '';
+
+    if (!Array.isArray(allAdminOrders) || allAdminOrders.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999">No orders placed yet.</td></tr>';
+        return;
+    }
+
+    const filterEl = document.getElementById('ordersFilter');
+    const filterValue = filterEl ? filterEl.value : 'actual';
+
+    const typeFilterEl = document.getElementById('ordersTypeFilter');
+    const typeFilterValue = typeFilterEl ? typeFilterEl.value : 'all';
+
+    let ordersToDisplay = allAdminOrders.filter(o => {
+        // 1. Status Filter
+        if (filterValue === 'actual') {
+            if (o.status === 'pending' || o.status === 'pending_payment' || o.status === 'cancelled') {
+                return false;
+            }
         }
-        orders.forEach(o => {
-            const tr = document.createElement('tr');
-            const date = new Date(o.createdAt).toLocaleDateString();
-            
-            // Format order items list
-            const itemsStr = o.items ? o.items.map(it => `${it.productName || it.productId} (x${it.quantity})`).join(', ') : 'No Details';
-            
-            // Determine tracking badge
-            let trackingStr = o.trackingNumber 
-                ? `<span style="font-family:monospace; color:#2e7d32">🚚 ${o.trackingNumber}</span>`
-                : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
-            
-            if (o.checkoutType === 'pickup') {
-                trackingStr = `<span style="font-family:monospace; color:#6b4c35; font-weight:600">🏪 Store Pickup</span>` + (o.paymentMethod === 'offline_qr' ? ` <span style="font-size:0.75rem; background:#fff3cd; color:#856404; padding:2px 4px; border-radius:3px;">Offline QR</span>` : ' (Online)');
-            } else if (o.checkoutType === 'hyderabad_instant') {
-                trackingStr = `<div style="font-family:monospace; color:#bf7c00; font-weight:600">⚡ Hyderabad Instant</div>` + 
-                    (o.trackingNumber ? `<span style="font-size:0.75rem; font-family:monospace; color:#555">${o.trackingNumber}</span>` : '');
-            }
+        
+        // 2. Type Filter
+        if (typeFilterValue === 'pickup') {
+            if (o.checkoutType !== 'pickup') return false;
+        } else if (typeFilterValue === 'delivery') {
+            if (o.checkoutType !== 'delivery' && o.checkoutType !== 'hyderabad_instant') return false;
+        }
 
-            // Status label style
-            let badgeBg = '#ffe0b2';
-            let badgeColor = '#e65100';
-            if (o.status === 'shipped') {
-                badgeBg = '#e8f5e9';
-                badgeColor = '#2e7d32';
-            } else if (o.status === 'ready_for_pickup') {
-                badgeBg = '#fff8e1';
-                badgeColor = '#f57f17';
-            } else if (o.status === 'picked_up') {
-                badgeBg = '#e8f5e9';
-                badgeColor = '#1b5e20';
-            } else if (o.status === 'dispatched_instant') {
-                badgeBg = '#efebe9';
-                badgeColor = '#4e342e';
-            } else if (o.status === 'paid') {
-                badgeBg = '#e3f2fd';
-                badgeColor = '#0d47a1';
-            } else if (o.status === 'pending_payment') {
-                badgeBg = '#ffebee';
-                badgeColor = '#c62828';
-            }
+        return true;
+    });
 
-            tr.innerHTML = `
+    if (ordersToDisplay.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999">No orders match the selected filter.</td></tr>';
+        return;
+    }
+
+    ordersToDisplay.forEach(o => {
+
+        const tr = document.createElement('tr');
+        const date = new Date(o.createdAt).toLocaleDateString();
+
+        // Format order items list
+        const itemsStr = o.items ? o.items.map(it => `${it.productName || it.productId} (x${it.quantity})`).join(', ') : 'No Details';
+
+        // Determine tracking badge
+        let trackingStr = o.trackingNumber
+            ? `<span style="font-family:monospace; color:#2e7d32">🚚 ${o.trackingNumber}</span>`
+            : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
+
+        if (o.checkoutType === 'pickup') {
+            trackingStr = `<span style="font-family:monospace; color:#6b4c35; font-weight:600">🏪 Store Pickup</span>` + (o.paymentMethod === 'offline_qr' ? ` <span style="font-size:0.75rem; background:#fff3cd; color:#856404; padding:2px 4px; border-radius:3px;">Offline QR</span>` : ' (Online)');
+        } else if (o.checkoutType === 'hyderabad_instant') {
+            trackingStr = `<div style="font-family:monospace; color:#bf7c00; font-weight:600">⚡ Hyderabad Instant</div>` +
+                (o.trackingNumber ? `<span style="font-size:0.75rem; font-family:monospace; color:#555">${o.trackingNumber}</span>` : '');
+        }
+
+        // Status label style
+        let badgeBg = '#ffe0b2';
+        let badgeColor = '#e65100';
+        if (o.status === 'shipped') {
+            badgeBg = '#e8f5e9';
+            badgeColor = '#2e7d32';
+        } else if (o.status === 'ready_for_pickup') {
+            badgeBg = '#fff8e1';
+            badgeColor = '#f57f17';
+        } else if (o.status === 'picked_up') {
+            badgeBg = '#e8f5e9';
+            badgeColor = '#1b5e20';
+        } else if (o.status === 'dispatched_instant') {
+            badgeBg = '#efebe9';
+            badgeColor = '#4e342e';
+        } else if (o.status === 'paid') {
+            badgeBg = '#e3f2fd';
+            badgeColor = '#0d47a1';
+        } else if (o.status === 'pending_payment') {
+            badgeBg = '#ffebee';
+            badgeColor = '#c62828';
+        }
+
+        tr.innerHTML = `
                 <td style="font-weight:500">${o.id}</td>
                 <td>${o.customerEmail}</td>
                 <td>₹${o.totalAmount.toLocaleString('en-IN')}</td>
@@ -699,17 +741,16 @@ async function loadOrders() {
                 <td>${trackingStr}</td>
                 <td>${date}</td>
             `;
-            body.appendChild(tr);
-        });
-    } catch (err) {
-        body.innerHTML = '<tr><td colspan="7" style="color:red">Failed to load orders or Unauthorized. Error: ' + err.message + '</td></tr>';
-    }
+        body.appendChild(tr);
+    });
 }
+
+window.renderOrders = renderOrders;
 
 async function loadCoupons() {
     const body = document.querySelector('#couponsTable tbody');
     body.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
-    
+
     try {
         const coupons = await fetch(API_BASE_URL + '/api/admin/coupons', { headers: getAuthHeader() }).then(r => r.json());
         body.innerHTML = '';
@@ -733,7 +774,7 @@ async function loadCoupons() {
 function resetProductFormState() {
     const form = document.getElementById('productForm');
     if (form) form.reset();
-    
+
     const pIdInput = document.getElementById('p_id');
     if (pIdInput) pIdInput.value = '';
 
@@ -833,7 +874,7 @@ function openEditProductModal(productId) {
             row.className = 'gallery-img-row';
             row.style.cssText = 'display: flex; gap: 0.8rem; align-items: center; margin-bottom: 0.5rem;';
             row.innerHTML = `
-                <input type="text" class="gallery-img-input" value="${imgUrl}" placeholder="./images/angle${idx+2}.png" style="flex: 1; padding: 0.7rem; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box;">
+                <input type="text" class="gallery-img-input" value="${imgUrl}" placeholder="./images/angle${idx + 2}.png" style="flex: 1; padding: 0.7rem; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box;">
                 <div style="position: relative;">
                     <button type="button" class="btn-secondary" style="padding: 0.7rem 1rem; font-size:0.85rem; cursor: pointer;">Upload</button>
                     <input type="file" accept="image/*" onchange="uploadGalleryRowFile(event, this)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
@@ -909,7 +950,7 @@ async function handleAddProduct(e) {
 
     const res = await fetch(API_BASE_URL + '/api/products', {
         method: method,
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
             ...getAuthHeader()
         },
@@ -939,7 +980,7 @@ async function handleAddCoupon(e) {
 
     const res = await fetch(API_BASE_URL + '/api/admin/coupons', {
         method: 'POST',
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
             ...getAuthHeader()
         },
@@ -964,29 +1005,29 @@ let currentTiers = [];
 
 async function loadSettings() {
     console.log("[SETTINGS DIAG] loadSettings function started execution.");
-    
+
     // Load auth settings
     await loadAuthConfig();
-    
+
     const body = document.querySelector('#tiersTable tbody');
     if (!body) {
         console.error("[SETTINGS DIAG] ERROR: Element '#tiersTable tbody' not found in DOM!");
         showAdminAlert("[JS Error] Element '#tiersTable tbody' not found in DOM!", 'DOM Error', 'error');
         return;
     }
-    
+
     body.innerHTML = '<tr><td colspan="5">Loading tiers...</td></tr>';
-    
+
     try {
         console.log("[SETTINGS DIAG] Fetching /api/gift-tiers...");
         const res = await fetch(API_BASE_URL + '/api/gift-tiers');
         console.log("[SETTINGS DIAG] Fetch /api/gift-tiers completed. Status:", res.status);
         if (!res.ok) throw new Error("Failed to load tiers (HTTP " + res.status + ")");
-        
+
         const data = await res.json();
         console.log("[SETTINGS DIAG] Received JSON data from server:", data);
         currentTiers = Array.isArray(data) ? data : [];
-        
+
         console.log("[SETTINGS DIAG] Rendering tiers table...");
         renderTiersTable();
     } catch (err) {
@@ -998,25 +1039,25 @@ async function loadSettings() {
 function renderTiersTable() {
     const body = document.querySelector('#tiersTable tbody');
     body.innerHTML = '';
-    
+
     if (currentTiers.length === 0) {
         body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding: 2rem;">No gift tiers configured.</td></tr>';
         return;
     }
-    
+
     // Sort tiers by threshold ascending
     currentTiers.sort((a, b) => a.threshold - b.threshold);
-    
+
     currentTiers.forEach((tier, idx) => {
         const tr = document.createElement('tr');
-        
+
         let detailsStr = '';
         if (tier.rewardType === 'coupon') {
             detailsStr = `<strong>${tier.discountType === 'percentage' ? tier.discountValue + '%' : '₹' + tier.discountValue} Off</strong> Coupon (Pattern: <code>${tier.couponFormat}</code>, Expiry: ${tier.couponExpiryDays || 30} days)`;
         } else {
             detailsStr = `Physical item: <strong>${tier.physicalName}</strong>`;
         }
-        
+
         tr.innerHTML = `
             <td style="font-weight: 500;">${tier.name}</td>
             <td>₹${parseFloat(tier.threshold).toLocaleString('en-IN')}</td>
@@ -1058,9 +1099,9 @@ function editTier(idx) {
     document.getElementById('t_name').value = tier.name;
     document.getElementById('t_threshold').value = tier.threshold;
     document.getElementById('t_reward_type').value = tier.rewardType;
-    
+
     toggleRewardTypeInputs();
-    
+
     if (tier.rewardType === 'coupon') {
         document.getElementById('t_discount_type').value = tier.discountType;
         document.getElementById('t_discount_value').value = tier.discountValue;
@@ -1073,7 +1114,7 @@ function editTier(idx) {
         document.getElementById('t_coupon_format').value = '';
         document.getElementById('t_coupon_expiry_days').value = 0;
     }
-    
+
     document.getElementById('formTitle').innerText = "Edit Reward Tier";
     document.getElementById('cancelBtn').style.display = 'inline-block';
 }
@@ -1098,33 +1139,33 @@ async function handleSaveTier(e) {
     try {
         console.log("[SETTINGS DIAG] handleSaveTier submit event intercepted!");
         e.preventDefault();
-        
+
         const editIdxStr = document.getElementById('t_edit_idx').value;
         const tierName = document.getElementById('t_name').value;
         const thresholdVal = document.getElementById('t_threshold').value;
         const rewardType = document.getElementById('t_reward_type').value;
-        
+
         console.log("[SETTINGS DIAG] Input Values:", { editIdxStr, tierName, thresholdVal, rewardType });
-        
+
         const threshold = parseFloat(thresholdVal);
         if (isNaN(threshold)) {
             throw new Error("Threshold must be a valid number");
         }
-        
+
         let tier = {
             name: tierName,
             threshold: threshold,
             rewardType: rewardType
         };
-        
+
         if (rewardType === 'coupon') {
             const discType = document.getElementById('t_discount_type').value;
             const discValStr = document.getElementById('t_discount_value').value;
             const copFormat = document.getElementById('t_coupon_format').value;
             const expDaysStr = document.getElementById('t_coupon_expiry_days').value;
-            
+
             console.log("[SETTINGS DIAG] Coupon Input Values:", { discType, discValStr, copFormat, expDaysStr });
-            
+
             tier.discountType = discType;
             tier.discountValue = parseFloat(discValStr || 0);
             tier.couponFormat = copFormat || "GFT-[RAND]";
@@ -1133,16 +1174,16 @@ async function handleSaveTier(e) {
         } else {
             const physName = document.getElementById('t_physical_name').value;
             console.log("[SETTINGS DIAG] Physical Input Values:", { physName });
-            
+
             tier.discountType = "";
             tier.discountValue = 0;
             tier.couponFormat = "";
             tier.couponExpiryDays = 0;
             tier.physicalName = physName;
         }
-        
+
         console.log("[SETTINGS DIAG] Final Tier Object Details:", tier);
-        
+
         if (editIdxStr !== "") {
             const idx = parseInt(editIdxStr);
             console.log("[SETTINGS DIAG] Editing existing tier at index:", idx);
@@ -1151,10 +1192,10 @@ async function handleSaveTier(e) {
             console.log("[SETTINGS DIAG] Appending new tier to configuration array.");
             currentTiers.push(tier);
         }
-        
+
         console.log("[SETTINGS DIAG] currentTiers array updated. Invoking saveTiersToServer...");
         await saveTiersToServer();
-        
+
         console.log("[SETTINGS DIAG] Resetting form...");
         resetTierForm();
     } catch (err) {
@@ -1171,15 +1212,15 @@ async function saveTiersToServer() {
             ...getAuthHeader()
         };
         console.log("[SETTINGS DIAG] Request Headers:", headers);
-        
+
         const res = await fetch(API_BASE_URL + '/api/admin/gift-tiers', {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(currentTiers)
         });
-        
+
         console.log("[SETTINGS DIAG] Request completed. Response status code:", res.status);
-        
+
         if (res.ok) {
             console.log("[SETTINGS DIAG] Save successful. Reloading settings list.");
             await loadSettings();
@@ -1190,10 +1231,10 @@ async function saveTiersToServer() {
             try {
                 const json = JSON.parse(text);
                 errMsg = json.error || text;
-            } catch(e) {}
+            } catch (e) { }
             showAdminAlert("Error saving settings: " + errMsg, 'Settings Error', 'error');
         }
-    } catch(err) {
+    } catch (err) {
         console.error("[SETTINGS DIAG] Fetch request connection failed:", err);
         showAdminAlert("Failed to connect to server: " + err.message, 'Network Error', 'error');
     }
@@ -1202,16 +1243,16 @@ async function saveTiersToServer() {
 async function loadProfiles() {
     const body = document.querySelector('#profilesTable tbody');
     body.innerHTML = '<tr><td colspan="6">Loading profiles...</td></tr>';
-    
+
     try {
         const data = await fetchJsonSafe('/api/admin/profiles', { headers: getAuthHeader() });
         body.innerHTML = '';
-        
+
         if (!Array.isArray(data) || data.length === 0) {
             body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">No user profiles completed yet.</td></tr>';
             return;
         }
-        
+
         data.forEach(p => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -1235,7 +1276,7 @@ async function loadProfiles() {
 
 async function deleteProfile(userId, email) {
     if (!confirm(`Are you sure you want to permanently delete the profile for ${email || userId}? This cannot be undone.`)) return;
-    
+
     try {
         const res = await fetch(`${API_BASE_URL}/api/admin/profiles/delete?userId=${encodeURIComponent(userId)}`, {
             method: 'DELETE',
@@ -1258,17 +1299,17 @@ async function viewProfileDetails(userId) {
     const content = document.getElementById('profileModalContent');
     content.innerHTML = '<p>Loading details...</p>';
     modal.style.display = 'flex';
-    
+
     try {
         const res = await fetch(`${API_BASE_URL}/api/admin/profiles/details?userId=${userId}`, { headers: getAuthHeader() });
         if (!res.ok) throw new Error("HTTP Status " + res.status);
         const data = await res.json();
-        
+
         const p = data.profile;
         const addrs = data.addresses || [];
         const orders = data.orders || [];
         const coupons = data.coupons || [];
-        
+
         let ordersHtml = '';
         if (orders.length === 0) {
             ordersHtml = '<p style="color: #999; font-size: 0.9rem;">No orders placed.</p>';
@@ -1300,7 +1341,7 @@ async function viewProfileDetails(userId) {
                 </table>
             `;
         }
-        
+
         let couponsHtml = '';
         if (coupons.length === 0) {
             couponsHtml = '<p style="color: #999; font-size: 0.9rem;">No coupons issued yet.</p>';
@@ -1318,7 +1359,7 @@ async function viewProfileDetails(userId) {
                 </div>
             `;
         }
-        
+
         let addrsHtml = '';
         if (addrs.length === 0) {
             addrsHtml = '<p style="color: #999; font-size: 0.9rem;">No saved shipping addresses.</p>';
@@ -1337,7 +1378,7 @@ async function viewProfileDetails(userId) {
                 </div>
             `;
         }
-        
+
         content.innerHTML = `
             <form id="adminProfileEditForm" onsubmit="saveProfileFromAdmin(event, '${userId}')">
                 <h3 style="margin-bottom:1rem; font-size: 1.1rem; border-bottom: 2px solid #ddd; padding-bottom: 0.4rem;">Customer Profile</h3>
@@ -1413,7 +1454,7 @@ async function saveProfileFromAdmin(e, userId) {
         preferredSize: document.getElementById('ap_size').value,
         styleNotes: document.getElementById('ap_notes').value
     };
-    
+
     try {
         const res = await fetch(API_BASE_URL + '/api/admin/profiles/edit', {
             method: 'POST',
@@ -1423,7 +1464,7 @@ async function saveProfileFromAdmin(e, userId) {
             },
             body: JSON.stringify(data)
         });
-        
+
         if (res.ok) {
             showAdminAlert('Profile updated successfully!', 'Profile Updated', 'success');
             viewProfileDetails(userId);
@@ -1446,22 +1487,22 @@ async function loadSpinWin() {
         const res = await fetch(API_BASE_URL + '/api/config/spin-wheel');
         if (!res.ok) throw new Error("Failed to load Spin & Win config");
         const data = await res.json();
-        
+
         document.getElementById('sw_enabled').checked = data.enabled || false;
-        
+
         document.getElementById('sw_new_user_threshold').value = data.new_user_kurthi_threshold || 10;
         document.getElementById('sw_order_threshold').value = data.order_kurthi_threshold || 50;
-        
+
         const ft = data.first_time_probs || {};
         document.getElementById('sw_ft_5').value = ft.prob_5_off || 50;
         document.getElementById('sw_ft_10').value = ft.prob_10_off || 30;
         document.getElementById('sw_ft_fail').value = ft.prob_better_luck || 20;
-        
+
         const ret = data.returning_probs || {};
         document.getElementById('sw_ret_5').value = ret.prob_5_off || 30;
         document.getElementById('sw_ret_10').value = ret.prob_10_off || 10;
         document.getElementById('sw_ret_fail').value = ret.prob_better_luck || 60;
-        
+
     } catch (err) {
         showAdminAlert(err.message, 'Config Error', 'error');
     }
@@ -1469,7 +1510,7 @@ async function loadSpinWin() {
 
 async function handleSaveSpinWinConfig(e) {
     e.preventDefault();
-    
+
     const payload = {
         enabled: document.getElementById('sw_enabled').checked,
         new_user_kurthi_threshold: parseInt(document.getElementById('sw_new_user_threshold').value) || 0,
@@ -1485,7 +1526,7 @@ async function handleSaveSpinWinConfig(e) {
             prob_better_luck: parseInt(document.getElementById('sw_ret_fail').value) || 0
         }
     };
-    
+
     try {
         const res = await fetch(API_BASE_URL + '/api/admin/config/spin-wheel', {
             method: 'PUT',
@@ -1495,7 +1536,7 @@ async function handleSaveSpinWinConfig(e) {
             },
             body: JSON.stringify(payload)
         });
-        
+
         if (!res.ok) throw new Error("Failed to update config");
         showAdminAlert('Spin & Win settings updated!', 'Success', 'success');
     } catch (err) {
@@ -1584,7 +1625,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         finalOrderId = decodedText.split('orderId=')[1].split('&')[0];
                     }
                     document.getElementById('scannerOrderIdInput').value = finalOrderId;
-                    
+
                     html5QrcodeScanner.stop().then(() => {
                         container.style.display = 'none';
                         triggerSearchPickupOrder();
@@ -1659,7 +1700,7 @@ function displayPickupOrderDetails(order) {
     // Status Badge
     const badge = document.getElementById('poCardStatusBadge');
     badge.innerText = order.status;
-    
+
     let badgeBg = '#ffe0b2';
     let badgeColor = '#e65100';
     if (order.status === 'picked_up') {
@@ -1713,7 +1754,7 @@ function displayPickupOrderDetails(order) {
         const btn = document.createElement('button');
         btn.className = 'btn-primary';
         btn.style.cssText = 'padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600; flex: 1;';
-        
+
         if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
             btn.innerText = 'Verify Offline UPI Payment & Complete Pickup';
             btn.style.backgroundColor = '#d0883b';
@@ -1765,23 +1806,23 @@ function handleUrlHashChange() {
             const params = new URLSearchParams(hash.slice(qIdx));
             orderId = params.get('orderId') || '';
         }
-        
+
         // Find matching li in navigation
         const pickupTab = document.querySelector('nav li[data-tab="pickup-scanner"]');
         if (pickupTab) {
             const tabs = document.querySelectorAll('nav li');
             const contents = document.querySelectorAll('.tab-content');
-            
+
             tabs.forEach(t => t.classList.remove('active'));
             pickupTab.classList.add('active');
-            
+
             contents.forEach(c => c.classList.remove('active'));
             const targetEl = document.getElementById('tab-pickup-scanner');
             if (targetEl) targetEl.classList.add('active');
-            
+
             document.getElementById('pageTitle').innerText = pickupTab.innerText;
             updateHeaderActions('pickup-scanner');
-            
+
             if (orderId) {
                 const inputEl = document.getElementById('scannerOrderIdInput');
                 if (inputEl) {
@@ -1805,7 +1846,7 @@ async function loadAuthConfig() {
             const data = await res.json();
             document.getElementById('auth_phone_enabled').checked = data.phone_auth_enabled;
         }
-        
+
         loadCheckoutConfig();
     } catch (err) {
         console.error("Failed to load auth config:", err);
@@ -1825,7 +1866,7 @@ async function saveAuthConfig() {
             },
             body: JSON.stringify(payload)
         });
-        
+
         if (!res.ok) throw new Error("Failed to update auth config");
         showAdminAlert('Authentication settings updated!', 'Success', 'success');
     } catch (err) {
@@ -1868,7 +1909,7 @@ async function saveCheckoutConfig() {
             },
             body: JSON.stringify(payload)
         });
-        
+
         if (!res.ok) throw new Error("Failed to update checkout config");
         showAdminAlert('Checkout settings updated!', 'Success', 'success');
     } catch (err) {
@@ -1892,7 +1933,7 @@ async function loadSupport() {
             headers: { 'Authorization': 'Bearer ' + idToken }
         });
         if (!res.ok) throw new Error("Failed to load support requests");
-        
+
         const data = await res.json();
         const messages = data.messages || [];
         updateSupportBadge(data.unreadCount || 0);
@@ -1914,10 +1955,10 @@ async function loadSupport() {
                 <td><div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${msg.message}">${msg.message}</div></td>
                 <td><span class="badge ${msg.status === 'unread' ? 'danger' : 'success'}">${msg.status}</span></td>
                 <td>
-                    ${msg.status === 'unread' 
-                        ? `<button onclick="markSupportRead(${msg.id})" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Mark Read</button>` 
-                        : `<button disabled class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; opacity: 0.6;">Read</button>`
-                    }
+                    ${msg.status === 'unread'
+                ? `<button onclick="markSupportRead(${msg.id})" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Mark Read</button>`
+                : `<button disabled class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; opacity: 0.6;">Read</button>`
+            }
                 </td>
             </tr>
         `).join('');
@@ -1963,7 +2004,7 @@ async function pollUnreadSupportCount() {
             const data = await res.json();
             updateSupportBadge(data.unreadCount || 0);
         }
-    } catch (err) {}
+    } catch (err) { }
 }
 
 // Poll every 60 seconds

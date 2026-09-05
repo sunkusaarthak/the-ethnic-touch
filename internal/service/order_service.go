@@ -132,6 +132,8 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 		_, amt, err := s.couponSvc.ValidateCoupon(req.CouponCode, subtotal, cartItemsInfo, req.UserID)
 		if err == nil {
 			discountAmt = amt
+		} else {
+			return nil, "", "", fmt.Errorf("invalid coupon: %v", err)
 		}
 	}
 
