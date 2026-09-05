@@ -98,7 +98,7 @@ export const CartProvider = ({ children }) => {
 
     // Auto-recalculate discount if cart changes and a coupon is active
     useEffect(() => {
-        if (discount?.code && cart && cart.length > 0) {
+        if (!authLoading && discount?.code && cart && cart.length > 0) {
             const subtotal = cart.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
             
             // Re-validate coupon in background to get accurate discount amount
@@ -128,7 +128,7 @@ export const CartProvider = ({ children }) => {
             // Remove discount if cart is empty
             setDiscount(null);
         }
-    }, [cart, discount?.code]);
+    }, [cart, discount?.code, authLoading]);
 
     // Synchronize guest items and load account data upon login
     useEffect(() => {

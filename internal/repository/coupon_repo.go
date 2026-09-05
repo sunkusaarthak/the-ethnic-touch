@@ -24,7 +24,7 @@ func NewCouponRepository(db *sql.DB) CouponRepository {
 func (r *postgresCouponRepo) GetByCode(code string) (*models.Coupon, error) {
 	var c models.Coupon
 	err := r.db.QueryRow(`
-		SELECT id, code, type, value, min_order, COALESCE(expiry_date, ''), is_active, usage_limit, used_count, user_id
+		SELECT id, code, type, value, min_order, COALESCE(expiry_date, ''), is_active, usage_limit, used_count, COALESCE(user_id, '')
 		FROM coupons WHERE UPPER(TRIM(code)) = UPPER(TRIM($1)) AND is_active = TRUE`, code).
 		Scan(&c.ID, &c.Code, &c.Type, &c.Value, &c.MinOrder, &c.ExpiryDate, &c.IsActive, &c.UsageLimit, &c.UsedCount, &c.UserID)
 	if err != nil {
@@ -35,7 +35,7 @@ func (r *postgresCouponRepo) GetByCode(code string) (*models.Coupon, error) {
 
 func (r *postgresCouponRepo) GetAllCoupons() ([]models.Coupon, error) {
 	rows, err := r.db.Query(`
-		SELECT id, code, type, value, min_order, expiry_date, is_active, usage_limit, used_count, user_id
+		SELECT id, code, type, value, min_order, COALESCE(expiry_date, ''), is_active, usage_limit, used_count, COALESCE(user_id, '')
 		FROM coupons ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
