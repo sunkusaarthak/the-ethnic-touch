@@ -150,6 +150,16 @@ func runMigrations(db *sql.DB) error {
 			size TEXT DEFAULT '',
 			UNIQUE(user_id, product_id, size)
 		);`,
+		`CREATE TABLE IF NOT EXISTS contact_messages (
+			id SERIAL PRIMARY KEY,
+			name TEXT NOT NULL,
+			email TEXT NOT NULL,
+			phone TEXT,
+			order_id TEXT,
+			message TEXT NOT NULL,
+			status TEXT DEFAULT 'unread',
+			created_at TEXT NOT NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS system_config (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL

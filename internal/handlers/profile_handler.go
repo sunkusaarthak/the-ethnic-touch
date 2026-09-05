@@ -8,6 +8,7 @@ import (
 
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
+	"ethnictouch/internal/utils"
 )
 
 type ProfileHandler struct {
@@ -68,10 +69,10 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 			if err == models.ErrEmailAlreadyRegistered || 
 			   err == models.ErrMobileAlreadyRegistered || 
 			   err == models.ErrIdentityConflict {
-				http.Error(w, err.Error(), http.StatusConflict)
+				http.Error(w, utils.FormatError(err), http.StatusConflict)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 
@@ -103,7 +104,7 @@ func (h *ProfileHandler) HandleAddresses(w http.ResponseWriter, r *http.Request)
 	if r.Method == http.MethodGet {
 		addresses, err := h.svc.GetAddresses(userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -117,7 +118,7 @@ func (h *ProfileHandler) HandleAddresses(w http.ResponseWriter, r *http.Request)
 		addr.UserID = userID
 
 		if err := h.svc.CreateAddress(&addr); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -131,7 +132,7 @@ func (h *ProfileHandler) HandleAddresses(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if err := h.svc.SetDefaultAddress(userID, id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -144,7 +145,7 @@ func (h *ProfileHandler) HandleAddresses(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if err := h.svc.DeleteAddress(userID, id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -234,7 +235,7 @@ func (h *ProfileHandler) HandleAdminProfileDelete(w http.ResponseWriter, r *http
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete profile: " + err.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete profile: " + utils.FormatError(err)})
 		return
 	}
 

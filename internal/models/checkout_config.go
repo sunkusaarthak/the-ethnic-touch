@@ -4,5 +4,8 @@ type CheckoutConfig struct {
 	StandardDeliveryEnabled      bool `json:"standard_delivery_enabled"`
 	HyderabadInstantEnabled      bool `json:"hyderabad_instant_enabled"`
 	StorePickupPrepayEnabled     bool `json:"store_pickup_prepay_enabled"`
-	StorePickupPayInStoreEnabled bool `json:"store_pickup_pay_in_store_enabled"`
+	StorePickupPayInStoreEnabled bool    `json:"store_pickup_pay_in_store_enabled"`
+	FreeShippingThreshold        float64 `json:"free_shipping_threshold"`
+	ShippingCutoffHour           int     `json:"shipping_cutoff_hour"`
+	PickupHoldHours              int     `json:"pickup_hold_hours"`
 }

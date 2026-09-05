@@ -556,6 +556,7 @@ async function loadTabData(target) {
     if (target === 'dashboard') loadDashboard();
     if (target === 'products') loadProducts();
     if (target === 'orders') loadOrders();
+    if (target === 'support') loadSupport();
     if (target === 'coupons') loadCoupons();
     if (target === 'settings') loadSettings();
     if (target === 'spinwin') loadSpinWin();
@@ -1875,3 +1876,94 @@ async function saveCheckoutConfig() {
 
 window.loadCheckoutConfig = loadCheckoutConfig;
 window.saveCheckoutConfig = saveCheckoutConfig;
+
+// --- Support Tab Logic ---
+
+async function loadSupport() {
+    const tbody = document.querySelector('#supportTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
+    try {
+        const idToken = await auth.currentUser.getIdToken();
+        const res = await fetch('/api/admin/contact', {
+            headers: { 'Authorization': 'Bearer ' + idToken }
+        });
+        if (!res.ok) throw new Error("Failed to load support requests");
+        
+        const data = await res.json();
+        const messages = data.messages || [];
+        updateSupportBadge(data.unreadCount || 0);
+
+        if (messages.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7">No support requests found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = messages.map(msg => `
+            <tr style="background: ${msg.status === 'unread' ? '#fff6f6' : 'transparent'}">
+                <td>${new Date(msg.createdAt).toLocaleString()}</td>
+                <td><strong>${msg.name}</strong></td>
+                <td>
+                    <a href="mailto:${msg.email}">${msg.email}</a><br/>
+                    <a href="tel:${msg.phone}">${msg.phone || 'N/A'}</a>
+                </td>
+                <td>${msg.orderId || 'N/A'}</td>
+                <td><div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${msg.message}">${msg.message}</div></td>
+                <td><span class="badge ${msg.status === 'unread' ? 'danger' : 'success'}">${msg.status}</span></td>
+                <td>
+                    ${msg.status === 'unread' 
+                        ? `<button onclick="markSupportRead(${msg.id})" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Mark Read</button>` 
+                        : `<button disabled class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; opacity: 0.6;">Read</button>`
+                    }
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color:red">Error: ' + err.message + '</td></tr>';
+    }
+}
+
+async function markSupportRead(id) {
+    try {
+        const idToken = await auth.currentUser.getIdToken();
+        const res = await fetch(`/api/admin/contact/${id}/read`, {
+            method: 'PUT',
+            headers: { 'Authorization': 'Bearer ' + idToken }
+        });
+        if (!res.ok) throw new Error("Failed to mark as read");
+        loadSupport();
+    } catch (err) {
+        showAdminAlert(err.message, 'Error', 'error');
+    }
+}
+
+function updateSupportBadge(count) {
+    const badge = document.getElementById('support-badge');
+    if (badge) {
+        if (count > 0) {
+            badge.style.display = 'inline-block';
+            badge.innerText = count;
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+async function pollUnreadSupportCount() {
+    if (!auth || !auth.currentUser) return;
+    try {
+        const idToken = await auth.currentUser.getIdToken();
+        const res = await fetch('/api/admin/contact', {
+            headers: { 'Authorization': 'Bearer ' + idToken }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            updateSupportBadge(data.unreadCount || 0);
+        }
+    } catch (err) {}
+}
+
+// Poll every 60 seconds
+setInterval(pollUnreadSupportCount, 60000);
+window.markSupportRead = markSupportRead;
+

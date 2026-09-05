@@ -4,6 +4,7 @@ import CopyButton from '../components/CopyButton';
 import { signOut } from 'firebase/auth';
 import { auth, API_BASE_URL } from '../data/config';
 import apiClient from '../utils/apiClient';
+import { formatError } from '../utils/errors';
 
 const ProfilePage = ({ authUser, setProfileIncomplete }) => {
     const navigate = useNavigate();
@@ -127,7 +128,7 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                 loadAddresses();
             }
         } catch (err) {
-            setAddressMessage(err.message || 'Failed to save address');
+            setAddressMessage(formatError(err, 'Failed to save address'));
         }
     };
 

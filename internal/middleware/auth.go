@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
 	"ethnictouch/internal/repository"
+	"ethnictouch/internal/utils"
 )
 
 type contextKey string
@@ -25,7 +27,7 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 			if token == "" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized: missing token"})
+				json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Unauthorized: missing token")})
 				return
 			}
 
@@ -37,7 +39,7 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 			if err != nil || resp.StatusCode != http.StatusOK {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized: invalid Firebase token"})
+				json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Unauthorized: invalid Firebase token")})
 				return
 			}
 			defer resp.Body.Close()
@@ -50,7 +52,7 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 			if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil || len(tokenInfo.Users) == 0 || tokenInfo.Users[0].Email == "" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized: failed to parse Firebase token response"})
+				json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Unauthorized: failed to parse Firebase token response")})
 				return
 			}
 
@@ -65,7 +67,7 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 				if err != nil || dbRole == "" {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusForbidden)
-					json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden: access denied"})
+					json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Forbidden: access denied")})
 					return
 				}
 				role = dbRole
@@ -90,7 +92,7 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 			if !roleAllowed {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden: insufficient permissions"})
+				json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Forbidden: insufficient permissions")})
 				return
 			}
 

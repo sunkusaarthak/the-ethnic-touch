@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, API_BASE_URL } from '../data/config';
 import { RecaptchaVerifier, linkWithPhoneNumber, GoogleAuthProvider, linkWithPopup } from 'firebase/auth';
+import { formatError } from '../utils/errors';
 
 const CompleteProfile = ({ authUser }) => {
     const navigate = useNavigate();
@@ -79,7 +80,7 @@ const CompleteProfile = ({ authUser }) => {
             } else if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
                 // User closed popup, do nothing
             } else {
-                setFormError(err.message || 'Failed to link Google account.');
+                setFormError(formatError(err, 'Failed to link Google account.'));
             }
         } finally {
             setLinkLoading(false);
@@ -149,8 +150,7 @@ const CompleteProfile = ({ authUser }) => {
             setConfirmationResult(result);
             setPhoneStep('otp_sent');
         } catch (err) {
-            console.error("Phone verification error:", err);
-            setPhoneError(err.message || 'Failed to send OTP code.');
+            setPhoneError(formatError(err, 'Failed to send OTP code.'));
             if (recaptchaVerifierRef.current) {
                 try { recaptchaVerifierRef.current.clear(); } catch(e){}
                 recaptchaVerifierRef.current = null;
@@ -253,8 +253,7 @@ const CompleteProfile = ({ authUser }) => {
             // Redirect to destination
             navigate(redirectPath);
         } catch (err) {
-            console.error("Profile Submit Error:", err);
-            setFormError(err.message || 'Unable to save profile details. Please try again.');
+            setFormError(formatError(err, 'Unable to save profile details. Please try again.'));
         } finally {
             setSubmitting(false);
         }

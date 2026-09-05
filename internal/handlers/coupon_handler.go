@@ -6,6 +6,7 @@ import (
 
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
+	"ethnictouch/internal/utils"
 )
 
 type CouponHandler struct {
@@ -45,11 +46,12 @@ func (h *CouponHandler) HandleValidateCoupon(w http.ResponseWriter, r *http.Requ
 		total = req.Subtotal
 	}
 
-	coupon, discountAmt, err := h.svc.ValidateCoupon(req.Code, total, req.Items)
+	reqUserID := r.Header.Get("X-User-Id")
+	coupon, discountAmt, err := h.svc.ValidateCoupon(req.Code, total, req.Items, reqUserID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
 		return
 	}
 
@@ -67,7 +69,7 @@ func (h *CouponHandler) HandleAdminCoupons(w http.ResponseWriter, r *http.Reques
 	if r.Method == http.MethodGet {
 		coupons, err := h.svc.GetAllCoupons()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -79,7 +81,7 @@ func (h *CouponHandler) HandleAdminCoupons(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if err := h.svc.CreateCoupon(&c); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -98,7 +100,7 @@ func (h *CouponHandler) HandleUserCoupons(w http.ResponseWriter, r *http.Request
 
 	coupons, err := h.svc.GetAllCoupons()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -133,7 +135,7 @@ func (h *CouponHandler) HandleGetGiftTiers(w http.ResponseWriter, r *http.Reques
 
 	tiers, err := h.svc.GetGiftTiers()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 		return
 	}
 

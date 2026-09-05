@@ -14,8 +14,10 @@ type OrderRepository interface {
 	GetOrder(orderID string) (*models.Order, error)
 	GetAllOrders(email string) ([]models.Order, error)
 	GetAdminOrders(orderID string) ([]models.Order, error)
+	GetPendingDeliveryOrders() ([]models.Order, error)
 	CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
+	UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error
 	ConfirmStorePickup(orderID string) error
 	CancelPendingOrder(orderID string) error
 }
@@ -242,13 +244,13 @@ func (r *postgresOrderRepo) CreateOrderWithTransaction(order *models.Order, stoc
 				sizesStock = map[string]int{}
 			}
 
-			if item.Size != "" && len(sizesStock) > 0 {
-				if curr, ok := sizesStock[item.Size]; ok {
-					if curr < item.Quantity {
-						return fmt.Errorf("insufficient stock for product %s size %s", prodName, item.Size)
-					}
-					sizesStock[item.Size] = curr - item.Quantity
+			if item.Size != "" {
+				// Must exist and have enough stock
+				curr, ok := sizesStock[item.Size]
+				if !ok || curr < item.Quantity {
+					return fmt.Errorf("insufficient stock for product %s size %s", prodName, item.Size)
 				}
+				sizesStock[item.Size] = curr - item.Quantity
 			}
 
 			newTotalStock := totalStock - item.Quantity
@@ -344,6 +346,48 @@ func (r *postgresOrderRepo) UpdateOrderStatus(orderID, status, paymentID, tracki
 	return tx.Commit()
 }
 
+func (r *postgresOrderRepo) UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if newCoupon != nil {
+		_, err = tx.Exec(`INSERT INTO coupons (code, type, value, min_order, usage_limit, times_used, expiry_date, is_active)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			newCoupon.Code, newCoupon.Type, newCoupon.Value, newCoupon.MinOrder, newCoupon.UsageLimit, 0, newCoupon.ExpiryDate, newCoupon.IsActive)
+		if err != nil {
+			return fmt.Errorf("failed to insert coupon in transaction: %w", err)
+		}
+	}
+
+	query := "UPDATE orders SET status = $1"
+	args := []interface{}{status}
+	argIdx := 2
+
+	if paymentID != "" {
+		query += fmt.Sprintf(", razorpay_payment_id = $%d", argIdx)
+		args = append(args, paymentID)
+		argIdx++
+	}
+	if unlockedGift != "" {
+		query += fmt.Sprintf(", unlocked_gift = $%d", argIdx)
+		args = append(args, unlockedGift)
+		argIdx++
+	}
+
+	query += fmt.Sprintf(" WHERE id = $%d", argIdx)
+	args = append(args, orderID)
+
+	_, err = tx.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update order status in transaction: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -427,4 +471,34 @@ func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 	}
 
 	return tx.Commit()
+}
+
+func (r *postgresOrderRepo) GetPendingDeliveryOrders() ([]models.Order, error) {
+	rows, err := r.db.Query(`
+		SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, 
+		COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
+		COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
+		COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
+		COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
+		COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') 
+		FROM orders WHERE status = 'paid' AND checkout_type = 'delivery'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var o models.Order
+		if err := rows.Scan(&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
+			&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift,
+			&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
+			&o.CheckoutType, &o.PaymentMethod); err == nil {
+			
+			items, _ := r.getOrderItems(o.ID)
+			o.Items = items
+			orders = append(orders, o)
+		}
+	}
+	return orders, nil
 }

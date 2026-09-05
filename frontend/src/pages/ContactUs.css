@@ -1,0 +1,514 @@
+/* =========================================
+   Contact Us - Mockup Exact Match
+   ========================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&family=Great+Vibes&display=swap');
+
+.contact-page-wrapper {
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+  background-color: #fdfbf7;
+  font-family: 'Inter', sans-serif;
+  color: #5c5c5c;
+  padding-bottom: 4rem;
+}
+
+/* Silk Textures */
+.silk-bg-top-left, .silk-bg-bottom-right {
+  position: absolute;
+  width: 60%;
+  height: 60%;
+  background-image: url('/images/silk_bg.png');
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.silk-bg-top-left {
+  top: -10%;
+  left: -10%;
+  mask-image: radial-gradient(ellipse at top left, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 70%);
+  -webkit-mask-image: radial-gradient(ellipse at top left, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 70%);
+}
+
+.silk-bg-bottom-right {
+  bottom: -10%;
+  right: -10%;
+  mask-image: radial-gradient(ellipse at bottom right, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 70%);
+  -webkit-mask-image: radial-gradient(ellipse at bottom right, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 70%);
+}
+
+/* Layout */
+.contact-container {
+  position: relative;
+  z-index: 1;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 4rem 5%;
+}
+
+.contact-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.contact-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 3.5rem;
+  color: #B27B50; /* A rich warm gold/brown */
+  margin: 0 0 0.5rem 0;
+  font-weight: 500;
+}
+
+.ornament-divider {
+  margin: 0 auto 1.5rem auto;
+  color: #c7a481;
+  width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.contact-subtitle {
+  color: #8c8c8c;
+  font-size: 1.05rem;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* Grid Layout for Form */
+.contact-grid {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 4rem;
+  position: relative;
+}
+
+/* Contact Card */
+.contact-card-mockup {
+  background: #fdfbf7;
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+  box-shadow: 0 10px 40px rgba(178, 123, 80, 0.08), 0 0 0 1px rgba(178, 123, 80, 0.1);
+  height: fit-content;
+  position: relative;
+  z-index: 2;
+}
+
+.card-ornament {
+  color: #c7a481;
+  margin-bottom: 1rem;
+}
+
+.contact-card-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2rem;
+  color: #B27B50;
+  margin: 0 0 0.5rem 0;
+  font-weight: 500;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid rgba(178, 123, 80, 0.15);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.contact-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.contact-item:hover {
+  transform: translateX(3px);
+}
+
+.icon-circle {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  border: 1px solid rgba(178, 123, 80, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #B27B50;
+  flex-shrink: 0;
+  background: #fdfbf7;
+}
+
+.contact-details h4 {
+  margin: 0 0 0.2rem 0;
+  font-size: 0.95rem;
+  color: #5c5c5c;
+  font-weight: 600;
+}
+
+.contact-details p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #B27B50;
+}
+
+.contact-item svg.arrow-right {
+  margin-left: auto;
+  color: #B27B50;
+  opacity: 0.7;
+}
+
+/* Form Styles */
+.form-animation-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: relative;
+  z-index: 2;
+}
+
+.form-group-mockup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group-mockup label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #5c5c5c;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 1rem;
+  color: #8c8c8c;
+  pointer-events: none;
+}
+
+.input-wrapper input, .input-wrapper textarea {
+  width: 100%;
+  padding: 1rem 1rem 1rem 3rem;
+  border: 1px solid rgba(178, 123, 80, 0.2);
+  border-radius: 8px;
+  background: #fdfbf7;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: #333;
+  transition: all 0.3s ease;
+}
+
+.input-wrapper textarea {
+  padding-left: 1rem;
+}
+
+.input-wrapper input::placeholder, .input-wrapper textarea::placeholder {
+  color: #a0a0a0;
+  font-weight: 400;
+}
+
+.input-wrapper input:focus, .input-wrapper textarea:focus {
+  outline: none;
+  border-color: #B27B50;
+  box-shadow: 0 0 15px rgba(178, 123, 80, 0.15);
+  background: #fff;
+}
+
+.textarea-icon {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  color: #a0a0a0;
+  pointer-events: none;
+}
+
+/* Submit Button & Thread */
+.submit-area {
+  position: relative;
+  margin-top: 1rem;
+}
+
+.btn-submit-mockup {
+  width: 100%;
+  padding: 1.2rem;
+  border: none;
+  border-radius: 50px;
+  background: linear-gradient(to right, #D4A373, #B27B50);
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(178, 123, 80, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+}
+
+.btn-icon-send {
+  margin-left: 0.5rem;
+  transition: transform 0.3s ease;
+}
+
+.btn-submit-mockup:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 30px rgba(178, 123, 80, 0.5);
+}
+
+.btn-submit-mockup:hover:not(:disabled) .btn-icon-send {
+  transform: translate(4px, -4px);
+}
+
+.button-launching {
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.reply-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: #8c8c8c;
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+/* Embroidery Thread connecting card to button */
+.embroidery-thread-svg {
+  position: absolute;
+  top: 100px;
+  left: 200px;
+  width: 450px;
+  height: 500px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.thread-path {
+  stroke: #c7a481;
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0.6;
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawThread 2.5s ease forwards;
+}
+
+.thread-glow-dot {
+  fill: #fff;
+  stroke: #B27B50;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 5px rgba(178, 123, 80, 0.8));
+  opacity: 0;
+  animation: fadeIn 0.5s 2.3s forwards;
+}
+
+/* Animations */
+@keyframes drawThread {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes fadeIn {
+  to { opacity: 1; }
+}
+
+.fade-out {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.98);
+  transition: all 0.5s ease;
+}
+
+.fade-in {
+  animation: fadeInScale 0.6s ease forwards;
+}
+
+@keyframes fadeInScale {
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.success-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  padding: 4rem 2rem;
+  background: rgba(253, 251, 247, 0.8);
+  backdrop-filter: blur(5px);
+  border-radius: 12px;
+  border: 1px solid rgba(178, 123, 80, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  z-index: 20;
+}
+
+/* ====================================================
+   Paper Airplane Delivery Animation
+   ==================================================== */
+
+.airplane-scene {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  background: rgba(253, 251, 247, 0.6);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+  animation: fadeIn 0.5s ease;
+}
+
+.scene-text {
+  position: absolute;
+  bottom: 2rem;
+  width: 100%;
+  text-align: center;
+  font-size: 1.1rem;
+  color: #B27B50;
+  font-weight: 500;
+  font-family: 'Playfair Display', serif;
+}
+
+.airplane-container {
+  position: absolute;
+  top: var(--start-y, 80%);
+  left: var(--start-x, 20%);
+  color: #B27B50;
+  opacity: 0;
+  transform: rotate(0deg) scale(0.5);
+  transition: all 1.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.paper-airplane {
+  width: 60px;
+  height: 60px;
+  filter: drop-shadow(0 10px 15px rgba(178, 123, 80, 0.3));
+  /* Offset so the center of the plane matches the center of the button */
+  transform: translate(-50%, -50%);
+}
+
+.destination-mailbox {
+  position: absolute;
+  top: 20%;
+  left: 70%;
+  color: #B27B50;
+  width: 60px;
+  height: 60px;
+  margin-left: -10px;
+  margin-top: -10px;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.5s ease;
+}
+
+/* Launching State */
+.state-launching .airplane-container {
+  opacity: 1;
+  transform: rotate(15deg) scale(1.2);
+  /* Uses default top/left */
+}
+
+/* Flying State */
+.state-flying .airplane-container {
+  top: 50%;
+  left: 50%;
+  opacity: 1;
+  transform: rotate(35deg) scale(1.1);
+  transition: all 2.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.state-flying .destination-mailbox {
+  opacity: 0.4;
+  transform: scale(1);
+}
+
+/* Delivered State */
+.state-delivered .airplane-container {
+  top: 20%;
+  left: 70%;
+  opacity: 0;
+  transform: rotate(60deg) scale(0.2);
+  transition: all 0.8s ease-in;
+}
+
+.state-delivered .destination-mailbox {
+  opacity: 1;
+  transform: scale(1.2);
+  filter: drop-shadow(0 0 20px rgba(178, 123, 80, 0.4));
+}
+
+/* Particle Trail */
+.trail-particles {
+  position: absolute;
+  bottom: -20px;
+  left: -10px;
+  width: 20px;
+  height: 60px;
+  background: linear-gradient(to top, rgba(178, 123, 80, 0), rgba(178, 123, 80, 0.6));
+  filter: blur(4px);
+  transform: rotate(45deg);
+  opacity: 0;
+}
+
+.state-flying .trail-particles {
+  animation: engineGlow 0.5s infinite alternate;
+  opacity: 1;
+}
+
+@keyframes engineGlow {
+  0% { transform: rotate(45deg) scaleY(1); opacity: 0.4; }
+  100% { transform: rotate(45deg) scaleY(1.5); opacity: 0.8; }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .contact-grid {
+    grid-template-columns: 1fr;
+  }
+  .embroidery-thread-svg {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .contact-container {
+    padding: 2rem 5%;
+  }
+  .contact-title {
+    font-size: 2.5rem;
+  }
+  .contact-card-mockup {
+    padding: 2rem 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .airplane-container, .airplane-scene, .destination-mailbox, .thread-path {
+      display: none !important;
+  }
+}

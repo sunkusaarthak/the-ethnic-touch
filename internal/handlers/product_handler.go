@@ -16,6 +16,7 @@ import (
 
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
+	"ethnictouch/internal/utils"
 )
 
 type ProductHandler struct {
@@ -55,7 +56,7 @@ func (h *ProductHandler) HandleProducts(w http.ResponseWriter, r *http.Request) 
 
 		products, meta, err := h.svc.GetProducts(filters)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 
@@ -73,12 +74,12 @@ func (h *ProductHandler) HandleProducts(w http.ResponseWriter, r *http.Request) 
 		// AdminAuthMiddleware should protect this in routing
 		var p models.Product
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, utils.FormatError(err), http.StatusBadRequest)
 			return
 		}
 
 		if err := h.svc.CreateProduct(&p); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 
@@ -88,12 +89,12 @@ func (h *ProductHandler) HandleProducts(w http.ResponseWriter, r *http.Request) 
 	} else if r.Method == http.MethodPut {
 		var p models.Product
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, utils.FormatError(err), http.StatusBadRequest)
 			return
 		}
 
 		if err := h.svc.UpdateProduct(&p); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 
@@ -126,7 +127,7 @@ func (h *ProductHandler) HandleProductByID(w http.ResponseWriter, r *http.Reques
 			if err.Error() == "product not found" {
 				http.Error(w, "Product not found", http.StatusNotFound)
 			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			}
 			return
 		}
@@ -142,7 +143,7 @@ func (h *ProductHandler) HandleProductByID(w http.ResponseWriter, r *http.Reques
 		// Actually, let's keep the router simple and just let it pass here.
 		// In app.go we will wrap the DELETE method inside the router with adminOnly.
 		if err := h.svc.DeleteProduct(productID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 
@@ -170,7 +171,7 @@ func (h *ProductHandler) HandleProductReviews(w http.ResponseWriter, r *http.Req
 	if r.Method == http.MethodGet {
 		reviews, err := h.svc.GetReviews(productID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
 		}
 
@@ -185,7 +186,7 @@ func (h *ProductHandler) HandleProductReviews(w http.ResponseWriter, r *http.Req
 		rev.ProductID = productID
 
 		if err := h.svc.CreateReview(&rev); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, utils.FormatError(err), http.StatusBadRequest)
 			return
 		}
 

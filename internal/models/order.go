@@ -45,6 +45,7 @@ type Order struct {
 // OrderCreateRequest represents storefront payload to initiate booking
 type OrderCreateRequest struct {
 	CustomerEmail   string `json:"customerEmail"`
+	UserID          string `json:"userId"`
 	CouponCode      string `json:"couponCode"`
 	ShippingName    string `json:"shippingName"`
 	ShippingPhone   string `json:"shippingPhone"`
@@ -68,4 +69,13 @@ type OrderVerifyRequest struct {
 	RazorpayPaymentID string `json:"razorpayPaymentId"`
 	RazorpaySignature string `json:"razorpaySignature"`
 	Mock              bool   `json:"mock"`
+}
+
+// OrderVerifyResponse represents the response containing unlocked gift info
+type OrderVerifyResponse struct {
+	Message        string `json:"message"`
+	UnlockedGift   string `json:"unlockedGift,omitempty"`
+	GiftType       string `json:"giftType,omitempty"`
+	GiftCode       string `json:"giftCode,omitempty"`
+	GiftExpiryDate string `json:"giftExpiryDate,omitempty"`
 }
