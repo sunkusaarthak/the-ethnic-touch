@@ -55,7 +55,8 @@ const AppRoutesContent = () => {
         discount, 
         setDiscount, 
         toggleWishlist, 
-        toastProduct 
+        toastProduct,
+        closeToast
     } = useCart();
     const { showAlert, closeAlert } = useAlert();
 
@@ -186,13 +187,15 @@ const AppRoutesContent = () => {
                         <button 
                             style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#ccc', padding: 0, lineHeight: 0 }}
                             aria-label="Close notification"
+                            onClick={closeToast}
                         >
                             &times;
                         </button>
                     </div>
                     
                     <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
-                        <button 
+                        <a 
+                            href="#/shop"
                             style={{ 
                                 flex: 1, 
                                 height: '40px',
@@ -208,11 +211,13 @@ const AppRoutesContent = () => {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 whiteSpace: 'nowrap',
-                                boxSizing: 'border-box'
+                                boxSizing: 'border-box',
+                                textDecoration: 'none'
                             }}
+                            onClick={closeToast}
                         >
                             Continue Shopping
-                        </button>
+                        </a>
                         <a 
                             href="#/cart" 
                             style={{ 
@@ -233,6 +238,7 @@ const AppRoutesContent = () => {
                                 whiteSpace: 'nowrap',
                                 boxSizing: 'border-box'
                             }}
+                            onClick={closeToast}
                         >
                             Checkout &rarr;
                         </a>

@@ -3801,3 +3801,4 @@ button:active, .btn:active, .size-pill:active, .product-card:active {
 .review-submit-btn:active:not(:disabled) {
     transform: translateY(0);
 }
+@media (max-width: 768px) { .gallery-main-container { width: 80% !important; margin: 0 auto !important; flex: none !important; } }

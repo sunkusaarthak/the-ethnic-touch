@@ -3,6 +3,9 @@ import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, Bro
 import Cart from './Cart';
 import ImageWithSkeleton from '../components/ImageWithSkeleton';
 import { API_BASE_URL } from '../data/config';
+import SizeSelectionModal from '../components/SizeSelectionModal';
+import SizeGuide from '../components/SizeGuide';
+import ZoomableImage from '../components/ZoomableImage';
 
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
@@ -47,6 +50,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     }, [id, globalProduct]);
 
     const product = localProduct;
+    const hasSizes = product?.sizes && product.sizes.length > 0;
+    const isOutOfStock = hasSizes ? !product.sizes.some(sz => (product.sizesStock && product.sizesStock[sz] !== undefined ? product.sizesStock[sz] : -1) !== 0) : false;
 
     const [activeImage, setActiveImage] = useState(0);
     const [selectedSize, setSelectedSize] = useState('');
@@ -55,6 +60,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     
     const [rating, setRating] = useState(5);
     const [comment, setComment] = useState('');
+    const [showSizeModal, setShowSizeModal] = useState(false);
+    const [modalSelectedSize, setModalSelectedSize] = useState('');
     const [reviewFormError, setReviewFormError] = useState('');
     const [reviewLoading, setReviewLoading] = useState(false);
 
@@ -68,12 +75,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
     useEffect(() => {
         if (product && product.sizes && product.sizes.length > 0) {
-            // Select first size that has stock > 0
-            const firstAvailable = product.sizes.find(sz => {
-                const stk = (product.sizesStock && product.sizesStock[sz] !== undefined) ? product.sizesStock[sz] : -1;
-                return stk !== 0;
-            });
-            setSelectedSize(firstAvailable || '');
+            // Don't select a default size automatically
+            setSelectedSize('');
             setActiveImage(0); // reset image index on product change
             setQuantity(1); // reset quantity on product change
         }
@@ -162,7 +165,20 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     };
 
     const handleAddToCart = () => {
+        if (product && product.sizes && product.sizes.length > 0 && !selectedSize) {
+            setModalSelectedSize('');
+            setShowSizeModal(true);
+            return;
+        }
         addToCart({ ...product, size: selectedSize, quantity: quantity });
+    };
+
+    const handleModalAddToCart = () => {
+        if (modalSelectedSize) {
+            addToCart({ ...product, size: modalSelectedSize, quantity: quantity });
+            setSelectedSize(modalSelectedSize);
+            setShowSizeModal(false);
+        }
     };
 
     const submitReview = async (e) => {
@@ -261,11 +277,11 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                         >
                             {galleryImages.map((imgUrl, idx) => (
                                 <div key={idx} id={`gallery-slide-${idx}`} className="gallery-carousel-slide">
-                                    <ImageWithSkeleton 
+                                    <ZoomableImage 
                                         src={imgUrl} 
                                         alt={`${product.name} - View ${idx + 1}`} 
                                         className="gallery-slide-img" 
-                                        style={{ height: '100%', objectFit: 'contain' }}
+                                        style={{ height: '100%' }}
                                     />
                                 </div>
                             ))}
@@ -407,10 +423,10 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                         <button 
                             className="btn btn-primary" 
                             onClick={handleAddToCart}
-                            disabled={!selectedSize}
+                            disabled={isOutOfStock}
                             style={{ fontSize: '0.92rem', padding: '0 1.25rem', flex: 1, minWidth: '180px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >
-                            {selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - Size ${selectedSize}` : 'Out of Stock'}
+                            {isOutOfStock ? 'Out of Stock' : (selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - Size ${selectedSize}` : `Add to Cart ${quantity > 1 ? `(${quantity})` : ''}`)}
                         </button>
 
                         <button 
@@ -479,9 +495,9 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                 <span>Sizing & Fit guide</span>
                                 <span className={`acc-icon ${openTabs.sizeGuide ? 'open' : ''}`}>▼</span>
                             </button>
-                            <div className="acc-content" style={{ maxHeight: openTabs.sizeGuide ? '200px' : '0' }}>
+                            <div className="acc-content" style={{ maxHeight: openTabs.sizeGuide ? '1500px' : '0' }}>
                                 <div className="acc-content-inner">
-                                    Runs standard size. We suggest choosing chest sizes mapping to your current fitted garments. Regular relaxed straight cut silhouette. Size configurations available: XS, S, M, L, XL, XXL, XXXL.
+                                    <SizeGuide />
                                 </div>
                             </div>
                         </div>
@@ -616,11 +632,20 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                 <button 
                     className="btn btn-primary mobile-sticky-add-btn" 
                     onClick={handleAddToCart}
-                    disabled={!selectedSize}
+                    disabled={isOutOfStock}
                 >
-                    {selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - ₹${(product.price * quantity).toLocaleString('en-IN')}` : 'Out of Stock'}
+                    {isOutOfStock ? 'Out of Stock' : `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - ₹${(product.price * quantity).toLocaleString('en-IN')}`}
                 </button>
             </div>
+
+            <SizeSelectionModal
+                isOpen={showSizeModal}
+                onClose={() => setShowSizeModal(false)}
+                product={product}
+                selectedSize={modalSelectedSize}
+                onSelectSize={setModalSelectedSize}
+                onAddToCart={handleModalAddToCart}
+            />
         </div>
     );
 };
