@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"ethnictouch/internal/config"
@@ -249,13 +251,87 @@ func (a *App) setupRoutes() {
 		}
 
 		// Fallback for React SPA
-		if _, err := os.Stat(frontendDist + "/index.html"); err == nil {
-			http.ServeFile(w, r, frontendDist+"/index.html")
-		} else if _, err := os.Stat(frontendPublic + "/index.html"); err == nil {
-			http.ServeFile(w, r, frontendPublic+"/index.html")
-		} else {
-			http.NotFound(w, r)
+		htmlPath := frontendDist + "/index.html"
+		if _, err := os.Stat(htmlPath); err != nil {
+			htmlPath = frontendPublic + "/index.html"
+			if _, err := os.Stat(htmlPath); err != nil {
+				http.NotFound(w, r)
+				return
+			}
 		}
+
+		// Inject dynamic Open Graph tags for product pages
+		if strings.HasPrefix(path, "/product/") {
+			idStr := strings.TrimPrefix(path, "/product/")
+			if idStr != "" {
+				product, err := productRepo.GetProductByID(idStr)
+				if err == nil && product != nil {
+					// Read the html file
+					htmlBytes, err := os.ReadFile(htmlPath)
+					if err == nil {
+						htmlContent := string(htmlBytes)
+						// Create dynamic meta tags
+						imageURL := "/favicon.png"
+						if product.ImageURL != "" {
+							imageURL = product.ImageURL
+						}
+						
+						// Check availability for Schema
+						availability := "https://schema.org/OutOfStock"
+						for _, stock := range product.SizesStock {
+							if stock > 0 {
+								availability = "https://schema.org/InStock"
+								break
+							}
+						}
+
+						// JSON-LD structured data for Google Search Rich Snippets
+						jsonLD := fmt.Sprintf(`
+							<script type="application/ld+json">
+							{
+								"@context": "https://schema.org/",
+								"@type": "Product",
+								"name": "%s",
+								"image": "%s",
+								"description": "%s",
+								"brand": {
+									"@type": "Brand",
+									"name": "The Ethnic Touch"
+								},
+								"offers": {
+									"@type": "Offer",
+									"url": "%s",
+									"priceCurrency": "INR",
+									"price": "%f",
+									"availability": "%s"
+								}
+							}
+							</script>
+						`, product.Name, imageURL, product.Description, "https://theethnictouch.com"+path, product.Price, availability)
+
+						dynamicTags := fmt.Sprintf(`
+							<title>%s | The Ethnic Touch</title>
+							<meta name="description" content="%s">
+							<meta property="og:title" content="%s">
+							<meta property="og:description" content="%s">
+							<meta property="og:image" content="%s">
+							<meta property="og:url" content="%s">
+							<meta property="og:type" content="product">
+							<meta name="twitter:card" content="summary_large_image">
+							%s
+						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://theethnictouch.com"+path, jsonLD)						
+						htmlContent = strings.Replace(htmlContent, "<!-- DYNAMIC_META_TAGS -->", dynamicTags, 1)
+						
+						w.Header().Set("Content-Type", "text/html; charset=utf-8")
+						w.Write([]byte(htmlContent))
+						return
+					}
+				}
+			}
+		}
+
+		// Serve normal file if no dynamic injection happened
+		http.ServeFile(w, r, htmlPath)
 	})
 }
 

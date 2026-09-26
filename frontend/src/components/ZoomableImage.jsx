@@ -78,6 +78,31 @@ const ZoomableImage = ({ src, alt, className, style }) => {
                         }}
                     />
                 )}
+                {/* Zoom indicator icon (Mobile UX) */}
+                {isMobile && !isMobileModalOpen && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '15px',
+                        right: '15px',
+                        width: '36px',
+                        height: '36px',
+                        backgroundColor: '#fff',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        pointerEvents: 'none',
+                        zIndex: 2
+                    }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            <line x1="11" y1="8" x2="11" y2="14"></line>
+                            <line x1="8" y1="11" x2="14" y2="11"></line>
+                        </svg>
+                    </div>
+                )}
             </div>
 
             {/* Mobile Full Screen Modal */}
@@ -88,7 +113,7 @@ const ZoomableImage = ({ src, alt, className, style }) => {
                     left: 0,
                     width: '100%',
                     height: '100%',
-                    backgroundColor: '#000',
+                    backgroundColor: '#fff', // White background to match reference image cleanly
                     zIndex: 9999999,
                     display: 'flex',
                     flexDirection: 'column',
@@ -102,18 +127,19 @@ const ZoomableImage = ({ src, alt, className, style }) => {
                             position: 'absolute',
                             top: '20px',
                             right: '20px',
-                            background: 'rgba(255,255,255,0.2)',
+                            background: '#000', // Solid black background for visibility
                             color: '#fff',
                             border: 'none',
                             borderRadius: '50%',
-                            width: '40px',
-                            height: '40px',
-                            fontSize: '24px',
+                            width: '44px',
+                            height: '44px',
+                            fontSize: '28px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             zIndex: 10,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.3)'
                         }}
                     >
                         &times;

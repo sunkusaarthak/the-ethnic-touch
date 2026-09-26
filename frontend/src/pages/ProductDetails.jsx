@@ -164,6 +164,24 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         }
     };
 
+    const handleShare = async () => {
+        const shareData = {
+            title: `${product.name} | The Ethnic Touch`,
+            text: product.description,
+            url: window.location.href,
+        };
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(window.location.href);
+                alert("Link copied to clipboard!");
+            }
+        } catch (err) {
+            console.error("Error sharing:", err);
+        }
+    };
+
     const handleAddToCart = () => {
         if (product && product.sizes && product.sizes.length > 0 && !selectedSize) {
             setModalSelectedSize('');
@@ -456,6 +474,38 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                             </svg>
                             <span>{isWished ? 'Wishlisted' : 'Wishlist'}</span>
                         </button>
+                        
+                        <button 
+                            type="button"
+                            onClick={handleShare}
+                            title="Share Product"
+                            aria-label="Share Product"
+                            style={{
+                                height: '44px',
+                                padding: '0 1.25rem',
+                                borderRadius: 'var(--border-radius-pill, 50px)',
+                                border: '1.5px solid #ddd',
+                                backgroundColor: '#fff',
+                                color: '#444',
+                                fontWeight: '600',
+                                fontSize: '0.9rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                transition: 'all 0.2s ease',
+                                flexShrink: 0
+                            }}
+                        >
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="18" cy="5" r="3"></circle>
+                                <circle cx="6" cy="12" r="3"></circle>
+                                <circle cx="18" cy="19" r="3"></circle>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                            </svg>
+                            <span>Share</span>
+                        </button>
                     </div>
 
                     {/* Moved Description Below Buttons */}
@@ -619,14 +669,37 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     type="button"
                     onClick={() => toggleWishlist && toggleWishlist(product)}
                     className="mobile-sticky-wish-btn"
+                    title="Wishlist"
                     style={{
                         border: isWished ? '2px solid #e53935' : '1.5px solid #ddd',
                         backgroundColor: isWished ? '#fff5f5' : '#fff',
-                        color: isWished ? '#e53935' : '#444'
+                        color: isWished ? '#e53935' : '#444',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill={isWished ? "#e53935" : "none"} stroke={isWished ? "#e53935" : "currentColor"} strokeWidth="2">
                         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                </button>
+                <button 
+                    type="button"
+                    onClick={handleShare}
+                    className="mobile-sticky-wish-btn"
+                    title="Share Product"
+                    style={{
+                        border: '1.5px solid #ddd',
+                        backgroundColor: '#fff',
+                        color: '#444',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        marginLeft: '8px'
+                    }}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="18" cy="5" r="3"></circle>
+                        <circle cx="6" cy="12" r="3"></circle>
+                        <circle cx="18" cy="19" r="3"></circle>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
                     </svg>
                 </button>
                 <button 
