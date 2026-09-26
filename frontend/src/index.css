@@ -1814,13 +1814,11 @@ textarea {
     }
 }
 
-/* Recommended/Related Section cards */
 .recommended-section {
-    margin-top: 6rem;
+    margin-top: 2rem;
     border-top: 1px solid #eaeaea;
-    padding-top: 4rem;
+    padding-top: 2rem;
 }
-
 .recommendations-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -3800,4 +3798,39 @@ button:active, .btn:active, .size-pill:active, .product-card:active {
 
 .review-submit-btn:active:not(:disabled) {
     transform: translateY(0);
+}
+@media (max-width: 768px) {
+    /* Hide thumbnails on mobile to save vertical space */
+    .product-thumbnails-list {
+        display: none !important;
+    }
+    
+    /* Constrain main image height so it doesn't push content off screen, but allow full width */
+    .gallery-main-container {
+        width: 100% !important;
+        max-height: 55vh !important;
+        margin: 0 !important;
+    }
+    
+    /* Ensure the image scales properly inside the constrained container */
+    .gallery-slide-img, .gallery-slide-img img {
+        object-fit: contain !important;
+    }
+
+    /* Reduce title size */
+    .product-summary-pane h1 {
+        font-size: 1.5rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    
+    /* Reduce spacing around title and price */
+    .product-summary-pane {
+        padding-top: 0.5rem !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .logo-text, .logo-separator {
+        display: none !important;
+    }
 }

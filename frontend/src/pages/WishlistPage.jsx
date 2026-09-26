@@ -2,8 +2,19 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
 import Shop from './Shop';
+import SizeSelectionModal from '../components/SizeSelectionModal';
 
 const WishlistPage = ({ wishlist, toggleWishlist, addToCart }) => {
+    const [modalProduct, setModalProduct] = useState(null);
+    const [modalSelectedSize, setModalSelectedSize] = useState('');
+
+    const handleModalAddToCart = () => {
+        if (modalProduct && modalSelectedSize) {
+            addToCart({ ...modalProduct, size: modalSelectedSize, quantity: 1 });
+            setModalProduct(null);
+            setModalSelectedSize('');
+        }
+    };
 
     return (
         <div className="wishlist-page-container" style={{ padding: '1.25rem 5% 3rem', maxWidth: '1200px', margin: '0 auto', minHeight: '75vh' }}>
@@ -31,8 +42,12 @@ const WishlistPage = ({ wishlist, toggleWishlist, addToCart }) => {
                     {wishlist.map(p => {
                         const handleQuickAddToCart = (e) => {
                             e.preventDefault();
-                            const defaultSz = (p.sizes && p.sizes.length > 0) ? p.sizes[0] : 'S';
-                            addToCart({ ...p, size: defaultSz });
+                            if (p.sizes && p.sizes.length > 0) {
+                                setModalProduct(p);
+                                setModalSelectedSize('');
+                            } else {
+                                addToCart({ ...p, size: 'S', quantity: 1 });
+                            }
                         };
 
                         return (
@@ -69,6 +84,15 @@ const WishlistPage = ({ wishlist, toggleWishlist, addToCart }) => {
                     })}
                 </div>
             )}
+            
+            <SizeSelectionModal
+                isOpen={!!modalProduct}
+                onClose={() => setModalProduct(null)}
+                product={modalProduct}
+                selectedSize={modalSelectedSize}
+                onSelectSize={setModalSelectedSize}
+                onAddToCart={handleModalAddToCart}
+            />
         </div>
     );
 };

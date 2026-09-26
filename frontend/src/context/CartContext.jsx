@@ -13,7 +13,8 @@ const CartContext = createContext({
     clearCart: () => {},
     setDiscount: () => {},
     toggleWishlist: () => {},
-    toastProduct: null
+    toastProduct: null,
+    closeToast: () => {}
 });
 
 // Helper to ensure cart items always have an image and price
@@ -250,6 +251,13 @@ export const CartProvider = ({ children }) => {
         }, 5500);
     }, [authUser]);
 
+    const closeToast = useCallback(() => {
+        setToastProduct(null);
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+        }
+    }, []);
+
     // Flexible updateQuantity: handles (index, newQty) OR (id, size, delta)
     const updateQuantity = useCallback((idOrIndex, sizeOrQty, newQtyOrDelta) => {
         setCart(prev => {
@@ -395,7 +403,8 @@ export const CartProvider = ({ children }) => {
             clearCart,
             setDiscount,
             toggleWishlist,
-            toastProduct
+            toastProduct,
+            closeToast
         }}>
             {children}
         </CartContext.Provider>
