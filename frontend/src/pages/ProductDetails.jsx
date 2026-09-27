@@ -156,6 +156,25 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         return JSON.stringify(schema);
     }, [product, reviews, avgRating, galleryImages]);
 
+    const [shareBlob, setShareBlob] = useState(null);
+
+    useEffect(() => {
+        if (product) {
+            const fetchShareImage = async () => {
+                try {
+                    // Adding a timestamp cache-buster to ensure the browser always gets the latest generated banner
+                    const ogImageUrl = `${API_BASE_URL}/api/og-image/${product.id}.jpg?v=${new Date().getTime()}`;
+                    const response = await fetch(ogImageUrl, { cache: 'no-store' });
+                    const blob = await response.blob();
+                    setShareBlob(blob);
+                } catch (err) {
+                    console.error("Failed to prefetch share image", err);
+                }
+            };
+            fetchShareImage();
+        }
+    }, [product]);
+
     const breadcrumbJSON = useMemo(() => {
         if (!product) return null;
         return JSON.stringify({
@@ -249,10 +268,14 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         try {
             let filesArray = [];
             try {
-                // Try to fetch the dynamic composite OG image and convert to a File object
-                const ogImageUrl = `${API_BASE_URL}/api/og-image/${product.id}.jpg`;
-                const response = await fetch(ogImageUrl);
-                const blob = await response.blob();
+                let blob = shareBlob;
+                if (!blob) {
+                    // If the user clicked share before the background prefetch finished, fetch it now!
+                    const ogImageUrl = `${API_BASE_URL}/api/og-image/${product.id}.jpg?v=${new Date().getTime()}`;
+                    const response = await fetch(ogImageUrl);
+                    blob = await response.blob();
+                }
+                
                 const file = new File([blob], 'product-preview.jpg', { type: blob.type || 'image/jpeg' });
                 filesArray.push(file);
             } catch (imgErr) {
