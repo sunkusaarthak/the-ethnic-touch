@@ -53,7 +53,7 @@ const WishlistPage = ({ wishlist, toggleWishlist, addToCart }) => {
                         return (
                             <div key={p.id} style={{ position: 'relative' }}>
                                 <div className="product-card" style={{ padding: '0.65rem' }}>
-                                    <Link to={`/product/${p.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                                    <Link to={`/product/${p.id}/${p.name ? p.name.toLowerCase().replace(/[\s\/]+/g, '-') : ''}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
                                         <div className="product-image-container" style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden' }}>
                                             <div className="wishlist-heart-btn active" onClick={(e) => {
                                                 e.preventDefault();

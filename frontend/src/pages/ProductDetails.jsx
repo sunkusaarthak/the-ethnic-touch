@@ -97,6 +97,91 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                 });
         }
         return () => controller.abort();
+        return () => controller.abort();
+    }, [product]);
+
+    const avgRating = reviews.length > 0 
+        ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) 
+        : 0;
+
+    const galleryImages = (product && product.galleryImages && product.galleryImages.length > 0) 
+        ? product.galleryImages 
+        : (product ? [product.imageUrl] : []);
+
+    const schemaJSON = useMemo(() => {
+        if (!product) return null;
+        
+        const availability = (product.sizesStock && Object.values(product.sizesStock).some(qty => qty > 0)) 
+            ? "https://schema.org/InStock" 
+            : "https://schema.org/OutOfStock";
+
+        const schema = {
+            "@context": "https://schema.org/",
+            "@type": "Product",
+            "name": product.name,
+            "image": galleryImages,
+            "description": product.description,
+            "brand": {
+                "@type": "Brand",
+                "name": "The Ethnic Touch"
+            },
+            "offers": {
+                "@type": "Offer",
+                "url": window.location.href,
+                "priceCurrency": "INR",
+                "price": product.price,
+                "availability": availability
+            }
+        };
+
+        if (reviews && reviews.length > 0) {
+            schema.aggregateRating = {
+                "@type": "AggregateRating",
+                "ratingValue": avgRating,
+                "reviewCount": reviews.length
+            };
+            schema.review = reviews.slice(0, 5).map(rev => ({
+                "@type": "Review",
+                "reviewRating": {
+                    "@type": "Rating",
+                    "ratingValue": rev.rating,
+                    "bestRating": "5"
+                },
+                "author": {
+                    "@type": "Person",
+                    "name": rev.userName
+                }
+            }));
+        }
+        return JSON.stringify(schema);
+    }, [product, reviews, avgRating, galleryImages]);
+
+    const breadcrumbJSON = useMemo(() => {
+        if (!product) return null;
+        return JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [{
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://theethnictouch.com/"
+            },{
+                "@type": "ListItem",
+                "position": 2,
+                "name": "Shop",
+                "item": "https://theethnictouch.com/shop"
+            },{
+                "@type": "ListItem",
+                "position": 3,
+                "name": product.category || "Collection",
+                "item": `https://theethnictouch.com/shop/${(product.category || "").toLowerCase().replace(" ", "-")}`
+            },{
+                "@type": "ListItem",
+                "position": 4,
+                "name": product.name
+            }]
+        });
     }, [product]);
 
     if (isFetchingDelta) {
@@ -113,10 +198,6 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     }
 
     const isWished = wishlist ? wishlist.some(item => item.id === product.id) : false;
-
-    const galleryImages = (product.galleryImages && product.galleryImages.length > 0) 
-        ? product.galleryImages 
-        : [product.imageUrl];
 
     const handleCarouselScroll = () => {
         if (!carouselRef.current) return;
@@ -165,20 +246,52 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     };
 
     const handleShare = async () => {
-        const shareData = {
-            title: `${product.name} | The Ethnic Touch`,
-            text: product.description,
-            url: window.location.href,
-        };
         try {
+            let filesArray = [];
+            try {
+                // Try to fetch the dynamic composite OG image and convert to a File object
+                const ogImageUrl = `${API_BASE_URL}/api/og-image/${product.id}.jpg`;
+                const response = await fetch(ogImageUrl);
+                const blob = await response.blob();
+                const file = new File([blob], 'product-preview.jpg', { type: blob.type || 'image/jpeg' });
+                filesArray.push(file);
+            } catch (imgErr) {
+                console.error("Could not fetch image for share:", imgErr);
+            }
+
+            const shareUrl = new URL(window.location.href);
+            shareUrl.searchParams.set('utm_source', 'user_share');
+            shareUrl.searchParams.set('utm_medium', 'social');
+            shareUrl.searchParams.set('utm_campaign', 'product_share');
+
+            const shareData = {
+                title: `${product.name} | The Ethnic Touch`,
+                text: product.description,
+                url: shareUrl.toString(),
+            };
+            
+            const shareDataWithFiles = { ...shareData, files: filesArray };
+
             if (navigator.share) {
-                await navigator.share(shareData);
+                if (navigator.canShare && navigator.canShare(shareDataWithFiles)) {
+                    await navigator.share(shareDataWithFiles);
+                } else {
+                    await navigator.share(shareData);
+                }
             } else {
-                await navigator.clipboard.writeText(window.location.href);
-                alert("Link copied to clipboard!");
+                throw new Error("Web Share API not supported");
             }
         } catch (err) {
             console.error("Error sharing:", err);
+            // Fallback to clipboard if user didn't explicitly abort the share
+            if (err.name !== 'AbortError') {
+                try {
+                    await navigator.clipboard.writeText(window.location.href);
+                    alert("Link copied to clipboard!");
+                } catch (clipboardErr) {
+                    console.error("Clipboard copy failed:", clipboardErr);
+                }
+            }
         }
     };
 
@@ -233,17 +346,14 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         }
     };
 
-    const avgRating = reviews.length > 0 
-        ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) 
-        : 0;
-
-    // Find up to 4 recommended products (excluding current one)
     const recommendedList = products
         .filter(p => p.id !== product.id)
         .slice(0, 4);
 
     return (
         <div className="product-details-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
+            {schemaJSON && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: schemaJSON }} />}
+            {breadcrumbJSON && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: breadcrumbJSON }} />}
             <a href="#" onClick={handleBack} className="product-details-back-link" style={{display:'inline-block', marginBottom:'1.5rem', color:'var(--color-text-light)', textDecoration:'none', transition:'color 0.2s'}}>&larr; Back to Collection</a>
             
             <div className="desktop-split-layout product-details-layout" style={{gap: '3rem', alignItems: 'flex-start'}}>
@@ -268,7 +378,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                         flexShrink: 0
                                     }}
                                 >
-                                    <ImageWithSkeleton src={imgUrl} alt={`Thumbnail ${idx+1}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                                    <ImageWithSkeleton src={imgUrl} alt={`${product.name} - Premium Jaipuri View ${idx+1}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
                                 </div>
                             ))}
                         </div>
@@ -297,7 +407,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                 <div key={idx} id={`gallery-slide-${idx}`} className="gallery-carousel-slide">
                                     <ZoomableImage 
                                         src={imgUrl} 
-                                        alt={`${product.name} - View ${idx + 1}`} 
+                                        alt={`${product.name} - Premium Jaipuri Quality View ${idx + 1}`} 
                                         className="gallery-slide-img" 
                                         style={{ height: '100%' }}
                                     />
@@ -563,7 +673,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     <p style={{color: 'var(--color-text-light)', textAlign: 'center', marginBottom: '2.5rem', fontSize: '1rem'}}>Complete your look with our top pastel pairings.</p>
                     <div className="recommendations-grid">
                         {recommendedList.map(item => (
-                            <Link to={`/product/${item.id}`} key={item.id} className="recommended-card" onClick={() => window.scrollTo(0, 0)}>
+                            <Link to={`/product/${item.id}/${item.name ? item.name.toLowerCase().replace(/[\s\/]+/g, '-') : ''}`} key={item.id} className="recommended-card" onClick={() => window.scrollTo(0, 0)}>
                                 <div className="recommended-image-wrapper">
                                     <img 
                                         className="recommended-img" 

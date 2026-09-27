@@ -45,16 +45,25 @@ func main() {
 	width := bounds.Dx()
 	height := bounds.Dy()
 	
-	// Assume square
-	radius := width / 2
-	if height < width {
-		radius = height / 2
+	// Assume square based on smallest dimension
+	side := width
+	if height < side {
+		side = height
 	}
+	radius := side / 2
 
-	mask := &circleMask{image.Point{width / 2, height / 2}, radius}
+	mask := &circleMask{image.Point{side / 2, side / 2}, radius}
 
-	result := image.NewRGBA(bounds)
-	draw.DrawMask(result, bounds, img, image.Point{}, mask, image.Point{}, draw.Over)
+	// Create a perfectly square bounds for the new image
+	squareBounds := image.Rect(0, 0, side, side)
+	result := image.NewRGBA(squareBounds)
+
+	// Calculate offset to crop from the center of the original image
+	offsetX := (width - side) / 2
+	offsetY := (height - side) / 2
+	srcPoint := image.Point{X: offsetX, Y: offsetY}
+
+	draw.DrawMask(result, squareBounds, img, srcPoint, mask, image.Point{}, draw.Over)
 
 	outFile, err := os.Create("frontend/public/favicon_circle.png")
 	if err != nil {

@@ -81,6 +81,8 @@ func (a *App) setupRoutes() {
 	configHandler := handlers.NewConfigHandler(configSvc)
 	staffHandler := handlers.NewStaffHandler(adminUserRepo)
 	contactHandler := handlers.NewContactHandler(contactSvc)
+	sitemapHandler := handlers.NewSitemapHandler(productSvc)
+	ogHandler := handlers.NewOgHandler(productSvc)
 
 	adminOnly := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin")
 	adminOrEmployee := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin", "employee")
@@ -218,6 +220,10 @@ func (a *App) setupRoutes() {
 		w.Write([]byte(`{"status":"` + status + `", "database":"` + dbStatus + `"}`))
 	})
 
+	// SEO Sitemap & OG Images
+	a.Router.HandleFunc("/sitemap.xml", sitemapHandler.HandleSitemap)
+	a.Router.HandleFunc("/api/og-image/", ogHandler.HandleOgImage)
+
 	// Static file server fallback for SPA & Admin Portal
 	frontendDist := "./frontend/dist"
 	frontendPublic := "./frontend/public"
@@ -263,6 +269,9 @@ func (a *App) setupRoutes() {
 		// Inject dynamic Open Graph tags for product pages
 		if strings.HasPrefix(path, "/product/") {
 			idStr := strings.TrimPrefix(path, "/product/")
+			if idx := strings.Index(idStr, "/"); idx != -1 {
+				idStr = idStr[:idx] // Extract just the ID if slug is present
+			}
 			if idStr != "" {
 				product, err := productRepo.GetProductByID(idStr)
 				if err == nil && product != nil {
@@ -271,10 +280,7 @@ func (a *App) setupRoutes() {
 					if err == nil {
 						htmlContent := string(htmlBytes)
 						// Create dynamic meta tags
-						imageURL := "/favicon.png"
-						if product.ImageURL != "" {
-							imageURL = product.ImageURL
-						}
+						imageURL := "https://theethnictouch.com/api/og-image/" + product.ID + ".jpg"
 						
 						// Check availability for Schema
 						availability := "https://schema.org/OutOfStock"
@@ -309,6 +315,7 @@ func (a *App) setupRoutes() {
 							</script>
 						`, product.Name, imageURL, product.Description, "https://theethnictouch.com"+path, product.Price, availability)
 
+						twitterPrice := fmt.Sprintf("₹%.0f", product.Price)
 						dynamicTags := fmt.Sprintf(`
 							<title>%s | The Ethnic Touch</title>
 							<meta name="description" content="%s">
@@ -317,9 +324,17 @@ func (a *App) setupRoutes() {
 							<meta property="og:image" content="%s">
 							<meta property="og:url" content="%s">
 							<meta property="og:type" content="product">
+							<meta property="product:price:amount" content="%f">
+							<meta property="product:price:currency" content="INR">
+							<meta property="product:availability" content="%s">
 							<meta name="twitter:card" content="summary_large_image">
+							<meta name="twitter:title" content="%s">
+							<meta name="twitter:description" content="%s">
+							<meta name="twitter:image" content="%s">
+							<meta name="twitter:label1" content="Price">
+							<meta name="twitter:data1" content="%s">
 							%s
-						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://theethnictouch.com"+path, jsonLD)						
+						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://theethnictouch.com"+path, product.Price, availability, product.Name, product.Description, imageURL, twitterPrice, jsonLD)						
 						htmlContent = strings.Replace(htmlContent, "<!-- DYNAMIC_META_TAGS -->", dynamicTags, 1)
 						
 						w.Header().Set("Content-Type", "text/html; charset=utf-8")
