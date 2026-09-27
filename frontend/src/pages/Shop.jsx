@@ -32,13 +32,20 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
+    const { category: routeCategory } = useParams();
     const isFirstRender = useRef(true);
 
-    // Map HashRouter query parameters directly to active filter states on load/route updates
+    // Map HashRouter/BrowserRouter query parameters and route params directly to active filter states
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         
-        const category = params.get('category');
+        let category = params.get('category');
+        if (routeCategory) {
+            if (routeCategory === 'straight-cut') category = 'Straight Cut';
+            else if (routeCategory === 'anarkali') category = 'Anarkali';
+            else if (routeCategory === 'tunic') category = 'Tunic';
+            else if (routeCategory === 'fusion') category = 'Fusion';
+        }
         setSelectedCategories(category ? category.split(',') : []);
         
         const size = params.get('sizes');
@@ -81,6 +88,26 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
         setCurrentPage(1);
     }, [location.search]);
 
+    // Handle Canonical URL to fix faceted navigation duplicate content SEO issues
+    useEffect(() => {
+        let link = document.querySelector("link[rel='canonical']");
+        let created = false;
+        if (!link) {
+            link = document.createElement("link");
+            link.setAttribute("rel", "canonical");
+            document.head.appendChild(link);
+            created = true;
+        }
+        const cleanUrl = window.location.origin + window.location.pathname;
+        link.setAttribute("href", cleanUrl);
+        
+        return () => {
+            if (created && link.parentNode) {
+                link.parentNode.removeChild(link);
+            }
+        };
+    }, [location.pathname]);
+
     // Push local filter state changes to URL to support copy-paste deep links
     useEffect(() => {
         if (isFirstRender.current) {
@@ -108,8 +135,25 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
         const newSearch = params.toString();
         const currentSearch = location.search.replace(/^\?/, '');
         
-        if (newSearch !== currentSearch) {
-            navigate('/shop?' + newSearch, { replace: true });
+        let targetPath = '/shop';
+        if (selectedCategories.length === 1 && selectedCategories[0]) {
+            const cat = selectedCategories[0];
+            if (cat === 'Straight Cut') targetPath = '/shop/straight-cut';
+            else if (cat === 'Anarkali') targetPath = '/shop/anarkali';
+            else if (cat === 'Tunic') targetPath = '/shop/tunic';
+            else if (cat === 'Fusion') targetPath = '/shop/fusion';
+        }
+        
+        // Remove category param if we are using the route path, to keep it clean
+        if (targetPath !== '/shop') {
+            params.delete('category');
+        }
+
+        const finalSearch = params.toString();
+        const finalUrl = targetPath + (finalSearch ? '?' + finalSearch : '');
+        
+        if (location.pathname + location.search !== finalUrl) {
+            navigate(finalUrl, { replace: true });
         }
     }, [
         selectedCategories,
@@ -366,6 +410,20 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
         return () => observer.disconnect();
     }, [handleObserver]);
 
+    // SEO Descriptions
+    const seoContent = {
+        'Straight Cut': {
+            title: 'Shop Premium Straight Cut Kurtis',
+            text: 'Discover the elegance of our meticulously crafted straight cut kurtis, perfectly tailored for the modern Indian woman. At The Ethnic Touch, our straight kurtas merge classic Jaipur craftsmanship with contemporary fits, ensuring you look poised whether at work or a festive gathering. Choose from a variety of premium breathable fabrics like fine cotton, georgette, and rich silks, featuring intricate Resham embroidery and traditional motifs. A staple for any ethnic wardrobe, the straight cut silhouette flatters all body types by providing a sleek, elongated look. Pair them effortlessly with palazzos, leggings, or trousers for versatile styling. Shop our authentic straight cut kurtis online today and experience unmatched quality delivered directly from our Jaipur artisans to your doorstep.'
+        },
+        'Anarkali': {
+            title: 'Authentic Jaipuri Anarkali Sets',
+            text: 'Embrace regal charm with our exclusive collection of Anarkali kurtis and suits. The Ethnic Touch brings you the grandeur of Jaipur heritage infused into sweeping, floor-length silhouettes and beautifully flared dresses. Each Anarkali in our collection is a masterpiece of design, featuring delicate hand-embroidery, vibrant Rajasthani prints, and luxurious fabrics that drape flawlessly. Ideal for weddings, festive celebrations, and special occasions, our Anarkali sets offer a royal appeal with modern comfort. We pride ourselves on creating garments that not only look spectacular but also feel incredibly soft against the skin. Explore our wide range of Anarkali designs, from subtle pastels to deep jewel tones, and add a touch of majestic elegance to your ethnic wear collection.'
+        }
+    };
+    const activeCategory = selectedCategories.length === 1 ? selectedCategories[0] : null;
+    const activeSeo = activeCategory ? seoContent[activeCategory] : null;
+
     return (
         <div>
             <span id="shop-top-anchor" style={{ display: 'block', height: '1px' }}></span>
@@ -464,6 +522,14 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
                                 </div>
                             )}
                             <div ref={loader} style={{ height: '20px' }}></div>
+                        </div>
+                    )}
+
+                    {/* SEO Rich Text for Categories */}
+                    {activeSeo && (
+                        <div className="category-seo-content" style={{ marginTop: '4rem', padding: '2rem', backgroundColor: '#fcfaf8', borderRadius: '12px', border: '1px solid #f2ece4' }}>
+                            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#2c2c2c', fontFamily: 'var(--font-title)' }}>{activeSeo.title}</h2>
+                            <p style={{ fontSize: '0.95rem', lineHeight: '1.7', color: '#555', margin: 0 }}>{activeSeo.text}</p>
                         </div>
                     )}
                 </main>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, HashRouter } from 'react-router-dom';
+import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Footer from './components/Footer';
 import Navbar from './components/Navbar';
 import ScrollToTop from './components/ScrollToTop';
@@ -13,6 +13,8 @@ import ProductDetails from './pages/ProductDetails';
 import ProfilePage from './pages/ProfilePage';
 import CompleteProfile from './pages/CompleteProfile';
 import Shop from './pages/Shop';
+import About from './pages/About';
+import Blog from './pages/Blog';
 import WishlistPage from './pages/WishlistPage';
 import SpinWheel from './pages/SpinWheel';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -95,15 +97,16 @@ const AppRoutesContent = () => {
 
     const handleSearchSubmit = (q) => {
         setGlobalSearch(q);
-        if (window.location.hash !== "#/shop") {
-            window.location.hash = "#/shop";
+        if (window.location.pathname !== "/shop") {
+            window.history.pushState(null, '', '/shop');
+            window.dispatchEvent(new Event('popstate'));
         }
     };
 
     const cartCount = (cart || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
 
     return (
-        <HashRouter>
+        <BrowserRouter>
             <ScrollToTop />
             <Navbar 
                 products={products}
@@ -128,7 +131,7 @@ const AppRoutesContent = () => {
                     } 
                 />
                 <Route 
-                    path="/shop" 
+                    path="/shop/:category?" 
                     element={
                         <Shop 
                             productsGlobal={products}
@@ -140,7 +143,9 @@ const AppRoutesContent = () => {
                     } 
                 />
 
-                <Route path="/product/:id" element={<ProductDetails products={products} addToCart={addToCart} wishlist={wishlist} toggleWishlist={toggleWishlist} authUser={authUser} />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/blog" element={<Blog />} />
+                <Route path="/product/:id/:slug?" element={<ProductDetails products={products} addToCart={addToCart} wishlist={wishlist} toggleWishlist={toggleWishlist} authUser={authUser} />} />
                 <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} onApplyCoupon={setDiscount} discount={discount} authUser={authUser} wishlist={wishlist} toggleWishlist={toggleWishlist} profileIncomplete={profileIncomplete} />} />
                 <Route 
                     path="/checkout" 
@@ -194,8 +199,8 @@ const AppRoutesContent = () => {
                     </div>
                     
                     <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
-                        <a 
-                            href="#/shop"
+                        <Link 
+                            to="/shop"
                             style={{ 
                                 flex: 1, 
                                 height: '40px',
@@ -217,9 +222,9 @@ const AppRoutesContent = () => {
                             onClick={closeToast}
                         >
                             Continue Shopping
-                        </a>
-                        <a 
-                            href="#/cart" 
+                        </Link>
+                        <Link 
+                            to="/cart" 
                             style={{ 
                                 flex: 1, 
                                 height: '40px',
@@ -241,11 +246,11 @@ const AppRoutesContent = () => {
                             onClick={closeToast}
                         >
                             Checkout &rarr;
-                        </a>
+                        </Link>
                     </div>
                 </div>
             )}
-        </HashRouter>
+        </BrowserRouter>
     );
 };
 

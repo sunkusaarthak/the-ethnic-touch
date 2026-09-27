@@ -4,10 +4,11 @@ import ImageWithSkeleton from './ImageWithSkeleton';
 
 const RenderProductCard = ({ product, wishlist, toggleWishlist }) => {
     const isWished = wishlist.some(item => item.id === product.id);
+    const slug = product.name ? product.name.toLowerCase().replace(/[\s\/]+/g, '-') : '';
 
     return (
         <div style={{ position: 'relative' }}>
-            <Link to={`/product/${product.id}`} className="product-card" style={{ display: 'block' }}>
+            <Link to={`/product/${product.id}/${slug}`} className="product-card" style={{ display: 'block' }}>
                 <div className="product-image-container">
                     <ImageWithSkeleton src={product.imageUrl} alt={product.name} className="product-image" />
                 </div>

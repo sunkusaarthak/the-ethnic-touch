@@ -46,7 +46,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
     useEffect(() => {
         const stored = localStorage.getItem('tet_recent_searches');
         if (stored) {
-            try { setRecentSearches(JSON.parse(stored)); } catch(e){}
+            try { setRecentSearches(JSON.parse(stored)); } catch (e) { }
         }
     }, []);
 
@@ -69,20 +69,20 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
     const popularTags = ["Silk", "Cotton", "Daily Wear", "Anarkali", "Embroidered"];
 
     const matchingProducts = (globalSearch.trim().length > 1 && Array.isArray(products))
-        ? products.filter(p => 
-            p.name.toLowerCase().includes(globalSearch.toLowerCase()) || 
-            (p.category && p.category.toLowerCase().includes(globalSearch.toLowerCase())) || 
+        ? products.filter(p =>
+            p.name.toLowerCase().includes(globalSearch.toLowerCase()) ||
+            (p.category && p.category.toLowerCase().includes(globalSearch.toLowerCase())) ||
             (p.tags && p.tags.toLowerCase().includes(globalSearch.toLowerCase()))
-          ).slice(0, 4)
+        ).slice(0, 4)
         : [];
 
     return (
         <nav className="navbar" style={{ padding: '0.7rem 4%' }}>
             <div className="nav-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '1rem' }}>
                 {/* Mobile Hamburger Button */}
-                <button 
-                    type="button" 
-                    className="mobile-hamburger-btn" 
+                <button
+                    type="button"
+                    className="mobile-hamburger-btn"
                     onClick={() => setMobileMenuOpen(true)}
                     aria-label="Open mobile menu"
                 >
@@ -93,23 +93,23 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                     </svg>
                 </button>
 
-                <Link to="/" onClick={() => { setGlobalSearch(''); setMobileMenuOpen(false); setMobileSearchOpen(false); }} className="logo" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
-                    <img src="/navbar-logo.png" alt="Icon" style={{ height: '48px', width: 'auto', objectFit: 'contain' }} />
-                    <span className="logo-separator" style={{ borderLeft: '1.5px solid var(--color-primary)', height: '28px', borderRadius: '2px' }}></span>
-                    <span className="logo-text" style={{ fontFamily: "'Playfair Display', serif", fontStyle: 'italic', fontWeight: '500', letterSpacing: '0.2px', fontSize: '1.5rem', color: '#2c2c2c' }}>
+                <Link to="/" onClick={() => { setGlobalSearch(''); setMobileMenuOpen(false); setMobileSearchOpen(false); }} className="logo" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+                    <img src="/navbar-logo.png" alt="Icon" style={{ height: '46px', width: 'auto', objectFit: 'contain', marginRight: '0px' }} />
+                    <span className="logo-separator" style={{ borderLeft: '1.5px solid var(--color-primary)', height: '26px', borderRadius: '2px', marginRight: '14px' }}></span>
+                    <span className="logo-text" style={{ fontFamily: "'Playfair Display', serif", fontStyle: 'italic', fontWeight: '500', letterSpacing: '0.2px', fontSize: '1.45rem', color: '#2c2c2c' }}>
                         The Ethnic Touch
                     </span>
                 </Link>
-                
+
                 {/* Center: Desktop Category Navigation */}
                 <ul className="desktop-category-nav">
                     <li><Link to="/">Home</Link></li>
                     <li><Link to="/shop">Shop</Link></li>
-                    <li><Link to="/contact">Contact Us</Link></li>
-                    <li><Link to="/shop?category=Straight Cut">Straight Cut</Link></li>
-                    <li><Link to="/shop?category=Anarkali">Anarkali</Link></li>
-                    <li><Link to="/shop?category=Tunic">Tunic</Link></li>
-                    <li><Link to="/shop?category=Fusion">Fusion</Link></li>
+                    <li><Link to="/about">About Us</Link></li>
+                    <li><Link to="/shop/straight-cut">Straight Cut</Link></li>
+                    <li><Link to="/shop/anarkali">Anarkali</Link></li>
+                    <li><Link to="/shop/tunic">Tunic</Link></li>
+                    <li><Link to="/shop/fusion">Fusion</Link></li>
                 </ul>
 
                 {/* Right: Compact Search Bar & Icon Badges */}
@@ -120,9 +120,9 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                             <span className="search-icon" style={{ display: 'flex', alignItems: 'center' }}>
                                 <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                             </span>
-                            <input 
-                                type="text" 
-                                className="search-input" 
+                            <input
+                                type="text"
+                                className="search-input"
                                 placeholder="Search wardrobe..."
                                 value={globalSearch}
                                 onChange={(e) => setGlobalSearch(e.target.value)}
@@ -133,8 +133,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                 style={{ fontSize: '0.78rem', padding: '0 6px', height: '100%', border: 'none', background: 'transparent' }}
                             />
                             {globalSearch && (
-                                <button 
-                                    onClick={() => setGlobalSearch('')} 
+                                <button
+                                    onClick={() => setGlobalSearch('')}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '1rem', padding: '0 4px' }}
                                 >
                                     &times;
@@ -152,8 +152,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                                 <div className="suggestion-section-title">Recent Searches</div>
                                                 <div className="suggestion-tags">
                                                     {recentSearches.map((s, idx) => (
-                                                        <span 
-                                                            key={idx} 
+                                                        <span
+                                                            key={idx}
                                                             className="suggestion-tag-chip"
                                                             onClick={() => handleSearchSubmit(s)}
                                                         >
@@ -167,8 +167,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                             <div className="suggestion-section-title">Trending Now</div>
                                             <div className="suggestion-tags">
                                                 {popularTags.map((tag, idx) => (
-                                                    <span 
-                                                        key={idx} 
+                                                    <span
+                                                        key={idx}
                                                         className="suggestion-tag-chip"
                                                         onClick={() => handleSearchSubmit(tag)}
                                                     >
@@ -186,9 +186,9 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                         ) : (
                                             <div className="matching-products-list">
                                                 {matchingProducts.map(p => (
-                                                    <Link 
-                                                        key={p.id} 
-                                                        to={`/product/${p.id}`} 
+                                                    <Link
+                                                        key={p.id}
+                                                        to={`/product/${p.id}/${p.name ? p.name.toLowerCase().replace(/[\s\/]+/g, '-') : ''}`}
                                                         className="matching-product-item"
                                                         onClick={() => setIsFocused(false)}
                                                     >
@@ -199,7 +199,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                                         </div>
                                                     </Link>
                                                 ))}
-                                                <div 
+                                                <div
                                                     onClick={() => handleSearchSubmit(globalSearch)}
                                                     style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: '600', padding: '6px 0', borderTop: '1px solid #f5f5f5', marginTop: '4px', cursor: 'pointer' }}
                                                 >
@@ -239,7 +239,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                 </svg>
                                 {profileIncomplete && <span className="desktop-badge-dot"></span>}
                             </div>
-                            
+
                             {profileMenuOpen && (
                                 <div style={{
                                     position: 'absolute',
@@ -277,9 +277,9 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
 
                 {/* Mobile Quick Action Badges (Search, Wishlist & Cart) */}
                 <div className="mobile-header-actions">
-                    <button 
-                        type="button" 
-                        className="mobile-search-toggle-btn" 
+                    <button
+                        type="button"
+                        className="mobile-search-toggle-btn"
                         onClick={() => { setMobileSearchOpen(!mobileSearchOpen); setIsFocused(!mobileSearchOpen); }}
                         title="Search wardrobe"
                     >
@@ -312,9 +312,9 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                         <span className="search-icon">
                             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                         </span>
-                        <input 
-                            type="text" 
-                            className="search-input" 
+                        <input
+                            type="text"
+                            className="search-input"
                             placeholder="Search wardrobe, fabrics..."
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
@@ -324,8 +324,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                 if (e.key === 'Enter') handleSearchSubmit(globalSearch);
                             }}
                         />
-                        <button 
-                            onClick={() => setMobileSearchOpen(false)} 
+                        <button
+                            onClick={() => setMobileSearchOpen(false)}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '1.2rem', padding: '0 8px' }}
                         >
                             &times;
@@ -342,8 +342,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                             <div className="suggestion-section-title">Recent Searches</div>
                                             <div className="suggestion-tags">
                                                 {recentSearches.map((s, idx) => (
-                                                    <span 
-                                                        key={idx} 
+                                                    <span
+                                                        key={idx}
                                                         className="suggestion-tag-chip"
                                                         onClick={() => handleSearchSubmit(s)}
                                                     >
@@ -357,8 +357,8 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                         <div className="suggestion-section-title">Trending Now</div>
                                         <div className="suggestion-tags">
                                             {popularTags.map((tag, idx) => (
-                                                <span 
-                                                    key={idx} 
+                                                <span
+                                                    key={idx}
                                                     className="suggestion-tag-chip"
                                                     onClick={() => handleSearchSubmit(tag)}
                                                 >
@@ -376,9 +376,9 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                     ) : (
                                         <div className="matching-products-list">
                                             {matchingProducts.map(p => (
-                                                <Link 
-                                                    key={p.id} 
-                                                    to={`/product/${p.id}`} 
+                                                <Link
+                                                    key={p.id}
+                                                    to={`/product/${p.id}/${p.name ? p.name.toLowerCase().replace(/[\s\/]+/g, '-') : ''}`}
                                                     className="matching-product-item"
                                                     onClick={() => { setIsFocused(false); setMobileSearchOpen(false); }}
                                                 >
@@ -389,7 +389,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                                     </div>
                                                 </Link>
                                             ))}
-                                            <div 
+                                            <div
                                                 onClick={() => handleSearchSubmit(globalSearch)}
                                                 style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: '600', padding: '6px 0', borderTop: '1px solid #f5f5f5', marginTop: '4px', cursor: 'pointer' }}
                                             >
@@ -415,7 +415,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                             </Link>
                             <button className="mobile-drawer-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">&times;</button>
                         </div>
-                        
+
                         <div className="mobile-drawer-body">
                             <div className="mobile-drawer-nav-group">
                                 <Link to="/" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
@@ -437,6 +437,13 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                                     </div>
                                     <span className="drawer-item-label">Contact Us</span>
+                                </Link>
+
+                                <Link to="/about" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
+                                    <div className="drawer-item-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                    </div>
+                                    <span className="drawer-item-label">About Us</span>
                                 </Link>
 
                                 <Link to="/wishlist" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-item">
@@ -475,10 +482,10 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                             <div className="mobile-drawer-sub-group">
                                 <div className="drawer-sub-heading">Featured Silhouettes</div>
                                 <div className="drawer-sub-grid">
-                                    <Link to="/shop?category=Straight Cut" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Straight Cut</Link>
-                                    <Link to="/shop?category=Anarkali" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Anarkali Sets</Link>
-                                    <Link to="/shop?category=Tunic" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Tunic Dresses</Link>
-                                    <Link to="/shop?category=Fusion" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Fusion Wear</Link>
+                                    <Link to="/shop/straight-cut" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Straight Cut</Link>
+                                    <Link to="/shop/anarkali" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Anarkali Sets</Link>
+                                    <Link to="/shop/tunic" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Tunic Dresses</Link>
+                                    <Link to="/shop/fusion" onClick={() => setMobileMenuOpen(false)} className="drawer-sub-chip">Fusion Wear</Link>
                                 </div>
                             </div>
                         </div>
