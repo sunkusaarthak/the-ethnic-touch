@@ -10,7 +10,12 @@ const RenderProductCard = ({ product, wishlist, toggleWishlist }) => {
         <div style={{ position: 'relative' }}>
             <Link to={`/product/${product.id}/${slug}`} className="product-card" style={{ display: 'block' }}>
                 <div className="product-image-container">
-                    <ImageWithSkeleton src={product.imageUrl} alt={product.name} className="product-image" />
+                    <ImageWithSkeleton 
+                        src={product.imageUrl} 
+                        alt={`${product.name} - Premium ${product.category || 'Kurti'} by The Ethnic Touch`}
+                        loading="lazy"
+                        className="product-image" 
+                    />
                 </div>
                 <div className="product-info">
                     <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>
