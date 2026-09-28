@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
 import ImageWithSkeleton from '../components/ImageWithSkeleton';
@@ -375,6 +376,10 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
 
     return (
         <div className="product-details-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
+            <Helmet>
+                <title>{product.name} | The Ethnic Touch</title>
+                <meta name="description" content={product.description} />
+            </Helmet>
             {schemaJSON && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: schemaJSON }} />}
             {breadcrumbJSON && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: breadcrumbJSON }} />}
             <a href="#" onClick={handleBack} className="product-details-back-link" style={{display:'inline-block', marginBottom:'1.5rem', color:'var(--color-text-light)', textDecoration:'none', transition:'color 0.2s'}}>&larr; Back to Collection</a>
@@ -701,7 +706,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                     <img 
                                         className="recommended-img" 
                                         src={item.imageUrl} 
-                                        alt={item.name} 
+                                        alt={`${item.name} - Premium ${item.category || 'Ethnic Wear'} for Women`}
+                                        loading="lazy"
                                         onError={(e) => { e.target.src = './images/kurthi_peach.png'; }}
                                     />
                                     <span className="recommended-badge">{item.category}</span>
