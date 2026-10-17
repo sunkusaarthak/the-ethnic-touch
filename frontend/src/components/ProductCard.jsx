@@ -1,20 +1,67 @@
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import ImageWithSkeleton from './ImageWithSkeleton';
 
-const RenderProductCard = ({ product, wishlist, toggleWishlist }) => {
+/**
+ * Silently preloads a list of image URLs into the browser cache
+ * using the Image() constructor trick — no DOM nodes are added.
+ */
+function prefetchImages(urls = []) {
+    urls.forEach(url => {
+        if (!url) return;
+        const img = new Image();
+        img.src = url;
+    });
+}
+
+const RenderProductCard = ({ product, wishlist, toggleWishlist, index = 99 }) => {
     const isWished = wishlist.some(item => item.id === product.id);
     const slug = product.name ? product.name.toLowerCase().replace(/[\s\/]+/g, '-') : '';
 
+    // Images are now served from Cloudflare R2 as static files.
+    // No URL transformation required — use the URL stored in the DB directly.
+    const optimizedImageUrl = product.imageUrl || '';
+
+    // Above-fold cards (first 4) load eagerly with high priority.
+    // All others load lazily as the user scrolls.
+    const isAboveFold = index < 4;
+    const loadingStrategy = isAboveFold ? 'eager' : 'lazy';
+    const fetchPriority   = isAboveFold ? 'high'  : 'auto';
+
+    // Hover prefetch — after 200ms hover, silently load all gallery images
+    // so the product detail page renders instantly when the user clicks.
+    const hoverTimer = useRef(null);
+    const prefetchedRef = useRef(false);
+
+    const handleMouseEnter = useCallback(() => {
+        if (prefetchedRef.current) return;
+        hoverTimer.current = setTimeout(() => {
+            if (product.galleryImages && product.galleryImages.length > 0) {
+                // Skip index 0 (same as imageUrl, already loaded as primary)
+                prefetchImages(product.galleryImages.slice(1));
+            }
+            prefetchedRef.current = true;
+        }, 200);
+    }, [product.galleryImages]);
+
+    const handleMouseLeave = useCallback(() => {
+        clearTimeout(hoverTimer.current);
+    }, []);
+
     return (
-        <div style={{ position: 'relative' }}>
+        <div
+            style={{ position: 'relative' }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+        >
             <Link to={`/product/${product.id}/${slug}`} className="product-card" style={{ display: 'block' }}>
                 <div className="product-image-container">
-                    <ImageWithSkeleton 
-                        src={product.imageUrl} 
+                    <ImageWithSkeleton
+                        src={optimizedImageUrl}
                         alt={`${product.name} - Premium ${product.category || 'Kurti'} by The Ethnic Touch`}
-                        loading="lazy"
-                        className="product-image" 
+                        loading={loadingStrategy}
+                        fetchpriority={fetchPriority}
+                        className="product-image"
                     />
                 </div>
                 <div className="product-info">
@@ -42,7 +89,7 @@ const RenderProductCard = ({ product, wishlist, toggleWishlist }) => {
                 </div>
             </Link>
 
-            <button 
+            <button
                 className={`wishlist-heart-btn ${isWished ? 'active' : ''}`}
                 onClick={(e) => {
                     e.preventDefault();

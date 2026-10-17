@@ -6,6 +6,7 @@ import FilterSidebarContent from '../components/FilterSidebarContent';
 import RenderProductCard from '../components/ProductCard';
 import ProductSkeletonGrid from '../components/ProductSkeletonGrid';
 import { API_BASE_URL } from '../data/config';
+import productCache from '../utils/productCache';
 
 const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGlobalSearch }) => {
     const [products, setProducts] = useState([]);
@@ -231,19 +232,39 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
             }
 
             try {
-                const res = await fetch(`${API_BASE_URL}/api/products?${params.toString()}`);
-                if (!res.ok) throw new Error("HTTP " + res.status);
-                const data = await res.json();
-                
-                if (active) {
-                    if (data && Array.isArray(data.products)) {
-                        setProducts(prev => currentPage === 1 ? data.products : [...prev, ...data.products]);
-                        setTotalProducts(data.total);
-                        setTotalPages(data.totalPages);
-                    } else if (Array.isArray(data)) {
-                        setProducts(prev => currentPage === 1 ? data : [...prev, ...data]);
-                        setTotalProducts(data.length);
-                        setTotalPages(1);
+                const cacheKey = `products:${params.toString()}`;
+                const cached = currentPage === 1 ? productCache.get(cacheKey) : null;
+
+                if (cached) {
+                    // Serve from in-memory cache — zero API calls, instant render
+                    if (active) {
+                        setProducts(cached.products);
+                        setTotalProducts(cached.total);
+                        setTotalPages(cached.totalPages);
+                    }
+                } else {
+                    const res = await fetch(`${API_BASE_URL}/api/products?${params.toString()}`);
+                    if (!res.ok) throw new Error("HTTP " + res.status);
+                    const data = await res.json();
+
+                    if (active) {
+                        if (data && Array.isArray(data.products)) {
+                            setProducts(prev => currentPage === 1 ? data.products : [...prev, ...data.products]);
+                            setTotalProducts(data.total);
+                            setTotalPages(data.totalPages);
+                            // Cache page-1 results for 5 minutes
+                            if (currentPage === 1) {
+                                productCache.set(cacheKey, {
+                                    products: data.products,
+                                    total: data.total,
+                                    totalPages: data.totalPages,
+                                });
+                            }
+                        } else if (Array.isArray(data)) {
+                            setProducts(prev => currentPage === 1 ? data : [...prev, ...data]);
+                            setTotalProducts(data.length);
+                            setTotalPages(1);
+                        }
                     }
                 }
             } catch (err) {
@@ -505,10 +526,11 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
                     ) : (
                         <div>
                             <div className="product-grid">
-                                {products.map(product => (
+                                {products.map((product, idx) => (
                                     <RenderProductCard 
                                         key={product.id} 
-                                        product={product} 
+                                        product={product}
+                                        index={idx}
                                         wishlist={wishlist} 
                                         toggleWishlist={toggleWishlist} 
                                     />

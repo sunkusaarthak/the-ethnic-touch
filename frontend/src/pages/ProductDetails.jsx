@@ -374,6 +374,11 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         .filter(p => p.id !== product.id)
         .slice(0, 4);
 
+    // Images are now served from Cloudflare R2 — no URL path transformations needed.
+    // The _width param is kept so all existing call sites remain valid.
+    // eslint-disable-next-line no-unused-vars
+    const optimizeCloudinaryUrl = (url, _width) => url || '';
+
     return (
         <div className="product-details-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
             <Helmet>
@@ -406,7 +411,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                         flexShrink: 0
                                     }}
                                 >
-                                    <ImageWithSkeleton src={imgUrl} alt={`${product.name} - Premium Jaipuri View ${idx+1}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                                    <ImageWithSkeleton src={optimizeCloudinaryUrl(imgUrl, 200)} alt={`${product.name} - Premium Jaipuri View ${idx+1}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
                                 </div>
                             ))}
                         </div>
@@ -434,7 +439,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                             {galleryImages.map((imgUrl, idx) => (
                                 <div key={idx} id={`gallery-slide-${idx}`} className="gallery-carousel-slide">
                                     <ZoomableImage 
-                                        src={imgUrl} 
+                                        src={optimizeCloudinaryUrl(imgUrl, 1200)} 
                                         alt={`${product.name} - Premium Jaipuri Quality View ${idx + 1}`} 
                                         className="gallery-slide-img" 
                                         style={{ height: '100%' }}
@@ -705,7 +710,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                 <div className="recommended-image-wrapper">
                                     <img 
                                         className="recommended-img" 
-                                        src={item.imageUrl} 
+                                        src={optimizeCloudinaryUrl(item.imageUrl, 500)} 
                                         alt={`${item.name} - Premium ${item.category || 'Ethnic Wear'} for Women`}
                                         loading="lazy"
                                         onError={(e) => { e.target.src = './images/kurthi_peach.png'; }}

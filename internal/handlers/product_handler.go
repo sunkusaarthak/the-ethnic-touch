@@ -2,20 +2,23 @@ package handlers
 
 import (
 	"bytes"
-	"crypto/sha1"
-	"encoding/hex"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"ethnictouch/internal/models"
-	"ethnictouch/internal/service"
+	service "ethnictouch/internal/service"
 	"ethnictouch/internal/utils"
 )
 
@@ -216,7 +219,7 @@ func (h *ProductHandler) HandleAdminUpload(w http.ResponseWriter, r *http.Reques
 	}
 	defer file.Close()
 
-	// Read file into bytes for Cloudinary upload
+	// Read file into bytes for R2 upload
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		http.Error(w, "Failed to read file bytes", http.StatusInternalServerError)
@@ -229,10 +232,25 @@ func (h *ProductHandler) HandleAdminUpload(w http.ResponseWriter, r *http.Reques
 	}
 	newFileName := fmt.Sprintf("upload_%d%s", time.Now().UnixNano(), ext)
 
-	// Attempt to upload to Cloudinary first
-	secureURL, err := uploadToCloudinary(fileBytes, newFileName)
+	// Detect content type from extension
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		switch strings.ToLower(ext) {
+		case ".png":
+			contentType = "image/png"
+		case ".webp":
+			contentType = "image/webp"
+		case ".gif":
+			contentType = "image/gif"
+		default:
+			contentType = "image/jpeg"
+		}
+	}
+
+	// Attempt to upload to Cloudflare R2
+	secureURL, err := uploadToR2(fileBytes, newFileName, contentType)
 	if err != nil {
-		fmt.Printf("[CLOUDINARY ERROR] Failed to upload: %v\n", err)
+		fmt.Printf("[R2 ERROR] Failed to upload: %v\n", err)
 		// Fallback to local storage if Cloudinary fails or is not configured
 		uploadDir := filepath.Join("frontend", "public", "images", "products")
 		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
@@ -262,81 +280,55 @@ func (h *ProductHandler) HandleAdminUpload(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func uploadToCloudinary(fileBytes []byte, fileName string) (string, error) {
-	cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
-	apiKey := os.Getenv("CLOUDINARY_API_KEY")
-	apiSecret := os.Getenv("CLOUDINARY_API_SECRET")
+// uploadToR2 uploads the given file bytes to Cloudflare R2 via the S3-compatible API
+// and returns the public URL of the uploaded object.
+func uploadToR2(fileBytes []byte, fileName string, contentType string) (string, error) {
+	accountID := os.Getenv("CF_R2_ACCOUNT_ID")
+	accessKey := os.Getenv("CF_R2_ACCESS_KEY_ID")
+	secretKey := os.Getenv("CF_R2_SECRET_ACCESS_KEY")
+	bucket := os.Getenv("CF_R2_BUCKET_NAME")
+	publicURL := os.Getenv("CF_R2_PUBLIC_URL")
 
-	if cloudName == "" || apiKey == "" || apiSecret == "" {
-		return "", fmt.Errorf("Cloudinary credentials are not configured in system environment")
+	if accountID == "" || accessKey == "" || secretKey == "" || bucket == "" || publicURL == "" {
+		return "", fmt.Errorf("Cloudflare R2 credentials are not configured in environment")
 	}
 
-	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	
-	// Create signature
-	sigStr := fmt.Sprintf("timestamp=%s%s", timestamp, apiSecret)
-	hasher := sha1.New()
-	hasher.Write([]byte(sigStr))
-	signature := hex.EncodeToString(hasher.Sum(nil))
+	// R2 S3-compatible endpoint
+	r2Endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID)
 
-	// Create multipart body
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
+	// Store all product images under a products/ prefix
+	objectKey := "products/" + fileName
 
-	// File field
-	part, err := writer.CreateFormFile("file", fileName)
+	// Build SDK config pointing at R2
+	cfg, err := config.LoadDefaultConfig(context.Background(),
+		config.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+		),
+		config.WithRegion("auto"),
+	)
 	if err != nil {
-		return "", err
-	}
-	if _, err := part.Write(fileBytes); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to build R2 config: %w", err)
 	}
 
-	// Other fields
-	writer.WriteField("api_key", apiKey)
-	writer.WriteField("timestamp", timestamp)
-	writer.WriteField("signature", signature)
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(r2Endpoint)
+		o.UsePathStyle = true
+	})
 
-	err = writer.Close()
+	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
+		Bucket:             aws.String(bucket),
+		Key:                aws.String(objectKey),
+		Body:               bytes.NewReader(fileBytes),
+		ContentType:        aws.String(contentType),
+		// Cache for 1 year — images are content-addressed so they never change.
+		// Cloudflare edge + browsers will serve from cache; no R2 Class B op on repeat views.
+		CacheControl:       aws.String("public, max-age=31536000, immutable"),
+		ContentDisposition: aws.String("inline"),
+	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("R2 PutObject failed: %w", err)
 	}
 
-	// HTTP request
-	url := fmt.Sprintf("https://api.cloudinary.com/v1_1/%s/image/upload", cloudName)
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Cloudinary upload failed with status %d: %s", resp.StatusCode, string(respBytes))
-	}
-
-	// Parse response
-	var result struct {
-		SecureURL string `json:"secure_url"`
-		URL       string `json:"url"`
-	}
-	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return "", err
-	}
-
-	if result.SecureURL != "" {
-		return result.SecureURL, nil
-	}
-	return result.URL, nil
+	// Return fully-qualified public URL
+	return fmt.Sprintf("%s/%s", strings.TrimRight(publicURL, "/"), objectKey), nil
 }

@@ -34,7 +34,7 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
                     <Link to="/shop" className="btn btn-primary">Browse Shop</Link>
                 </div>
                 <div className="hero-image">
-                    <img src="./images/hero_banner.png" alt="Premium Indo-Western Pastel Kurthi Fashion Model" />
+                    <img src="./images/hero_banner.png" alt="Premium Indo-Western Pastel Kurthi Fashion Model" fetchpriority="high" />
                 </div>
             </header>
 

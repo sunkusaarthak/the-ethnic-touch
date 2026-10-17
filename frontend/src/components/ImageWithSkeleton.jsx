@@ -5,7 +5,7 @@ import React, { useState } from 'react';
  * Shows a subtle luxury shimmer placeholder while the image loads from CDN/Cloud.
  * Prevents layout shifts and blank spaces.
  */
-const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, ...props }) => {
+const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, fetchpriority = 'auto', loading = 'lazy', ...props }) => {
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState(false);
 
@@ -44,6 +44,8 @@ const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, ...p
             <img
                 src={src}
                 alt={alt || ''}
+                loading={loading}
+                fetchpriority={fetchpriority}
                 onLoad={() => setLoaded(true)}
                 onError={() => {
                     setError(true);
