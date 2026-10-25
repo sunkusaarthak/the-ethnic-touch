@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { useAuth } from './AuthContext';
 import apiClient from '../utils/apiClient';
 import { fallbackProducts } from '../data/config';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 const CartContext = createContext({
     cart: [],
@@ -17,16 +18,19 @@ const CartContext = createContext({
     closeToast: () => {}
 });
 
-// Helper to ensure cart items always have an image and price
+// Helper to ensure cart items always have an image, name, and safe numeric price
 const enrichCartItem = (item) => {
     if (!item) return item;
     const found = fallbackProducts.find(p => p.id === String(item.id));
+    const rawPrice = item.price !== undefined && item.price !== null ? item.price : (found ? found.price : 549);
+    const safePrice = Number(rawPrice) > 0 ? Number(rawPrice) : 549;
     return {
         ...item,
-        id: String(item.id),
-        imageUrl: item.imageUrl || item.image_url || (found ? found.imageUrl : './images/kurthi_peach.png'),
+        id: String(item.id || item.productId || 'p_Pi_88000'),
+        name: item.name || item.title || (found ? found.name : 'Handcrafted Kurti'),
+        imageUrl: getOptimizedImageUrl(item.imageUrl || item.image_url || (found ? found.imageUrl : '/images/kurthi_peach.png')),
         description: item.description || (found ? found.description : ''),
-        price: item.price || (found ? found.price : 9999)
+        price: safePrice
     };
 };
 

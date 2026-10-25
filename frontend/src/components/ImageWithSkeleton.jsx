@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 /**
  * ImageWithSkeleton - Progressive Image Component
  * Shows a subtle luxury shimmer placeholder while the image loads from CDN/Cloud.
  * Prevents layout shifts and blank spaces.
  */
-const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, ...props }) => {
+const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, fetchPriority = 'auto', loading = 'lazy', ...props }) => {
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState(false);
+    const resolvedSrc = getOptimizedImageUrl(src);
 
     return (
         <div 
@@ -16,7 +18,7 @@ const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, ...p
                 overflow: 'hidden', 
                 display: 'inline-block',
                 width: '100%',
-                height: '100%',
+                height: '100%', 
                 ...style 
             }}
             className={className}
@@ -42,8 +44,11 @@ const ImageWithSkeleton = ({ src, alt, className = '', style = {}, onClick, ...p
 
             {/* Actual Image */}
             <img
-                src={src}
+                src={resolvedSrc}
                 alt={alt || ''}
+                loading={loading}
+                decoding="async"
+                fetchPriority={fetchPriority}
                 onLoad={() => setLoaded(true)}
                 onError={() => {
                     setError(true);

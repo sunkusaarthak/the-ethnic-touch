@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ImageWithSkeleton from './ImageWithSkeleton';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 const ZoomableImage = ({ src, alt, className, style }) => {
+    const resolvedSrc = getOptimizedImageUrl(src);
     const [isHovered, setIsHovered] = useState(false);
     const [position, setPosition] = useState({ x: '50%', y: '50%' });
     const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
@@ -70,7 +72,7 @@ const ZoomableImage = ({ src, alt, className, style }) => {
                             left: 0,
                             width: '100%',
                             height: '100%',
-                            backgroundImage: `url(${src})`,
+                            backgroundImage: `url(${resolvedSrc})`,
                             backgroundPosition: `${position.x} ${position.y}`,
                             backgroundSize: '250%', // 2.5x zoom
                             backgroundRepeat: 'no-repeat',
@@ -155,7 +157,7 @@ const ZoomableImage = ({ src, alt, className, style }) => {
                         justifyContent: 'center' 
                     }}>
                         <img 
-                            src={src} 
+                            src={resolvedSrc} 
                             alt={alt} 
                             style={{ 
                                 maxWidth: 'none',

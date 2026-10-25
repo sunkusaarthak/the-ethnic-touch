@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 const sizeData = [
     { size: 'XS', bust: 30, waist: 28, hips: 32 },
@@ -88,8 +89,10 @@ const SizeGuide = () => {
             <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                 <h4 style={{ fontSize: '1.1rem', fontWeight: '600', color: '#333', marginBottom: '1rem' }}>HOW TO MEASURE</h4>
                 <img 
-                    src="/images/how-to-measure.jpg" 
+                    src={getOptimizedImageUrl('/images/how-to-measure.jpg')} 
                     alt="How to Measure Guide" 
+                    loading="lazy"
+                    decoding="async"
                     style={{ width: '100%', maxWidth: '450px', display: 'block', margin: '0 auto 2rem', borderRadius: '8px' }} 
                 />
             </div>

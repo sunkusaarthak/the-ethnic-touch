@@ -20,6 +20,8 @@ type ConfigService interface {
 
 	GetCheckoutConfig() (*models.CheckoutConfig, error)
 	UpdateCheckoutConfig(config *models.CheckoutConfig) error
+	GetHomepageConfig() (*models.HomepageConfig, error)
+	UpdateHomepageConfig(config *models.HomepageConfig) error
 }
 
 type configService struct {
@@ -93,3 +95,12 @@ func (s *configService) GetCheckoutConfig() (*models.CheckoutConfig, error) {
 func (s *configService) UpdateCheckoutConfig(config *models.CheckoutConfig) error {
 	return s.repo.UpdateCheckoutConfig(config)
 }
+
+func (s *configService) GetHomepageConfig() (*models.HomepageConfig, error) {
+	return s.repo.GetHomepageConfig()
+}
+
+func (s *configService) UpdateHomepageConfig(config *models.HomepageConfig) error {
+	return s.repo.UpdateHomepageConfig(config)
+}
+

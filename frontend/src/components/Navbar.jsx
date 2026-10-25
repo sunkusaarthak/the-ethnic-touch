@@ -94,7 +94,7 @@ const Navbar = ({ products, cartCount, wishlistCount, authUser, authLoading, onS
                 </button>
 
                 <Link to="/" onClick={() => { setGlobalSearch(''); setMobileMenuOpen(false); setMobileSearchOpen(false); }} className="logo" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
-                    <img src="/navbar-logo.png" alt="Icon" style={{ height: '46px', width: 'auto', objectFit: 'contain', marginRight: '0px' }} />
+                    <img src="/navbar-logo.png" alt="Icon" width="61" height="46" style={{ height: '46px', width: 'auto', objectFit: 'contain', marginRight: '0px' }} />
                     <span className="logo-separator" style={{ borderLeft: '1.5px solid var(--color-primary)', height: '26px', borderRadius: '2px', marginRight: '14px' }}></span>
                     <span className="logo-text" style={{ fontFamily: "'Playfair Display', serif", fontStyle: 'italic', fontWeight: '500', letterSpacing: '0.2px', fontSize: '1.45rem', color: '#2c2c2c' }}>
                         The Ethnic Touch

@@ -70,7 +70,9 @@ type mockCouponServiceForOrder struct{}
 func (m *mockCouponServiceForOrder) ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo, userID string) (*models.Coupon, float64, error) { return nil, 0, nil }
 func (m *mockCouponServiceForOrder) GetAllCoupons() ([]models.Coupon, error) { return nil, nil }
 func (m *mockCouponServiceForOrder) CreateCoupon(c *models.Coupon) error { return nil }
+func (m *mockCouponServiceForOrder) DeleteCoupon(code string) error { return nil }
 func (m *mockCouponServiceForOrder) GetGiftTiers() ([]models.GiftTier, error) { return []models.GiftTier{}, nil }
+func (m *mockCouponServiceForOrder) SaveGiftTiers(tiers []models.GiftTier) error { return nil }
 
 func TestOrderService_VerifyPayment_HMACValidation(t *testing.T) {
 	repo := &mockOrderRepoForService{

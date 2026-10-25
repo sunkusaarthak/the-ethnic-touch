@@ -232,6 +232,24 @@ func runMigrations(db *sql.DB) error {
 		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS spin_count INT DEFAULT 0;`,
 		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS available_spins INT DEFAULT 0;`,
 		`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT '';`,
+		`UPDATE coupons SET id = 'cp_' || LOWER(code) WHERE id = '' OR id IS NULL;`,
+		`UPDATE coupons SET is_active = TRUE WHERE is_active IS NOT TRUE AND (used_count < usage_limit OR usage_limit = 0 OR usage_limit IS NULL);`,
+		`INSERT INTO coupons (id, code, type, value, min_order, usage_limit, is_active)
+		 VALUES ('cp_welcome5', 'WELCOME5', 'percentage', 5.0, 0, 100000, TRUE)
+		 ON CONFLICT (code) DO UPDATE SET is_active = TRUE, value = 5.0;`,
+		`UPDATE system_config
+		 SET value = jsonb_set(
+		     jsonb_set(
+		         value::jsonb,
+		         '{reviews,1,location}',
+		         '"Hyderabad"'
+		     ),
+		     '{reviews,2,location}',
+		     '"Vizag"'
+		 )::text
+		 WHERE key = 'homepage_config'
+		   AND value::jsonb->'reviews' IS NOT NULL
+		   AND jsonb_array_length(value::jsonb->'reviews') >= 3;`,
 	}
 	for _, q := range alterQueries {
 		if _, err := db.Exec(q); err != nil {

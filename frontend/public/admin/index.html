@@ -16,37 +16,125 @@
 </head>
 <body>
     <!-- Google Login Overlay -->
-    <div id="adminLoginOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-        <h1 style="font-family:'Playfair Display', serif; font-size:2.5rem; margin-bottom:1rem; color:#2D2A26;">Admin Portal</h1>
-        <p style="color:#6C6863; margin-bottom:2rem;">Secure access restricted to authorized personnel.</p>
-        <button id="adminGoogleLoginBtn" class="btn-primary" style="padding:1rem 2rem; font-size:1.1rem; border-radius:8px; display:flex; align-items:center; gap:0.8rem;">
-            <svg width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Sign in with Google
-        </button>
-        <div id="loginErrorMsg" style="color:#e53e3e; margin-top:1.5rem; font-weight:500; display:none;"></div>
+    <div id="adminLoginOverlay">
+        <div class="login-modal-card">
+            <div class="login-brand-emblem">ET</div>
+            <h1 class="login-brand-title">The Ethnic <span>Touch</span></h1>
+            <p class="login-subtitle">Boutique Administration & Staff Portal</p>
+            <div class="login-security-tag">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span>Restricted Access • Authorized Personnel Only</span>
+            </div>
+            <button id="adminGoogleLoginBtn" class="btn-primary login-btn">
+                <svg width="22" height="22" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                <span>Sign in with Google</span>
+            </button>
+            <div id="loginErrorMsg" class="login-error-msg" style="display:none;"></div>
+            <div class="login-footer-note">Khajaguda Lake Store & E-Commerce Headquarters</div>
+        </div>
     </div>
 
-    <aside class="sidebar">
+    <!-- Mobile Drawer Backdrop & Topbar -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <header class="mobile-topbar" id="mobileTopbar">
+        <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle Navigation Drawer">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+        <div class="mobile-brand">
+            <span class="mobile-logo-text">The Ethnic <span>Touch</span></span>
+            <span class="mobile-admin-pill">Admin</span>
+        </div>
+        <div class="mobile-topbar-actions">
+            <button class="mobile-quick-scan-btn" id="mobileQuickScanBtn" type="button" title="Quick Scan Pickup QR">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="adminSidebar">
         <div class="logo">
-            The Ethnic <span>Touch</span>
+            <div class="logo-emblem">ET</div>
+            <div class="logo-title">The Ethnic <span>Touch</span></div>
+            <span class="logo-badge">Admin</span>
         </div>
         <nav>
             <ul class="nav-menu">
-                <li class="active" data-tab="dashboard">Dashboard</li>
-                <li data-tab="orders">Orders & Fulfillment</li>
-                <li data-tab="support" style="display: flex; align-items: center; justify-content: space-between;">Support Requests <span id="support-badge" style="display: none; background: #ef4444; color: white; font-size: 0.75rem; font-weight: bold; border-radius: 9999px; padding: 2px 6px;"></span></li>
-                <li data-tab="pickup-scanner">Pickup Scanner</li>
-                <li data-tab="products" class="admin-only">Products & Inventory</li>
-                <li data-tab="coupons" class="admin-only">Discount & Gift Coupons</li>
-                <li data-tab="spinwin" class="admin-only">Spin & Win Config</li>
-                <li data-tab="profiles" class="admin-only">Customer Profiles</li>
-                <li data-tab="staff" class="admin-only">Team & Access</li>
-                <li data-tab="settings" class="admin-only">Platform Settings</li>
+                <div class="nav-section-title">Overview</div>
+                <li class="active" data-tab="dashboard" data-title="Store Overview">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                    <span class="nav-label">Dashboard</span>
+                </li>
+
+                <div class="nav-section-title">Operations</div>
+                <li data-tab="orders" data-title="Orders & Fulfillment">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    <span class="nav-label">Orders & Fulfillment</span>
+                </li>
+                <li data-tab="support" data-title="Customer Support Requests">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span class="nav-label">Support Requests</span>
+                    <span id="support-badge" style="display: none; background: #ef4444; color: white; font-size: 0.72rem; font-weight: 700; border-radius: 9999px; padding: 2px 7px; margin-left: auto;"></span>
+                </li>
+                <li data-tab="pickup-scanner" data-title="Order Pickup Scanner">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+                    <span class="nav-label">Pickup Scanner</span>
+                </li>
+
+                <div class="nav-section-title admin-only">Store & Catalog</div>
+                <li data-tab="products" data-title="Products & Inventory" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    <span class="nav-label">Products & Inventory</span>
+                </li>
+                <li data-tab="flashdrop" data-title="⚡ Flash Spotlight Drop" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    <span class="nav-label">⚡ Flash Spotlight Drop</span>
+                </li>
+                <li data-tab="reels" data-title="Instagram Reels & Shop" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                    <span class="nav-label">Instagram Reels & Shop</span>
+                </li>
+
+                <div class="nav-section-title admin-only">Marketing & Growth</div>
+                <li data-tab="coupons" data-title="Discount & Gift Coupons" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    <span class="nav-label">Discount & Gift Coupons</span>
+                </li>
+                <li data-tab="spinwin" data-title="Spin & Win Config" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="12 8 8 12 12 16 12 8"/><polygon points="12 8 16 12 12 16 12 8"/></svg>
+                    <span class="nav-label">Spin & Win Config</span>
+                </li>
+
+                <div class="nav-section-title admin-only">Administration</div>
+                <li data-tab="profiles" data-title="Customer Profiles" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span class="nav-label">Customer Profiles</span>
+                </li>
+                <li data-tab="staff" data-title="Team & Access Permissions" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span class="nav-label">Team & Access</span>
+                </li>
+                <li data-tab="settings" data-title="Platform Settings" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span class="nav-label">Platform Settings</span>
+                </li>
             </ul>
         </nav>
         <div class="sidebar-footer">
-            <button id="logoutAdminBtn" style="width:100%; padding:0.8rem; margin-bottom:0.8rem; border:1px solid #fca5a5; background:#fef2f2; color:#ef4444; border-radius:50px; cursor:pointer; font-family:var(--font-body); transition:var(--transition-fast);">Log Out of Admin</button>
-            <button id="logoutBtn">Back to Store</button>
+            <button id="logoutAdminBtn" type="button">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Log Out of Admin
+            </button>
+            <button id="logoutBtn" type="button">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                Back to Store
+            </button>
         </div>
     </aside>
 
@@ -61,21 +149,89 @@
         <!-- Dashboard Tab -->
         <div id="tab-dashboard" class="tab-content active">
             <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Revenue</h3>
+                <div class="stat-card stat-card-revenue">
+                    <div class="stat-card-header">
+                        <h3>Total Revenue</h3>
+                        <div class="stat-icon-pill emerald">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        </div>
+                    </div>
                     <p class="value" id="stat-revenue">₹0</p>
+                    <span class="stat-badge-pill green">✦ Paid & Settled</span>
                 </div>
-                <div class="stat-card">
-                    <h3>Orders</h3>
+                <div class="stat-card stat-card-orders">
+                    <div class="stat-card-header">
+                        <h3>Total Orders</h3>
+                        <div class="stat-icon-pill blue">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                        </div>
+                    </div>
                     <p class="value" id="stat-orders">0</p>
+                    <span class="stat-badge-pill blue">✦ All Channels</span>
                 </div>
-                <div class="stat-card">
-                    <h3>Coupons Active</h3>
+                <div class="stat-card stat-card-coupons">
+                    <div class="stat-card-header">
+                        <h3>Active Coupons</h3>
+                        <div class="stat-icon-pill purple">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        </div>
+                    </div>
                     <p class="value" id="stat-coupons">0</p>
+                    <span class="stat-badge-pill purple">✦ Active Campaigns</span>
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #f59e0b; background: #fffbeb;">
-                    <h3 style="color: #b45309;">Pending Pickups</h3>
+                <div class="stat-card stat-card-pickups">
+                    <div class="stat-card-header">
+                        <h3 style="color: #b45309;">Pending Pickups</h3>
+                        <div class="stat-icon-pill amber">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
+                        </div>
+                    </div>
                     <p class="value" id="stat-pending-pickups" style="color: #d97706;">0</p>
+                    <span class="stat-badge-pill amber">✦ Store Boutique Awaiting</span>
+                </div>
+            </div>
+
+            <!-- Quick Actions Banner for Mobile & Desktop -->
+            <div class="dashboard-quick-actions">
+                <div class="quick-action-card" onclick="const t = document.querySelector('nav li[data-tab=\'pickup-scanner\']'); if(t) t.click();">
+                    <div class="qa-icon amber-glow">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+                    </div>
+                    <div class="qa-info">
+                        <strong>Pickup Scanner</strong>
+                        <span>Scan customer QR pass to hand over orders</span>
+                    </div>
+                    <span class="qa-arrow">&rsaquo;</span>
+                </div>
+                <div class="quick-action-card" onclick="const t = document.querySelector('nav li[data-tab=\'orders\']'); if(t) t.click();">
+                    <div class="qa-icon blue-glow">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    </div>
+                    <div class="qa-info">
+                        <strong>View Orders</strong>
+                        <span>Manage packing, shipping and deliveries</span>
+                    </div>
+                    <span class="qa-arrow">&rsaquo;</span>
+                </div>
+                <div class="quick-action-card admin-only" onclick="const t = document.querySelector('nav li[data-tab=\'products\']'); if(t) t.click();">
+                    <div class="qa-icon emerald-glow">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    </div>
+                    <div class="qa-info">
+                        <strong>Product Inventory</strong>
+                        <span>Update sizes, stock and prices</span>
+                    </div>
+                    <span class="qa-arrow">&rsaquo;</span>
+                </div>
+                <div class="quick-action-card admin-only" onclick="const t = document.querySelector('nav li[data-tab=\'flashdrop\']'); if(t) t.click();">
+                    <div class="qa-icon bronze-glow">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    </div>
+                    <div class="qa-info">
+                        <strong>Flash Loom Spotlight</strong>
+                        <span>Configure countdown duration & spotlit kurti</span>
+                    </div>
+                    <span class="qa-arrow">&rsaquo;</span>
                 </div>
             </div>
         </div>
@@ -179,20 +335,399 @@
 
         <!-- Coupons Tab -->
         <div id="tab-coupons" class="tab-content">
-            <div class="table-container">
-                <table id="couponsTable">
-                    <thead>
-                        <tr>
-                            <th>Code</th>
-                            <th>Type</th>
-                            <th>Value</th>
-                            <th>Min Order</th>
-                            <th>Uses</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+            <!-- 1. Homepage Featured Welcome Coupon Card UI Config -->
+            <div style="background: #FFF; padding: 2rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 4px 10px rgba(0,0,0,0.02); margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <h3 style="font-family: var(--font-heading); font-size: 1.35rem; margin-bottom: 0.35rem; color: #2D2A26;">
+                            Homepage Welcome Coupon Card (VIP Voucher UI)
+                        </h3>
+                        <p style="color: var(--color-text-light); font-size: 0.88rem; margin: 0;">
+                            Configure the first-order discount coupon card displayed on the homepage with the celebratory confetti and 1-tap copy button.
+                        </p>
+                    </div>
+                    <button type="button" class="btn" onclick="saveHomepageCouponConfig()" style="padding: 0.65rem 1.4rem; font-size: 0.88rem;">
+                        Save Homepage Coupon UI
+                    </button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: #4A4641;">
+                            Coupon Code
+                        </label>
+                        <input type="text" id="vip_code" placeholder="WELCOME10" style="width: 100%; padding: 0.75rem; border: 1px solid #E0DCD6; border-radius: 8px; box-sizing: border-box; font-family: monospace; font-weight: 700; text-transform: uppercase;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: #4A4641;">
+                            Discount Percentage (%)
+                        </label>
+                        <input type="number" id="vip_discount_percent" placeholder="10" min="1" max="100" style="width: 100%; padding: 0.75rem; border: 1px solid #E0DCD6; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.25rem;">
+                    <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: #4A4641;">
+                        Card Headline Title
+                    </label>
+                    <input type="text" id="vip_title" placeholder="Get 10% Off Your First Order" style="width: 100%; padding: 0.75rem; border: 1px solid #E0DCD6; border-radius: 8px; box-sizing: border-box;">
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: #4A4641;">
+                        Offer Subtitle / Description
+                    </label>
+                    <textarea id="vip_desc" rows="2" placeholder="Use code WELCOME10 at checkout to get an extra 10% off on your first kurti order today!" style="width: 100%; padding: 0.75rem; border: 1px solid #E0DCD6; border-radius: 8px; box-sizing: border-box; resize: vertical;"></textarea>
+                </div>
+            </div>
+
+            <!-- 2. All Active Discount & Gift Coupons Table -->
+            <div style="background: #FFF; padding: 2rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 4px 10px rgba(0,0,0,0.02);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <div>
+                        <h3 style="font-family: var(--font-heading); font-size: 1.35rem; margin-bottom: 0.35rem; color: #2D2A26;">
+                            Active Store Coupons & Vouchers
+                        </h3>
+                        <p style="color: var(--color-text-light); font-size: 0.88rem; margin: 0;">
+                            All valid checkout discount codes, minimum order requirements, and usage limits.
+                        </p>
+                    </div>
+                    <button type="button" class="btn-primary" onclick="document.getElementById('couponModal').style.display = 'flex'" style="padding: 0.65rem 1.4rem; font-size: 0.88rem;">
+                        + Create New Coupon
+                    </button>
+                </div>
+                <div class="table-container" style="box-shadow: none; border: 1px solid #F0ECE6;">
+                    <table id="couponsTable">
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Type</th>
+                                <th>Value</th>
+                                <th>Min Order</th>
+                                <th>Uses</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instagram Reels & Shoppable Showcase Tab -->
+        <div id="tab-reels" class="tab-content">
+            <!-- Instagram Global Account Settings -->
+            <div style="background: #FFF; padding: 2rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 4px 10px rgba(0,0,0,0.02); margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <h3 style="font-family: var(--font-heading); font-size: 1.35rem; margin-bottom: 0.35rem; color: #2D2A26;">
+                            Instagram Profile & Header
+                        </h3>
+                        <p style="color: var(--color-text-light); font-size: 0.88rem; margin: 0;">
+                            Configure the brand Instagram handle and direct profile link displayed in the showcase header.
+                        </p>
+                    </div>
+                    <button type="button" class="btn" onclick="saveInstagramGlobalSettings()" style="padding: 0.65rem 1.4rem; font-size: 0.88rem;">
+                        Save Profile Settings
+                    </button>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: #4A4641;">
+                            Instagram Handle (without @)
+                        </label>
+                        <input type="text" id="insta_handle" placeholder="theethnictouch.co" style="width: 100%; padding: 0.75rem; border: 1px solid #E0DCD6; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: #4A4641;">
+                            Full Instagram Profile URL
+                        </label>
+                        <input type="url" id="insta_profile_url" placeholder="https://www.instagram.com/theethnictouch.co" style="width: 100%; padding: 0.75rem; border: 1px solid #E0DCD6; border-radius: 8px; box-sizing: border-box;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configured Shoppable Reels List -->
+            <div style="background: #FFF; padding: 2rem; border-radius: var(--border-radius-md); border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 4px 10px rgba(0,0,0,0.02);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <h3 style="font-family: var(--font-heading); font-size: 1.35rem; margin-bottom: 0.35rem; color: #2D2A26;">
+                            Shoppable Video Reels (<span id="reelsCountBadge">0</span>)
+                        </h3>
+                        <p style="color: var(--color-text-light); font-size: 0.88rem; margin: 0;">
+                            Configure the video thumbnails, reel links, badges, and linked catalog products that customers can buy directly.
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+                        <button type="button" class="btn-secondary" onclick="syncAllInstaThumbnails()" id="btnSyncAllThumbs" style="display: flex; align-items: center; gap: 6px; padding: 0.7rem 1.2rem; cursor: pointer;">
+                            ⚡ Sync All Insta Thumbnails
+                        </button>
+                        <button type="button" class="btn-primary" onclick="openAddReelModal()" style="display: flex; align-items: center; gap: 6px; padding: 0.7rem 1.4rem;">
+                            + Add New Reel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flash Spotlight Drop Tab -->
+        <div id="tab-flashdrop" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                        <span style="font-size: 1.6rem;">⚡</span>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.6rem; color: #2D2A26; margin: 0;">Flash Loom Drop Spotlight</h2>
+                    </div>
+                    <p style="color: #666; font-size: 0.95rem; margin-top: 0.4rem; max-width: 650px;">
+                        Configure the limited-edition urgency card displayed on the storefront homepage. Choose automated rotation or spotlight a specific kurti with an auto-reverting countdown timer.
+                    </p>
+                </div>
+                <div id="fdStatusBadge" style="display: inline-flex; align-items: center; gap: 0.6rem; background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; padding: 0.6rem 1.2rem; border-radius: 50px; font-size: 0.85rem; font-weight: 600;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #F59E0B; box-shadow: 0 0 6px #F59E0B;"></span>
+                    <span id="fdStatusText">Loading Flash Drop Status...</span>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1.25fr 1fr; gap: 2rem; align-items: start;">
+                <!-- Left: Configuration Form -->
+                <div>
+                    <!-- Mode Selector Card -->
+                    <div style="background: #FFF; padding: 2rem; border-radius: 16px; border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 4px 14px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+                        <h3 style="margin-top: 0; font-size: 1.15rem; color: #2D2A26; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>1. Select Spotlight Mode</span>
+                        </h3>
+
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <!-- Option 1: Random Rotation with Configurable Cycle Interval -->
+                            <div id="card_mode_random" style="border-radius: 12px; border: 2px solid #D4A373; background: #FAF5EE; transition: all 0.2s ease;">
+                                <label id="lbl_mode_random" style="display: flex; align-items: flex-start; gap: 1rem; padding: 1.25rem; cursor: pointer;">
+                                    <input type="radio" name="fd_mode" id="fd_mode_random" value="random" onchange="onFlashModeChange()" style="margin-top: 4px; width: 18px; height: 18px; accent-color: #D4A373;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                                            <strong style="font-size: 1rem; color: #2D2A26;">🔀 Randomly Rotate Products from DB</strong>
+                                            <span style="font-size: 0.75rem; background: #E8F5E9; color: #2E7D32; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Automated</span>
+                                        </div>
+                                        <p style="margin: 0.4rem 0 0; font-size: 0.88rem; color: #666; line-height: 1.45;">
+                                            Continuously cycles through in-stock kurtis from your database with a live synchronized countdown. Keeps your homepage fresh without manual work.
+                                        </p>
+                                    </div>
+                                </label>
+                                
+                                <!-- Rotation Cycle Configuration Inputs -->
+                                <div id="fd_random_cycle_box" style="padding: 0 1.25rem 1.25rem; border-top: 1px dashed #E5E7EB; margin-top: 0.25rem; padding-top: 1rem;">
+                                    <label style="display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 0.35rem; color: #2D2A26;">
+                                        ⏱️ Configure Rotation Cycle Interval
+                                    </label>
+                                    <p style="font-size: 0.8rem; color: #666; margin: 0 0 0.75rem;">
+                                        How long should each random kurti remain in the spotlight before rotating to the next product?
+                                    </p>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                        <div>
+                                            <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin-bottom: 0.25rem;">Cycle Hours</label>
+                                            <input type="number" id="fd_random_hours" min="0" max="72" value="6" oninput="onRandomCycleInput()" style="width: 100%; padding: 0.65rem; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.9rem; box-sizing: border-box;">
+                                        </div>
+                                        <div>
+                                            <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin-bottom: 0.25rem;">Cycle Minutes</label>
+                                            <input type="number" id="fd_random_mins" min="0" max="59" value="0" oninput="onRandomCycleInput()" style="width: 100%; padding: 0.65rem; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.9rem; box-sizing: border-box;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Option 2: Choose Specific Product -->
+                            <label id="lbl_mode_manual" style="display: flex; align-items: flex-start; gap: 1rem; padding: 1.25rem; border-radius: 12px; border: 2px solid #E5E7EB; background: #FAF9F6; cursor: pointer; transition: all 0.2s ease;">
+                                <input type="radio" name="fd_mode" id="fd_mode_manual" value="manual" onchange="onFlashModeChange()" style="margin-top: 4px; width: 18px; height: 18px; accent-color: #D4A373;">
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                                        <strong style="font-size: 1rem; color: #2D2A26;">🎯 Choose Specific Product (With Auto-Expiry)</strong>
+                                        <span style="font-size: 0.75rem; background: #FEF3C7; color: #B45309; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Time-Limited</span>
+                                    </div>
+                                    <p style="margin: 0.4rem 0 0; font-size: 0.88rem; color: #666; line-height: 1.45;">
+                                        Handpick a specific kurti from your catalog and set a promotion duration. <strong>Once configured time expires, it automatically reverts to random catalog rotation!</strong>
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Manual Product & Expiry Controls -->
+                    <div id="fd_manual_settings_card" style="display: none; background: #FFF; padding: 2rem; border-radius: 16px; border: 1px solid #FCD34D; background: #FFFDF8; box-shadow: 0 4px 14px rgba(212,163,115,0.08); margin-bottom: 1.5rem;">
+                        <h3 style="margin-top: 0; font-size: 1.15rem; color: #2D2A26; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>2. Choose Product & Set Duration</span>
+                        </h3>
+
+                        <!-- Product Selector -->
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Choose Kurti from Catalog</label>
+                            <select id="fd_product_select" onchange="onFlashProductSelect()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; background: #fff; cursor: pointer;">
+                                <option value="">-- Select a Kurti from Live Catalog --</option>
+                            </select>
+                        </div>
+
+                        <!-- Selected Product Summary Preview -->
+                        <div id="fd_product_summary" style="display: none; align-items: center; gap: 1rem; padding: 1rem; background: #FFF; border: 1px solid #E5E7EB; border-radius: 10px; margin-bottom: 1.5rem;">
+                            <img id="fd_summary_img" src="" style="width: 52px; height: 62px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd;">
+                            <div style="flex: 1;">
+                                <div id="fd_summary_name" style="font-weight: 600; font-size: 0.95rem; color: #2D2A26;"></div>
+                                <div style="font-size: 0.85rem; color: #666; margin-top: 2px;">
+                                    Price: <strong style="color: #2D2A26;">₹<span id="fd_summary_price"></span></strong> &bull; 
+                                    Live Stock: <strong style="color: #059669;"><span id="fd_summary_stock"></span> units</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Duration Inputs -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem;">
+                            <div>
+                                <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Countdown Hours</label>
+                                <input type="number" id="fd_duration_hours" min="0" max="72" value="6" oninput="updateCalculatedExpiry()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Countdown Minutes</label>
+                                <input type="number" id="fd_duration_mins" min="0" max="59" value="0" oninput="updateCalculatedExpiry()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box;">
+                            </div>
+                        </div>
+
+                        <!-- Auto-Revert Expiry Notice -->
+                        <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 0.9rem 1rem; display: flex; align-items: flex-start; gap: 0.75rem;">
+                            <span style="font-size: 1.1rem; line-height: 1;">⏱️</span>
+                            <div style="font-size: 0.86rem; color: #1E40AF; line-height: 1.45;">
+                                <strong>Auto-Revert Guarantee:</strong> Card will spotlight this item until 
+                                <span id="fd_expiry_time_preview" style="font-weight: 700; text-decoration: underline;">Calculating...</span>. 
+                                When the timer expires, it <strong>seamlessly reverts back to random catalog rotation</strong> without any manual action needed.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scarcity & Copy Settings -->
+                    <div style="background: #FFF; padding: 2rem; border-radius: 16px; border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 4px 14px rgba(0,0,0,0.03); margin-bottom: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                            <h3 style="margin: 0; font-size: 1.15rem; color: #2D2A26; display: flex; align-items: center; gap: 0.5rem;">
+                                <span>3. Scarcity Meter & Card Content</span>
+                            </h3>
+                            <button type="button" onclick="populateSection3FromActiveProduct(true)" style="background: #FAF5EE; border: 1px solid #D4A373; color: #8C5828; padding: 0.35rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; transition: all 0.2s ease;">
+                                <span>↻ Reset to Current Kurti</span>
+                            </button>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #666; margin-top: 0; margin-bottom: 1.25rem; line-height: 1.4;">
+                            Populated from the currently active kurti. Customize any field below and click Save &amp; Publish to show your edits on the storefront card.
+                        </p>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem;">
+                            <div>
+                                <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Live Urgency Badge</label>
+                                <input type="text" id="fd_badge_text" value="SELLING FAST" oninput="updatePreviewCard()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Remaining Stock Meter</label>
+                                <input type="number" id="fd_remaining_stock" min="1" max="99" value="4" oninput="updatePreviewCard()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box;">
+                                <input type="hidden" id="fd_total_stock" value="25">
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem;">
+                            <div>
+                                <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Headline Prefix</label>
+                                <input type="text" id="fd_title" value="Customer Favorite: " oninput="updatePreviewCard()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Custom Highlight Title</label>
+                                <input type="text" id="fd_highlight" placeholder="Leave blank to use Kurti name" oninput="updatePreviewCard()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box;">
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 1.25rem;">
+                            <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Card Description</label>
+                            <textarea id="fd_desc" rows="2" oninput="updatePreviewCard()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box; resize: vertical;">Crafted in 100% soft Jaipur cotton with vibrant floral paisley motifs. Perfect for daily wear and office comfort. Only a few pieces left in stock!</textarea>
+                        </div>
+
+                        <div>
+                            <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; color: #333;">Quality Feature Pill</label>
+                            <input type="text" id="fd_feature_text" value="100% Pure Breathable Cotton" oninput="updatePreviewCard()" style="width: 100%; padding: 0.8rem; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box;">
+                        </div>
+                    </div>
+
+                    <!-- Action Save Button -->
+                    <button type="button" id="fdSaveBtn" onclick="saveFlashDropConfig()" style="width: 100%; padding: 1.1rem; font-size: 1.05rem; font-weight: 700; border-radius: 10px; background: #2D2A26; color: #FFF; border: none; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 6px 20px rgba(45,42,38,0.2);">
+                        <span>⚡ Save & Publish Flash Drop Settings</span>
+                    </button>
+                </div>
+
+                <!-- Right: Live Storefront Card Preview -->
+                <div style="position: sticky; top: 2rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                        <span style="font-weight: 700; font-size: 0.95rem; color: #2D2A26; display: flex; align-items: center; gap: 0.4rem;">
+                            📱 Live Storefront Customer View
+                        </span>
+                        <span id="pv_mode_badge" style="font-size: 0.75rem; background: #E0E7FF; color: #3730A3; padding: 2px 8px; border-radius: 12px; font-weight: 600;">Random Rotation</span>
+                    </div>
+
+                    <!-- The Dark Chocolate Preview Card (Matching Customer View Exactly) -->
+                    <div style="background: linear-gradient(135deg, #25221F 0%, #38322B 100%); border-radius: 24px; padding: 1.8rem; color: #FFF; border: 1px solid rgba(212, 163, 115, 0.3); box-shadow: 0 16px 40px rgba(0,0,0,0.35); text-align: center; display: flex; flex-direction: column; align-items: center; position: relative; overflow: hidden;">
+                        
+                        <!-- Product Image Frame -->
+                        <div style="width: 190px; height: 235px; border-radius: 16px; overflow: hidden; border: 2px solid rgba(212, 163, 115, 0.4); box-shadow: 0 10px 24px rgba(0,0,0,0.5); margin-bottom: 1.25rem; background: #1a1816;">
+                            <img id="pv_img" src="./images/kurthi_peach.png" alt="Spotlight Kurti" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
+
+                        <!-- Red Live Urgency Pill -->
+                        <div style="display: inline-flex; align-items: center; gap: 7px; background: rgba(196, 109, 94, 0.22); border: 1px solid rgba(196, 109, 94, 0.45); color: #FFAAA0; font-size: 0.72rem; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; padding: 4px 12px; border-radius: 20px; margin-bottom: 0.9rem;">
+                            <span style="width: 7px; height: 7px; border-radius: 50%; background: #FF6B57; box-shadow: 0 0 8px #FF6B57;"></span>
+                            <span id="pv_badge">SELLING FAST</span>
+                        </div>
+
+                        <!-- Card Headline -->
+                        <h4 style="font-family: var(--font-heading); font-size: 1.25rem; margin: 0 0 0.5rem; line-height: 1.3; color: #FAF5F0;">
+                            <span id="pv_title_prefix">Customer Favorite: </span>
+                            <span id="pv_highlight" style="color: #D4A373;">Pink Paisley Cotton Kurti</span>
+                        </h4>
+
+                        <!-- Card Description -->
+                        <p id="pv_desc" style="color: #B8B0A8; font-size: 0.85rem; line-height: 1.45; margin: 0 0 1.2rem; max-width: 320px;">
+                            Crafted in 100% soft Jaipur cotton with vibrant floral paisley motifs. Perfect for daily wear and office comfort. Only a few pieces left in stock!
+                        </p>
+
+                        <!-- Countdown Timer Blocks -->
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 1.2rem;">
+                            <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 0.4rem 0.65rem; min-width: 52px;">
+                                <div id="pv_hours" style="font-size: 1.2rem; font-weight: 800; font-family: monospace; color: #FFF;">05</div>
+                                <div style="font-size: 0.65rem; color: #9E968D; text-transform: uppercase; letter-spacing: 0.5px;">HOURS</div>
+                            </div>
+                            <span style="color: #D4A373; font-weight: 700; font-size: 1.1rem;">:</span>
+                            <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 0.4rem 0.65rem; min-width: 52px;">
+                                <div id="pv_mins" style="font-size: 1.2rem; font-weight: 800; font-family: monospace; color: #FFF;">42</div>
+                                <div style="font-size: 0.65rem; color: #9E968D; text-transform: uppercase; letter-spacing: 0.5px;">MINS</div>
+                            </div>
+                            <span style="color: #D4A373; font-weight: 700; font-size: 1.1rem;">:</span>
+                            <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 0.4rem 0.65rem; min-width: 52px;">
+                                <div id="pv_secs" style="font-size: 1.2rem; font-weight: 800; font-family: monospace; color: #FFF;">19</div>
+                                <div style="font-size: 0.65rem; color: #9E968D; text-transform: uppercase; letter-spacing: 0.5px;">SECS</div>
+                            </div>
+                        </div>
+
+                        <!-- Stock Progress Meter -->
+                        <div style="width: 100%; max-width: 320px; margin-bottom: 1.25rem;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.4rem;">
+                                <span style="color: #9E968D;">Stock Availability</span>
+                                <strong style="color: #FFF;">Only <span id="pv_remaining">4</span> Pieces Remaining</strong>
+                            </div>
+                            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 10px; overflow: hidden;">
+                                <div id="pv_meter_bar" style="width: 84%; height: 100%; background: #D4A373; border-radius: 10px; transition: width 0.3s ease;"></div>
+                            </div>
+                        </div>
+
+                        <!-- CTA Button -->
+                        <div style="width: 100%; max-width: 320px; background: #D4A373; color: #2D2A26; font-weight: 700; font-size: 0.95rem; padding: 0.85rem; border-radius: 50px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 0.8rem; box-shadow: 0 8px 24px rgba(212,163,115,0.35);">
+                            Order Now &bull; ₹<span id="pv_price">549</span> &rarr;
+                        </div>
+
+                        <!-- Feature Pill -->
+                        <div style="font-size: 0.78rem; color: #C4B9AD; display: flex; align-items: center; gap: 0.4rem;">
+                            ✨ <span id="pv_feature">100% Pure Breathable Cotton</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -784,6 +1319,158 @@
         </div>
     </div>
 
-    <script src="admin.js?v=3"></script>
+    <!-- Reel Modal -->
+    <div id="reelModal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 650px; width: 92%; max-height: 90vh; overflow-y: auto; border-radius: 12px; padding: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid #EEE; padding-bottom: 1rem;">
+                <h2 id="reelModalTitle" style="font-family: var(--font-heading); font-size: 1.4rem; margin: 0; color: #2D2A26;">Edit Reel</h2>
+                <button type="button" onclick="closeModals()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #888;">✕</button>
+            </div>
+
+            <form id="reelForm" onsubmit="handleSaveReel(event)">
+                <input type="hidden" id="reel_id" value="">
+
+                <!-- Reel Title -->
+                <div style="margin-bottom: 1.2rem;">
+                    <label style="display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.4rem; color: #333;">
+                        Reel Title / Headline *
+                    </label>
+                    <input type="text" id="reel_title" placeholder="e.g. Our Hit Paisley Print Kurti ✨" required style="width: 100%; padding: 0.75rem; border: 1px solid #CCC; border-radius: 8px; box-sizing: border-box;">
+                </div>
+
+                <!-- Instagram URL & Reel Code -->
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1.2rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.4rem; color: #333;">
+                            Instagram Reel URL *
+                        </label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="url" id="reel_instagram_url" oninput="handleReelUrlInput(this.value)" placeholder="https://www.instagram.com/theethnictouch.co/reel/DejumS8Cwm2/" required style="flex: 1; padding: 0.75rem; border: 1px solid #CCC; border-radius: 8px; box-sizing: border-box;">
+                            <button type="button" id="btnFetchInstaThumb" onclick="fetchReelThumbnailFromInsta()" class="btn-secondary" style="padding: 0.75rem 1rem; white-space: nowrap; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                📸 Fetch Insta Thumbnail
+                            </button>
+                        </div>
+                        <span style="font-size: 0.75rem; color: #888;">Paste any Instagram Reel link and click Fetch to get the authentic video thumbnail!</span>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.4rem; color: #333;">
+                            Reel Code (Embed)
+                        </label>
+                        <input type="text" id="reel_code" placeholder="DejumS8Cwm2" style="width: 100%; padding: 0.75rem; border: 1px solid #CCC; border-radius: 8px; box-sizing: border-box;">
+                        <span style="font-size: 0.75rem; color: #888;">Auto-filled from URL</span>
+                    </div>
+                </div>
+
+                <!-- Linked Store Product -->
+                <div style="margin-bottom: 1.2rem; background: #FAF8F5; border: 1px solid #EAE3D9; border-radius: 8px; padding: 1rem;">
+                    <label style="display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.4rem; color: #333;">
+                        Linked Shoppable Kurti (Product) *
+                    </label>
+                    <p style="font-size: 0.78rem; color: #777; margin: 0 0 0.6rem;">
+                        Select which product from your catalog is featured in this video. When clicked, customers can select sizes and quick-add to bag.
+                    </p>
+                    <select id="reel_product_id" onchange="handleReelProductSelect(this.value)" required style="width: 100%; padding: 0.75rem; border: 1px solid #CCC; border-radius: 8px; box-sizing: border-box; background: #FFF; font-size: 0.9rem;">
+                        <option value="">-- Choose Product from Store Catalog --</option>
+                    </select>
+
+                    <!-- Selected Product Live Preview Mini-card -->
+                    <div id="reelSelectedProductPreview" style="margin-top: 0.8rem; display: none; align-items: center; gap: 12px; background: #FFF; padding: 0.6rem 0.9rem; border-radius: 8px; border: 1px solid #DDD;">
+                        <img id="reelPreviewProdImg" src="" style="width: 42px; height: 54px; object-fit: cover; border-radius: 4px;">
+                        <div style="flex: 1;">
+                            <div id="reelPreviewProdName" style="font-weight: 600; font-size: 0.88rem; color: #2D2A26;"></div>
+                            <div id="reelPreviewProdPrice" style="font-size: 0.82rem; color: #A06C3E; font-weight: 700;"></div>
+                        </div>
+                        <button type="button" onclick="useProductImageAsThumbnail()" class="btn-sm" style="font-size: 0.75rem; padding: 5px 10px; background: #FAF8F5; border: 1px solid #C49363; color: #A06C3E; border-radius: 4px; cursor: pointer;">
+                            Use As Reel Thumbnail
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Thumbnail Image -->
+                <div style="margin-bottom: 1.2rem;">
+                    <label style="display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.4rem; color: #333;">
+                        Reel Thumbnail Image
+                    </label>
+                    <div style="display: flex; gap: 0.6rem; align-items: center;">
+                        <input type="text" id="reel_thumbnail" oninput="updateReelThumbPreview(this.value)" placeholder="./images/kurthi_peach.png" style="flex: 1; padding: 0.75rem; border: 1px solid #CCC; border-radius: 8px; box-sizing: border-box;">
+                        <div style="position: relative;">
+                            <button type="button" class="btn-secondary" style="padding: 0.75rem 1rem; cursor: pointer; white-space: nowrap;">Upload Photo</button>
+                            <input type="file" accept="image/*" onchange="uploadImageFile(event, 'reel_thumbnail'); setTimeout(() => updateReelThumbPreview(document.getElementById('reel_thumbnail').value), 1200);" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+                        </div>
+                    </div>
+                    <div id="reelThumbImgPreviewBox" style="margin-top: 0.6rem; display: none;">
+                        <img id="reelThumbImgPreview" src="" style="width: 70px; height: 95px; object-fit: cover; border-radius: 6px; border: 1px solid #DDD;">
+                    </div>
+                </div>
+
+                <!-- Caption / Description -->
+                <div style="margin-bottom: 1.2rem;">
+                    <label style="display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.4rem; color: #333;">
+                        Caption / Description
+                    </label>
+                    <textarea id="reel_caption" rows="2" placeholder="e.g. Pure handcrafted Jaipur cotton kurti with timeless floral paisley motifs." style="width: 100%; padding: 0.75rem; border: 1px solid #CCC; border-radius: 8px; box-sizing: border-box; font-family: inherit;"></textarea>
+                </div>
+
+                <!-- Badge & Stats Row -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; background: #FDFCFB; padding: 1rem; border-radius: 8px; border: 1px solid #EEE;">
+                    <div>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.3rem;">
+                            <input type="checkbox" id="reel_is_hit" style="width: 17px; height: 17px; accent-color: #C49363;">
+                            ⭐ Hit Reel Badge
+                        </label>
+                        <span style="font-size: 0.74rem; color: #888;">Shows prominent gold ⭐ Hit Reel tag</span>
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; color: #333;">
+                            Badge / Views Label
+                        </label>
+                        <input type="text" id="reel_views" placeholder="Latest Drop (or 12.4k)" style="width: 100%; padding: 0.65rem; border: 1px solid #CCC; border-radius: 6px; box-sizing: border-box; font-size: 0.85rem;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; color: #333;">
+                            Likes Label
+                        </label>
+                        <input type="text" id="reel_likes" placeholder="Trending Hit (or 520)" style="width: 100%; padding: 0.65rem; border: 1px solid #CCC; border-radius: 6px; box-sizing: border-box; font-size: 0.85rem;">
+                    </div>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="form-actions" style="display: flex; justify-content: flex-end; gap: 1rem; border-top: 1px solid #EEE; padding-top: 1.25rem;">
+                    <button type="button" class="btn-secondary" onclick="closeModals()">Cancel</button>
+                    <button type="submit" id="reelSubmitBtn" class="btn-primary" style="padding: 0.75rem 2rem;">Save Reel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Mobile Floating Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav">
+        <button class="bottom-nav-item active" type="button" data-bottom-tab="dashboard">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+            <span>Overview</span>
+        </button>
+        <button class="bottom-nav-item" type="button" data-bottom-tab="orders">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            <span>Orders</span>
+        </button>
+        <button class="bottom-nav-item bottom-nav-scan-highlight" type="button" data-bottom-tab="pickup-scanner">
+            <div class="scan-icon-bubble">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFF" stroke-width="2.2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12" stroke-dasharray="2 2"/></svg>
+            </div>
+            <span>Scan QR</span>
+        </button>
+        <button class="bottom-nav-item" type="button" data-bottom-tab="products">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <span>Catalog</span>
+        </button>
+        <button class="bottom-nav-item" type="button" id="bottomNavMenuBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            <span>More</span>
+        </button>
+    </nav>
+
+    <script src="admin.js?v=5"></script>
 </body>
 </html>

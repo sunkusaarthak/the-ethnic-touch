@@ -11,7 +11,7 @@ const About = () => {
                 Unlike off-the-shelf brands, we take pride in managing every step of the creation process. From handpicking premium, breathable fabrics to sketching original, modern designs, every garment is thoughtfully crafted by us and manufactured directly in Jaipur. This hands-on approach ensures that every kurti delivers unmatched quality, vibrant elegance, and exceptional durability.
             </p>
             <p style={{ fontSize: '1.1rem', lineHeight: '1.8', color: 'var(--color-text)', marginBottom: '20px' }}>
-                Whether you prefer the touch-and-feel experience of shopping in our offline store or the convenience of ordering online, we bring the best of Jaipur’s craftsmanship right to you.
+                Whether you prefer the touch-and-feel experience of shopping in our offline store <a href="https://share.google/eSxLvWitpLTqdQkn3" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>near Khajaguda Lake, Hyderabad</a> or the convenience of ordering online, we bring the best of Jaipur’s craftsmanship right to you.
             </p>
             <h3 style={{ fontSize: '1.5rem', marginTop: '40px', color: 'var(--color-primary)' }}>Our Promise</h3>
             <p style={{ fontSize: '1.1rem', lineHeight: '1.8', color: 'var(--color-text)' }}>

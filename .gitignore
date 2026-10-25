@@ -53,3 +53,6 @@ frontend/blob-report
 # MD files
 *.md
 !README.md
+# Local image assets
+frontend/kurthi-images/
+kurthi-images/
