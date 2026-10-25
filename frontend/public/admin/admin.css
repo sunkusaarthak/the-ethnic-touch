@@ -333,7 +333,7 @@ nav li.active::before {
     min-width: 0;
 }
 
-header {
+.content-header, .content > header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -982,82 +982,113 @@ form input:focus, form select:focus, form textarea:focus {
         transform: none !important;
     }
 
-    /* 2. Mobile Topbar */
+    /* 2. Mobile Topbar - Strictly Single Horizontal Row */
     .mobile-topbar {
-        display: flex;
-        position: sticky;
-        top: 0;
-        z-index: 90;
-        height: var(--mobile-topbar-height);
-        background: rgba(255, 255, 255, 0.94);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border-bottom: 1px solid var(--color-border);
-        padding: 0 1rem;
-        align-items: center;
-        justify-content: space-between;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        height: 54px !important;
+        min-height: 54px !important;
+        max-height: 54px !important;
+        position: sticky !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 1rem !important;
+        box-sizing: border-box !important;
+        background: rgba(255, 255, 255, 0.96) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border-bottom: 1px solid var(--color-border) !important;
+        z-index: 100 !important;
+        box-shadow: 0 1px 4px rgba(45, 42, 38, 0.04) !important;
     }
 
     .mobile-menu-btn {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid var(--color-border);
-        background: var(--color-surface);
-        color: var(--color-text);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: var(--transition-fast);
+        width: 38px !important;
+        height: 38px !important;
+        min-width: 38px !important;
+        border-radius: 10px !important;
+        border: 1px solid var(--color-border) !important;
+        background: var(--color-surface) !important;
+        color: var(--color-text) !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+        padding: 0 !important;
+        transition: var(--transition-fast) !important;
     }
 
     .mobile-menu-btn:active {
-        background: var(--color-surface-subtle);
+        background: var(--color-surface-subtle) !important;
     }
 
     .mobile-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+        display: inline-flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0.5rem !important;
+        flex: 1 !important;
+        white-space: nowrap !important;
+        padding: 0 0.5rem !important;
     }
 
     .mobile-logo-text {
-        font-family: var(--font-heading);
-        font-size: 1.15rem;
-        font-weight: 600;
-        color: var(--color-text);
+        font-family: var(--font-heading) !important;
+        font-size: 1.15rem !important;
+        font-weight: 600 !important;
+        color: var(--color-text) !important;
+        margin: 0 !important;
+        line-height: 1 !important;
     }
 
     .mobile-logo-text span {
-        color: var(--color-primary);
-        font-style: italic;
+        color: var(--color-primary) !important;
+        font-style: italic !important;
     }
 
     .mobile-admin-pill {
-        background: var(--color-primary-light);
-        color: var(--color-primary-dark);
-        font-size: 0.62rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        padding: 2px 6px;
-        border-radius: var(--radius-full);
-        border: 1px solid var(--color-primary-border);
+        background: var(--color-primary-light) !important;
+        color: var(--color-primary-dark) !important;
+        font-size: 0.62rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.6px !important;
+        padding: 2px 6px !important;
+        border-radius: var(--radius-full) !important;
+        border: 1px solid var(--color-primary-border) !important;
+        display: inline-block !important;
+        line-height: normal !important;
+    }
+
+    .mobile-topbar-actions {
+        display: inline-flex !important;
+        align-items: center !important;
+        flex-shrink: 0 !important;
     }
 
     .mobile-quick-scan-btn {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid var(--color-border);
-        background: var(--color-primary-light);
-        color: var(--color-primary-dark);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
+        width: 38px !important;
+        height: 38px !important;
+        min-width: 38px !important;
+        border-radius: 10px !important;
+        border: 1px solid var(--color-primary-border) !important;
+        background: var(--color-primary-light) !important;
+        color: var(--color-primary-dark) !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+        padding: 0 !important;
+        transition: var(--transition-fast) !important;
     }
 
     /* 3. Off-Canvas Sidebar Drawer */
@@ -1168,7 +1199,8 @@ form input:focus, form select:focus, form textarea:focus {
         padding: 1.25rem 1rem calc(var(--mobile-bottom-nav-height) + 2rem);
     }
 
-    header {
+    .content-header, .content > header {
+        display: flex;
         flex-direction: column;
         align-items: flex-start;
         gap: 0.8rem;
