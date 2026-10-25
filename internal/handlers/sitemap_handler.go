@@ -4,7 +4,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
+	"time"
 
 	"ethnictouch/internal/service"
 )
@@ -25,36 +27,54 @@ type URLSet struct {
 
 type URL struct {
 	Loc        string `xml:"loc"`
+	LastMod    string `xml:"lastmod,omitempty"`
 	ChangeFreq string `xml:"changefreq,omitempty"`
 	Priority   string `xml:"priority,omitempty"`
 }
 
+var (
+	reNonAlpha    = regexp.MustCompile(`[^a-z0-9\-]+`)
+	reMultiHyphen = regexp.MustCompile(`-+`)
+)
+
+func createSlug(name string) string {
+	s := strings.ToLower(name)
+	s = strings.ReplaceAll(s, "&", "and")
+	s = strings.ReplaceAll(s, "/", "-")
+	s = strings.ReplaceAll(s, "\\", "-")
+	s = strings.ReplaceAll(s, "+", "-")
+	s = reNonAlpha.ReplaceAllString(s, "-")
+	s = reMultiHyphen.ReplaceAllString(s, "-")
+	return strings.Trim(s, "-")
+}
+
 func (h *SitemapHandler) HandleSitemap(w http.ResponseWriter, r *http.Request) {
 	baseURL := "https://theethnictouch.com"
+	today := time.Now().Format("2006-01-02")
 
 	urlset := URLSet{
 		URLs: []URL{
-			{Loc: baseURL + "/", ChangeFreq: "daily", Priority: "1.0"},
-			{Loc: baseURL + "/shop", ChangeFreq: "daily", Priority: "0.95"},
-			{Loc: baseURL + "/shop/straight-cut", ChangeFreq: "weekly", Priority: "0.85"},
-			{Loc: baseURL + "/shop/anarkali", ChangeFreq: "weekly", Priority: "0.85"},
-			{Loc: baseURL + "/shop/tunic", ChangeFreq: "weekly", Priority: "0.85"},
-			{Loc: baseURL + "/shop/fusion", ChangeFreq: "weekly", Priority: "0.85"},
-			{Loc: baseURL + "/about", ChangeFreq: "monthly", Priority: "0.7"},
-			{Loc: baseURL + "/contact", ChangeFreq: "monthly", Priority: "0.7"},
-			{Loc: baseURL + "/privacy-policy", ChangeFreq: "yearly", Priority: "0.3"},
+			{Loc: baseURL + "/", LastMod: today, ChangeFreq: "daily", Priority: "1.0"},
+			{Loc: baseURL + "/shop", LastMod: today, ChangeFreq: "daily", Priority: "0.95"},
+			{Loc: baseURL + "/shop/straight-cut", LastMod: today, ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/shop/anarkali", LastMod: today, ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/shop/tunic", LastMod: today, ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/shop/fusion", LastMod: today, ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/about", LastMod: today, ChangeFreq: "monthly", Priority: "0.7"},
+			{Loc: baseURL + "/contact", LastMod: today, ChangeFreq: "monthly", Priority: "0.7"},
+			{Loc: baseURL + "/privacy-policy", LastMod: today, ChangeFreq: "yearly", Priority: "0.3"},
+			{Loc: baseURL + "/refund-policy", LastMod: today, ChangeFreq: "yearly", Priority: "0.3"},
 		},
 	}
 
 	products, _, err := h.ProductService.GetProducts(nil)
 	if err == nil {
 		for _, p := range products {
-			// Create SEO Slug
-			slug := strings.ToLower(strings.ReplaceAll(p.Name, " ", "-"))
-			slug = strings.ReplaceAll(slug, "/", "-")
+			slug := createSlug(p.Name)
 			loc := fmt.Sprintf("%s/product/%s/%s", baseURL, p.ID, slug)
 			urlset.URLs = append(urlset.URLs, URL{
 				Loc:        loc,
+				LastMod:    today,
 				ChangeFreq: "weekly",
 				Priority:   "0.8",
 			})

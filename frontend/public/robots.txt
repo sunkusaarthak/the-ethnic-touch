@@ -3,4 +3,13 @@ Allow: /
 Allow: /favicon*
 Allow: /sitemap.xml
 
+# Disallow private and admin areas from Googlebot crawl
+Disallow: /admin/
+Disallow: /admin
+Disallow: /checkout
+Disallow: /cart
+Disallow: /profile
+Disallow: /complete-profile
+Disallow: /api/
+
 Sitemap: https://theethnictouch.com/sitemap.xml

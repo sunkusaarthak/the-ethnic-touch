@@ -1,6 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import ImageWithSkeleton from './ImageWithSkeleton';
+import { createProductSlug } from '../utils/slugHelper';
 
 /**
  * Silently preloads a list of image URLs into the browser cache
@@ -16,7 +17,7 @@ function prefetchImages(urls = []) {
 
 const RenderProductCard = ({ product, wishlist, toggleWishlist, index = 99 }) => {
     const isWished = wishlist.some(item => item.id === product.id);
-    const slug = product.name ? product.name.toLowerCase().replace(/[\s\/]+/g, '-') : '';
+    const slug = createProductSlug(product.name);
 
     // Images are now served from Cloudflare R2 as static files.
     // No URL transformation required — use the URL stored in the DB directly.

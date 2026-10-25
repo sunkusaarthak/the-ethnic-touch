@@ -9,6 +9,7 @@ import SizeSelectionModal from '../components/SizeSelectionModal';
 import SizeGuide from '../components/SizeGuide';
 import ZoomableImage from '../components/ZoomableImage';
 import useSEO from '../utils/useSEO';
+import { createProductSlug } from '../utils/slugHelper';
 
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
@@ -27,7 +28,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
             ? `Buy ${product.name} crafted in pure Jaipur ${product.fabric || 'cotton'}. ₹${product.price}. Available in sizes ${(product.sizes || []).join(', ')}. Free delivery & easy dispatch.`
             : 'Shop authentic handcrafted pure cotton Jaipur kurtis at The Ethnic Touch.',
         canonicalUrl: product 
-            ? `https://theethnictouch.com/product/${product.id}/${product.name ? product.name.toLowerCase().replace(/[\s\/]+/g, '-') : ''}`
+            ? `https://theethnictouch.com/product/${product.id}/${createProductSlug(product.name)}`
             : 'https://theethnictouch.com/shop'
     });
 
