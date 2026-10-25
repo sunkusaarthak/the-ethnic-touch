@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initTabs();
+    initMobileNav();
     loadDashboard();
     initProductModal(); // Build size checkboxes on load
 
@@ -522,12 +523,65 @@ function initTabs() {
             tab.classList.add('active');
 
             contents.forEach(c => c.classList.remove('active'));
-            document.getElementById(`tab-${target}`).classList.add('active');
+            const contentEl = document.getElementById(`tab-${target}`);
+            if (contentEl) contentEl.classList.add('active');
 
-            document.getElementById('pageTitle').innerText = e.target.innerText;
+            const tabTitle = tab.getAttribute('data-title') || tab.querySelector('.nav-label')?.innerText || tab.innerText;
+            document.getElementById('pageTitle').innerText = (tabTitle || '').trim();
+
+            // Sync mobile bottom navigation bar active state
+            const bottomNavItems = document.querySelectorAll('.mobile-bottom-nav .bottom-nav-item');
+            bottomNavItems.forEach(b => {
+                b.classList.toggle('active', b.getAttribute('data-bottom-tab') === target);
+            });
+
+            // Close mobile off-canvas drawer
+            document.body.classList.remove('sidebar-open');
 
             updateHeaderActions(target);
             loadTabData(target);
+        });
+    });
+}
+
+function initMobileNav() {
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const bottomNavMenuBtn = document.getElementById('bottomNavMenuBtn');
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    const mobileQuickScanBtn = document.getElementById('mobileQuickScanBtn');
+
+    const toggleSidebar = (show) => {
+        const isOpen = show !== undefined ? show : !document.body.classList.contains('sidebar-open');
+        document.body.classList.toggle('sidebar-open', isOpen);
+    };
+
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', () => toggleSidebar(true));
+    }
+    if (bottomNavMenuBtn) {
+        bottomNavMenuBtn.addEventListener('click', () => toggleSidebar(true));
+    }
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', () => toggleSidebar(false));
+    }
+    if (mobileQuickScanBtn) {
+        mobileQuickScanBtn.addEventListener('click', () => {
+            const scanTab = document.querySelector('nav li[data-tab="pickup-scanner"]');
+            if (scanTab) scanTab.click();
+            toggleSidebar(false);
+        });
+    }
+
+    // Bind bottom navigation items to switch tabs
+    const bottomNavItems = document.querySelectorAll('.mobile-bottom-nav .bottom-nav-item[data-bottom-tab]');
+    bottomNavItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const target = item.getAttribute('data-bottom-tab');
+            const targetTab = document.querySelector(`nav li[data-tab="${target}"]`);
+            if (targetTab) {
+                targetTab.click();
+            }
+            toggleSidebar(false);
         });
     });
 }
@@ -1987,7 +2041,8 @@ function handleUrlHashChange() {
             const targetEl = document.getElementById('tab-pickup-scanner');
             if (targetEl) targetEl.classList.add('active');
 
-            document.getElementById('pageTitle').innerText = pickupTab.innerText;
+            const pickupTitle = pickupTab.getAttribute('data-title') || pickupTab.querySelector('.nav-label')?.innerText || pickupTab.innerText;
+            document.getElementById('pageTitle').innerText = (pickupTitle || '').trim();
             updateHeaderActions('pickup-scanner');
 
             if (orderId) {
