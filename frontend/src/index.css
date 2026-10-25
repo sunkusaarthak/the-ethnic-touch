@@ -1,6 +1,6 @@
 /* Global Tokens & Reset */
 :root {
-    --color-bg: #FCFBFA; /* Very light, warm off-white */
+    --color-bg: #FAF8F5; /* Warm luxury Jaipur off-white canvas throughout the entire site */
     --color-text: #2D2A26; /* Soft black for high readability */
     --color-text-light: #6C6863;
     --color-primary: #D4A373; /* Muted gold/camel accent */
@@ -225,10 +225,10 @@ textarea {
     top: 0;
     width: 100%;
     padding: 0.8rem 5%;
-    background: rgba(253, 251, 250, 0.72);
+    background: rgba(250, 248, 245, 0.94);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(212, 163, 115, 0.25);
+    border-bottom: 1px solid rgba(212, 163, 115, 0.2);
     z-index: 1000;
     transition: var(--transition-fast);
 }
@@ -2420,9 +2420,10 @@ textarea {
 }
 
 .pagination-btn.active {
-    background: var(--color-text);
-    color: var(--color-bg);
-    border-color: var(--color-text);
+    background: linear-gradient(135deg, #D4A373 0%, #C49363 100%);
+    color: #FFFFFF;
+    border-color: transparent;
+    box-shadow: 0 4px 12px rgba(212, 163, 115, 0.35);
 }
 
 .pagination-btn:disabled {
@@ -2676,10 +2677,11 @@ textarea {
 }
 
 .btn-premium-outline:hover {
-    background: var(--color-text);
-    color: var(--color-bg);
+    background: linear-gradient(135deg, #D4A373 0%, #C49363 100%);
+    color: #FFFFFF;
+    border-color: transparent;
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    box-shadow: 0 8px 22px rgba(212, 163, 115, 0.4);
 }
 
 /* Brand Story Showcase */
@@ -3834,3 +3836,49 @@ button:active, .btn:active, .size-pill:active, .product-card:active {
         display: none !important;
     }
 }
+
+/* Floating Spin and Win Trigger Button */
+.floating-spin-btn {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: linear-gradient(135deg, #D4A373 0%, #C49363 100%) !important;
+    color: #FFFFFF !important;
+    padding: 11px 22px;
+    border-radius: 50px;
+    box-shadow: 0 6px 20px rgba(196, 147, 99, 0.45);
+    text-decoration: none !important;
+    font-weight: 600;
+    font-size: 0.92rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 999;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    animation: pulseSpinBtn 3s infinite;
+}
+
+.floating-spin-btn:hover {
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 8px 24px rgba(196, 147, 99, 0.55);
+    color: #FFFFFF !important;
+}
+
+@keyframes pulseSpinBtn {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+}
+
+@media (max-width: 640px) {
+    .floating-spin-btn {
+        bottom: 14px !important;
+        right: 12px !important;
+        padding: 7px 13px !important;
+        font-size: 0.74rem !important;
+        border-radius: 30px !important;
+        box-shadow: 0 4px 14px rgba(196, 147, 99, 0.45) !important;
+        z-index: 85 !important;
+        gap: 5px !important;
+    }
+}
+

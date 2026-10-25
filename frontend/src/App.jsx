@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Footer from './components/Footer';
 import Navbar from './components/Navbar';
+import AnnouncementTicker from './components/home/AnnouncementTicker';
 import ScrollToTop from './components/ScrollToTop';
 import ErrorBoundary from './components/ErrorBoundary';
 import Auth from './pages/Auth';
@@ -108,6 +109,7 @@ const AppRoutesContent = () => {
     return (
         <BrowserRouter>
             <ScrollToTop />
+            <AnnouncementTicker />
             <Navbar 
                 products={products}
                 cartCount={cartCount} 
@@ -127,6 +129,7 @@ const AppRoutesContent = () => {
                             productsGlobal={products}
                             wishlist={wishlist}
                             toggleWishlist={toggleWishlist}
+                            addToCart={addToCart}
                         />
                     } 
                 />
@@ -186,7 +189,7 @@ const AppRoutesContent = () => {
                             </div>
                             <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: 'var(--color-text)', lineHeight: '1.4' }}>{toastProduct.name}</h4>
                             <div style={{ fontSize: '0.85rem', color: '#686461', marginTop: '3px' }}>
-                                Size: <strong style={{color:'var(--color-text)'}}>{toastProduct.size || 'Standard'}</strong> &bull; ₹{toastProduct.price.toLocaleString('en-IN')}
+                                Size: <strong style={{color:'var(--color-text)'}}>{toastProduct.size || 'Standard'}</strong> &bull; ₹{Number(toastProduct.price || 0).toLocaleString('en-IN')}
                             </div>
                         </div>
                         <button 

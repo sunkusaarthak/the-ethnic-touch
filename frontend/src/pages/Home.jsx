@@ -1,197 +1,174 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Gift } from 'lucide-react';
-import RenderProductCard from '../components/ProductCard';
-import ProductSkeletonGrid from '../components/ProductSkeletonGrid';
-import { auth, API_BASE_URL } from '../data/config';
-import Shop from './Shop';
+import { API_BASE_URL } from '../data/config';
+import { useCart } from '../context/CartContext';
+import './Home.css';
 
-const Home = ({ productsGlobal, wishlist, toggleWishlist }) => {
+// Subcomponents for the modern e-commerce experience
+import AnnouncementTicker from '../components/home/AnnouncementTicker';
+import CategoryStories from '../components/home/CategoryStories';
+import HeroSlider from '../components/home/HeroSlider';
+import CuratedShowcase from '../components/home/CuratedShowcase';
+import FlashLoomDrop from '../components/home/FlashLoomDrop';
+import ShopTheLook from '../components/home/ShopTheLook';
+import InstaReelsShowcase from '../components/home/InstaReelsShowcase';
+import CraftsmanshipJourney from '../components/home/CraftsmanshipJourney';
+import VipVoucherCard from '../components/home/VipVoucherCard';
+import PatronReviews from '../components/home/PatronReviews';
+
+const Home = ({ productsGlobal, wishlist, toggleWishlist, addToCart }) => {
     const [spinConfig, setSpinConfig] = useState(null);
+    const [homepageConfig, setHomepageConfig] = useState(null);
+    const cartContext = useCart();
+
+    // Safely resolve cart operations from props or context
+    const effectiveAddToCart = addToCart || cartContext.addToCart;
+    const effectiveWishlist = wishlist || cartContext.wishlist || [];
+    const effectiveToggleWishlist = toggleWishlist || cartContext.toggleWishlist;
 
     useEffect(() => {
+        // 1. Fetch spin wheel config
         fetch(`${API_BASE_URL}/api/config/spin-wheel`)
-            .then(res => res.json())
-            .then(data => setSpinConfig(data))
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data) setSpinConfig(data); })
             .catch(console.error);
-    }, []);
-    const bestSellers = React.useMemo(() => {
-        return (productsGlobal || []).filter(p => p.isBestSeller).slice(0, 4);
-    }, [productsGlobal]);
 
-    const newArrivals = React.useMemo(() => {
-        return (productsGlobal || []).filter(p => p.isNewArrival).slice(0, 4);
-    }, [productsGlobal]);
+        // 2. Fetch comprehensive homepage data from backend (Reels, stats, slides, ticker, flash drop, etc.)
+        fetch(`${API_BASE_URL}/api/config/homepage`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data) setHomepageConfig(data);
+            })
+            .catch(err => {
+                console.warn("Using local defaults for homepage config:", err);
+            });
+    }, []);
+
+    // Dynamic Flash Loom Drop product resolution
+    const flashConfig = homepageConfig?.flash_drop;
+    let flashFeaturedProduct = null;
+
+    if (productsGlobal && productsGlobal.length > 0) {
+        // 1. If product_id is specified in flash_drop, find that exact product
+        if (flashConfig?.product_id) {
+            flashFeaturedProduct = productsGlobal.find(p => String(p.id) === String(flashConfig.product_id));
+        }
+        // 2. If highlight matches a product name in the catalog (case-insensitive)
+        if (!flashFeaturedProduct && flashConfig?.highlight) {
+            const cleanHl = flashConfig.highlight.trim().toLowerCase();
+            flashFeaturedProduct = productsGlobal.find(p => p.name && p.name.trim().toLowerCase() === cleanHl);
+        }
+        // 3. Otherwise, if not matched or rotating, use deterministic rotation
+        if (!flashFeaturedProduct) {
+            const inStockKurtis = productsGlobal.filter(p => {
+                const cat = (p.category || '').toLowerCase();
+                const name = (p.name || '').toLowerCase();
+                const isKurti = cat.includes('kurti') || cat.includes('tunic') || cat.includes('straight') || cat.includes('line') || name.includes('kurti');
+                return (p.stock || 0) > 0 && isKurti;
+            });
+            const pool = inStockKurtis.length > 0 ? inStockKurtis : (productsGlobal.filter(p => (p.stock || 0) > 0).length > 0 ? productsGlobal.filter(p => (p.stock || 0) > 0) : productsGlobal);
+            const durHours = flashConfig?.duration_hours !== undefined ? flashConfig.duration_hours : 6;
+            const durMins = flashConfig?.duration_mins !== undefined ? flashConfig.duration_mins : 0;
+            const totalCycleMins = (durHours * 60) + durMins;
+            const cycleMs = (totalCycleMins > 0 ? totalCycleMins : 360) * 60 * 1000;
+            const cycleStart = flashConfig?.cycle_started_at 
+                ? new Date(flashConfig.cycle_started_at).getTime() 
+                : 0;
+            const elapsedMs = Math.max(0, Date.now() - cycleStart);
+            const cycleBlock = Math.floor(elapsedMs / cycleMs);
+            const index = Math.abs(cycleBlock) % pool.length;
+            flashFeaturedProduct = pool[index];
+        }
+    }
+
+    const handleFlashExpire = () => {
+        // When configured countdown timer expires:
+        // Automatically switch back to random rotation mode
+        setHomepageConfig(prev => {
+            if (!prev) return prev;
+            const durHours = prev.flash_drop?.duration_hours !== undefined ? prev.flash_drop.duration_hours : 6;
+            const durMins = prev.flash_drop?.duration_mins !== undefined ? prev.flash_drop.duration_mins : 0;
+            return {
+                ...prev,
+                flash_drop: {
+                    ...prev.flash_drop,
+                    mode: 'random',
+                    hours_left: durHours,
+                    minutes_left: durMins,
+                    seconds_left: 0
+                }
+            };
+        });
+        // Sync with backend
+        fetch(`${API_BASE_URL}/api/config/homepage`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data) setHomepageConfig(data); })
+            .catch(() => {});
+    };
 
     return (
-        <div>
-            {/* Editorial Hero Banner */}
-            <header className="hero">
-                <div className="hero-content">
-                    <span className="hero-subtitle">Handcrafted Luxury</span>
-                    <h1>Minimalist Indo-Western Silhouette</h1>
-                    <p>A curated destination for timeless pastel aesthetics, tailored meticulously with pure breathable fabrics for the contemporary woman.</p>
-                    <Link to="/shop" className="btn btn-primary">Browse Shop</Link>
-                </div>
-                <div className="hero-image">
-                    <img src="./images/hero_banner.png" alt="Premium Indo-Western Pastel Kurthi Fashion Model" fetchpriority="high" />
-                </div>
-            </header>
+        <main className="modern-ecommerce-homepage" role="main">
+            {/* 1. App-Style Category Story Bubbles */}
+            <CategoryStories />
 
-            {/* Shop by Category */}
-            <section className="home-section" style={{ backgroundColor: '#FAF8F5', paddingTop: '4rem', paddingBottom: '4rem' }}>
-                <div className="home-section-header">
-                    <h2>Shop by Category</h2>
-                    <p>Discover designer silhouettes, tailored for every occasion and style preference</p>
-                </div>
-                <div className="home-category-grid">
-                    {[
-                        { name: 'Straight Cut', label: 'Straight Cut', desc: 'Crisp & Modern', image: './images/kurthi_peach.png', color: 'var(--color-peach)' },
-                        { name: 'Anarkali', label: 'Anarkali Set', desc: 'Flowing Grace', image: './images/kurthi_mint.png', color: 'var(--color-mint)' },
-                        { name: 'Tunic', label: 'Tunic Dress', desc: 'Casual Comfort', image: './images/kurthi_lavender.png', color: 'var(--color-lavender)' },
-                        { name: 'Fusion', label: 'Fusion Wear', desc: 'Indo-Western Styles', image: './images/kurthi_blue.png', color: 'var(--color-blue)' }
-                    ].map(cat => (
-                        <Link to={`/shop?category=${cat.name}`} key={cat.name} className="home-category-card">
-                            <div className="home-category-img-container" style={{ backgroundColor: cat.color }}>
-                                <img src={cat.image} alt={cat.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            </div>
-                            <div className="home-category-overlay">
-                                <span>{cat.desc}</span>
-                                <h3>{cat.label}</h3>
-                            </div>
-                        </Link>
-                    ))}
-                </div>
-            </section>
+            {/* 3. Luxury Multi-Slide Hero Showcase (Data from Backend) */}
+            <HeroSlider 
+                slides={homepageConfig?.hero_slides} 
+            />
 
-            {/* Best Sellers Section */}
-            <section className="home-section">
-                <div className="home-section-header">
-                    <h2>Most Coveted Styles</h2>
-                    <p>Highly sought-after silhouettes curated by our designers for timeless appeal</p>
-                </div>
-                {bestSellers.length === 0 ? (
-                    <ProductSkeletonGrid count={4} />
-                ) : (
-                    <div>
-                        <div className="product-grid">
-                            {bestSellers.map(product => (
-                                <RenderProductCard 
-                                    key={product.id} 
-                                    product={product} 
-                                    wishlist={wishlist} 
-                                    toggleWishlist={toggleWishlist} 
-                                />
-                            ))}
-                        </div>
-                        <div className="home-action-btn-container">
-                            <Link to="/shop?bestSeller=true" className="btn-premium-outline">
-                                View All Best Sellers
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </Link>
-                        </div>
-                    </div>
-                )}
-            </section>
+            {/* 4. Curated Tabbed Product Showcase with Quick-Add Size Drawer */}
+            <CuratedShowcase 
+                products={productsGlobal}
+                wishlist={effectiveWishlist}
+                toggleWishlist={effectiveToggleWishlist}
+                addToCart={effectiveAddToCart}
+            />
 
-            {/* Brand Story Showcase */}
-            <section className="brand-story-section">
-                <div className="brand-story-container">
-                    <div className="brand-story-image">
-                        <img src="./images/login_art.png" alt="Detail of fine tailoring and pastel embroidery" />
-                    </div>
-                    <div className="brand-story-text">
-                        <span className="brand-story-tag">The Ethnic Touch Philosophy</span>
-                        <h2>Honoring Slow Fashion & Indian Aesthetics</h2>
-                        <p>At The Ethnic Touch, we discard mass production rules. Every garment is treated as a piece of art, starting from premium handpicked cotton and linens to natural mineral dyes and elegant embroidery details.</p>
-                        
-                        <div className="brand-values-grid">
-                            <div className="value-card">
-                                <div className="value-icon">
-                                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M7 6h10M5 12h14M7 18h10"/></svg>
-                                </div>
-                                <h3>Loomed with Love</h3>
-                                <p>Sourced from traditional Indian weaver clusters, celebrating pure, raw weaves that get softer with every wear.</p>
-                            </div>
+            {/* 5. Flash Loom Drop - Limited Edition Urgency Banner (Data from Backend) */}
+            <FlashLoomDrop 
+                flashConfig={homepageConfig?.flash_drop}
+                featuredProduct={flashFeaturedProduct}
+                onExpire={handleFlashExpire}
+            />
 
-                            <div className="value-card">
-                                <div className="value-icon">
-                                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22v-6M12 16a4 4 0 0 0-4-4c-1.5 0-3 1-3 3s1.5 3 3 3h8c1.5 0 3-1 3-3s-1.5-3-3-3a4 4 0 0 0-4 4z"/></svg>
-                                </div>
-                                <h3>Bespoke Colorways</h3>
-                                <p>Our signatures pale peach, mint green, and lavender palettes are carefully dyed in small, curated lots.</p>
-                            </div>
+            {/* 6. "Shop The Look" - Interactive Editorial Hotspots (Data from Backend) */}
+            <ShopTheLook 
+                lookbookConfig={homepageConfig?.lookbook} 
+                productsGlobal={productsGlobal}
+            />
 
-                            <div className="value-card">
-                                <div className="value-icon">
-                                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="1.75" fill="none" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-                                </div>
-                                <h3>Tailored For You</h3>
-                                <p>Designed with meticulous cuts, including standard custom margins, ensuring a premium contour drape.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            {/* 7. Instagram Shoppable Reels Integration with Backend Stats & Thumbnails */}
+            <InstaReelsShowcase 
+                instagramConfig={homepageConfig?.instagram}
+                productsGlobal={productsGlobal}
+                addToCart={effectiveAddToCart}
+            />
 
-            {/* New Arrivals Section */}
-            <section className="home-section" style={{ borderTop: '1px solid rgba(0,0,0,0.03)', paddingBottom: '8rem' }}>
-                <div className="home-section-header">
-                    <h2>Fresh Off the Loom</h2>
-                    <p>Be the first to step out in our latest custom creations and season-defining tones</p>
-                </div>
-                {newArrivals.length === 0 ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '20vh' }}>
-                        <p style={{ color: '#8c8883', fontStyle: 'italic' }}>Weaving new collections...</p>
-                    </div>
-                ) : (
-                    <div>
-                        <div className="product-grid">
-                            {newArrivals.map(product => (
-                                <RenderProductCard 
-                                    key={product.id} 
-                                    product={product} 
-                                    wishlist={wishlist} 
-                                    toggleWishlist={toggleWishlist} 
-                                />
-                            ))}
-                        </div>
-                        <div className="home-action-btn-container">
-                            <Link to="/shop?newArrival=true" className="btn-premium-outline">
-                                Explore New Arrivals
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </Link>
-                        </div>
-                    </div>
-                )}
-            </section>
+            {/* 8. The Weaver's Journey & Slow Fashion Heritage */}
+            <CraftsmanshipJourney />
 
-            {/* Spin and Win Floating Button */}
+            {/* 9. VIP Silk Circle 10% Off Voucher with Confetti Celebration (Data from Backend) */}
+            <VipVoucherCard 
+                voucherConfig={homepageConfig?.vip_voucher} 
+            />
+
+            {/* 10. Real Patron Reviews & Testimonials Carousel (Data from Backend) */}
+            <PatronReviews 
+                reviews={homepageConfig?.reviews} 
+            />
+
+            {/* Floating Spin and Win Button */}
             {spinConfig && spinConfig.enabled && (
                 <Link 
                     to="/spin-and-win" 
-                    style={{
-                        position: 'fixed',
-                        bottom: '30px',
-                        right: '30px',
-                        backgroundColor: 'var(--color-primary)',
-                        color: 'white',
-                        padding: '12px 24px',
-                        borderRadius: '50px',
-                        boxShadow: '0 4px 15px rgba(212, 163, 115, 0.4)',
-                        textDecoration: 'none',
-                        fontWeight: 'bold',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        zIndex: 100,
-                        animation: 'pulse 2s infinite',
-                    }}
+                    className="floating-spin-btn"
+                    aria-label="Spin and Win discounts"
                 >
-                    <Gift size={18} color="#fff" style={{ marginRight: '0.4rem' }} /> Spin & Win
+                    <Gift size={16} color="#fff" style={{ marginRight: '0.2rem' }} /> Spin & Win
                 </Link>
             )}
-        </div>
+        </main>
     );
 };
 

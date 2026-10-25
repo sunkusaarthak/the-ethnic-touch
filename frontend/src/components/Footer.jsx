@@ -12,8 +12,8 @@ const Footer = () => (
                 <Link to="/about" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>About Us</Link>
                 <Link to="/blog" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Style Guide & Journal</Link>
                 <Link to="/privacy-policy" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Privacy Policy</Link>
-                <Link to="/refund-policy" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Refund & Cancellation Policy</Link>
                 <Link to="/contact" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Contact Us</Link>
+                <a href="https://share.google/eSxLvWitpLTqdQkn3" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Visit Hyderabad Store</a>
             </div>
             <p className="copyright" style={{ marginTop: '2rem' }}>&copy; 2026 The Ethnic Touch. All rights reserved.</p>
         </div>

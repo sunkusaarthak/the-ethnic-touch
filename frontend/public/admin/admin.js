@@ -548,6 +548,12 @@ function updateHeaderActions(tab) {
         btn.innerText = 'Create Coupon';
         btn.onclick = () => document.getElementById('couponModal').style.display = 'flex';
         container.appendChild(btn);
+    } else if (tab === 'reels') {
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary';
+        btn.innerText = '+ Add New Reel';
+        btn.onclick = () => openAddReelModal();
+        container.appendChild(btn);
     }
 }
 
@@ -557,6 +563,8 @@ async function loadTabData(target) {
     if (target === 'orders') loadOrders();
     if (target === 'support') loadSupport();
     if (target === 'coupons') loadCoupons();
+    if (target === 'reels') loadInstagramReels();
+    if (target === 'flashdrop') loadFlashDropConfig();
     if (target === 'settings') loadSettings();
     if (target === 'spinwin') loadSpinWin();
     if (target === 'profiles') loadProfiles();
@@ -747,29 +755,6 @@ function renderOrders() {
 
 window.renderOrders = renderOrders;
 
-async function loadCoupons() {
-    const body = document.querySelector('#couponsTable tbody');
-    body.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
-
-    try {
-        const coupons = await fetch(API_BASE_URL + '/api/admin/coupons', { headers: getAuthHeader() }).then(r => r.json());
-        body.innerHTML = '';
-        coupons.forEach(c => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="font-weight:600">${c.code}</td>
-                <td style="text-transform:capitalize">${c.type}</td>
-                <td>${c.type === 'fixed' ? '₹' : ''}${c.value}${c.type === 'percentage' ? '%' : ''}</td>
-                <td>≥ ₹${c.minOrder}</td>
-                <td>${c.usedCount} / ${c.usageLimit}</td>
-                <td><span style="color:${c.isActive ? 'green' : 'red'}">${c.isActive ? 'Active' : 'Expired'}</span></td>
-            `;
-            body.appendChild(tr);
-        });
-    } catch (err) {
-        body.innerHTML = '<tr><td colspan="6" style="color:red">Failed to load coupons.</td></tr>';
-    }
-}
 
 function resetProductFormState() {
     const form = document.getElementById('productForm');
@@ -970,12 +955,15 @@ async function handleAddProduct(e) {
 
 async function handleAddCoupon(e) {
     e.preventDefault();
+    const code = (document.getElementById('c_code').value || '').trim().toUpperCase();
     const data = {
-        code: document.getElementById('c_code').value,
+        id: 'cp_' + code.toLowerCase() + '_' + Date.now(),
+        code: code,
         type: document.getElementById('c_type').value,
         value: parseFloat(document.getElementById('c_value').value),
-        minOrder: parseFloat(document.getElementById('c_min').value),
-        usageLimit: parseInt(document.getElementById('c_limit').value)
+        minOrder: parseFloat(document.getElementById('c_min').value) || 0,
+        usageLimit: parseInt(document.getElementById('c_limit').value) || 100,
+        isActive: true
     };
 
     const res = await fetch(API_BASE_URL + '/api/admin/coupons', {
@@ -991,9 +979,169 @@ async function handleAddCoupon(e) {
         closeModals();
         loadCoupons();
         document.getElementById('couponForm').reset();
+        showAdminAlert(`Coupon ${code} created successfully!`, "Coupon Created", "success");
     } else {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({}));
         showAdminAlert(errData.error || "Failed to create coupon", 'Coupon Error', 'error');
+    }
+}
+
+async function loadCoupons() {
+    const tbody = document.querySelector('#couponsTable tbody');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 1.5rem; color: #888;">Loading store coupons...</td></tr>';
+    }
+
+    // 1. Load Homepage Coupon (VIP Voucher) from Homepage Config
+    try {
+        const hpRes = await fetch(API_BASE_URL + '/api/config/homepage');
+        if (hpRes.ok) {
+            const hpData = await hpRes.json();
+            const voucher = hpData.vip_voucher || {};
+            const codeInput = document.getElementById('vip_code');
+            const discInput = document.getElementById('vip_discount_percent');
+            const titleInput = document.getElementById('vip_title');
+            const descInput = document.getElementById('vip_desc');
+
+            if (codeInput) codeInput.value = voucher.code || 'WELCOME10';
+            if (discInput) discInput.value = voucher.discount_percent || 10;
+            if (titleInput) titleInput.value = voucher.title || 'Get 10% Off Your First Order';
+            if (descInput) descInput.value = voucher.desc || 'Use code WELCOME10 at checkout to get an extra 10% off on your first kurti order today!';
+        }
+    } catch (e) {
+        console.error("Failed to load homepage voucher config:", e);
+    }
+
+    // 2. Load Store Coupons Table
+    try {
+        const res = await fetch(API_BASE_URL + '/api/admin/coupons', { headers: getAuthHeader() });
+        if (!res.ok) throw new Error("Failed to load coupons (HTTP " + res.status + ")");
+        const coupons = await res.json();
+
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (!Array.isArray(coupons) || coupons.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #888;">No coupons found. Click "+ Create New Coupon" to add one.</td></tr>';
+            return;
+        }
+
+        coupons.forEach(c => {
+            const tr = document.createElement('tr');
+            const isPercentage = c.type === 'percentage';
+            const valDisplay = isPercentage ? `${c.value}%` : `₹${parseFloat(c.value).toLocaleString('en-IN')}`;
+            const minDisplay = c.minOrder > 0 ? `₹${parseFloat(c.minOrder).toLocaleString('en-IN')}` : 'No Min';
+            const usageDisplay = `${c.usedCount || 0} / ${c.usageLimit > 0 ? c.usageLimit : '∞'}`;
+            const statusBadge = (c.isActive !== false)
+                ? `<span style="background: #E8F5E9; color: #2E7D32; padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600;">Active</span>`
+                : `<span style="background: #FFEBEE; color: #C62828; padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600;">Inactive</span>`;
+
+            tr.innerHTML = `
+                <td><code style="font-weight: 700; color: #C49363; background: #FAF7F2; padding: 3px 8px; border-radius: 4px;">${c.code}</code></td>
+                <td style="text-transform: capitalize;">${c.type || 'Percentage'}</td>
+                <td style="font-weight: 600;">${valDisplay}</td>
+                <td>${minDisplay}</td>
+                <td>${usageDisplay}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <button type="button" onclick="deleteCoupon('${c.code}')" style="background: #FFF5F5; color: #C62828; border: 1px solid #FFCDD2; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 0.78rem; font-weight: 600;">
+                        Delete
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error("Failed to load coupons:", err);
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: #E53E3E; padding: 1.5rem;">Failed to load coupons: ${err.message}</td></tr>`;
+        }
+    }
+}
+
+async function deleteCoupon(code) {
+    if (!confirm(`Are you sure you want to delete coupon code "${code}"?`)) return;
+    try {
+        const res = await fetch(API_BASE_URL + `/api/admin/coupons?code=${encodeURIComponent(code)}`, {
+            method: 'DELETE',
+            headers: getAuthHeader()
+        });
+        if (res.ok) {
+            showAdminAlert(`Coupon ${code} removed successfully.`, "Coupon Deleted", "success");
+            loadCoupons();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            showAdminAlert(err.error || 'Failed to delete coupon', 'Error', 'error');
+        }
+    } catch (e) {
+        showAdminAlert(e.message, 'Error', 'error');
+    }
+}
+
+async function saveHomepageCouponConfig() {
+    const code = (document.getElementById('vip_code')?.value || 'WELCOME10').trim().toUpperCase();
+    const discount = parseInt(document.getElementById('vip_discount_percent')?.value || '10');
+    const title = (document.getElementById('vip_title')?.value || 'Get 10% Off Your First Order').trim();
+    const desc = (document.getElementById('vip_desc')?.value || '').trim();
+
+    if (!code) {
+        showAdminAlert("Please enter a valid coupon code", "Validation Error", "error");
+        return;
+    }
+
+    try {
+        const hpRes = await fetch(API_BASE_URL + '/api/config/homepage');
+        if (!hpRes.ok) throw new Error("Could not fetch current homepage configuration");
+        const hpData = await hpRes.json();
+
+        hpData.vip_voucher = {
+            code: code,
+            discount_percent: discount > 0 ? discount : 10,
+            title: title,
+            desc: desc
+        };
+
+        const updateRes = await fetch(API_BASE_URL + '/api/admin/config/homepage', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(hpData)
+        });
+
+        if (!updateRes.ok) {
+            const errText = await updateRes.text();
+            throw new Error(errText || "Failed to update homepage config");
+        }
+
+        // Also ensure the coupon exists in coupons database so it works at checkout!
+        try {
+            await fetch(API_BASE_URL + '/api/admin/coupons', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getAuthHeader()
+                },
+                body: JSON.stringify({
+                    id: 'cp_' + code.toLowerCase(),
+                    code: code,
+                    type: 'percentage',
+                    value: discount > 0 ? discount : 10,
+                    minOrder: 0,
+                    usageLimit: 100000,
+                    isActive: true
+                })
+            });
+        } catch (couponErr) {
+            console.log("Coupon already exists or created:", couponErr);
+        }
+
+        showAdminAlert(`Homepage Welcome Coupon (${code}) updated and published successfully!`, "Coupon UI Saved", "success");
+        await loadCoupons();
+    } catch (err) {
+        console.error("Failed to save homepage coupon UI:", err);
+        showAdminAlert(err.message, "Error Saving Coupon UI", "error");
     }
 }
 
@@ -1117,6 +1265,10 @@ function editTier(idx) {
 
     document.getElementById('formTitle').innerText = "Edit Reward Tier";
     document.getElementById('cancelBtn').style.display = 'inline-block';
+    const formElem = document.getElementById('tierForm');
+    if (formElem) {
+        formElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 
 function deleteTier(idx) {
@@ -1152,7 +1304,16 @@ async function handleSaveTier(e) {
             throw new Error("Threshold must be a valid number");
         }
 
+        let existingId = 0;
+        if (editIdxStr !== "") {
+            const idx = parseInt(editIdxStr);
+            if (currentTiers[idx] && currentTiers[idx].id) {
+                existingId = currentTiers[idx].id;
+            }
+        }
+
         let tier = {
+            id: existingId,
             name: tierName,
             threshold: threshold,
             rewardType: rewardType
@@ -1220,10 +1381,16 @@ async function saveTiersToServer() {
         });
 
         console.log("[SETTINGS DIAG] Request completed. Response status code:", res.status);
+        const contentType = res.headers.get('content-type') || '';
+
+        if (contentType.includes('text/html')) {
+            throw new Error("Backend server returned HTML fallback. The backend server must be restarted to apply the new endpoint.");
+        }
 
         if (res.ok) {
             console.log("[SETTINGS DIAG] Save successful. Reloading settings list.");
             await loadSettings();
+            showAdminAlert("Reward tier saved and updated successfully!", 'Success', 'success');
         } else {
             const text = await res.text();
             console.error("[SETTINGS DIAG] Save failed with response text:", text);
@@ -1236,7 +1403,7 @@ async function saveTiersToServer() {
         }
     } catch (err) {
         console.error("[SETTINGS DIAG] Fetch request connection failed:", err);
-        showAdminAlert("Failed to connect to server: " + err.message, 'Network Error', 'error');
+        showAdminAlert("Failed to save reward tiers: " + err.message, 'Network Error', 'error');
     }
 }
 
@@ -2010,4 +2177,1226 @@ async function pollUnreadSupportCount() {
 // Poll every 60 seconds
 setInterval(pollUnreadSupportCount, 60000);
 window.markSupportRead = markSupportRead;
+
+// ==========================================
+// INSTAGRAM REELS & SHOPPABLE SHOWCASE LOGIC
+// ==========================================
+
+let currentHomepageConfig = null;
+let currentReelsList = [];
+let allStoreProducts = [];
+
+async function loadInstagramReels() {
+    const container = document.getElementById('reelsCardsContainer');
+    if (container) {
+        container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: #888;">Loading Instagram Reels & Store Catalog...</div>';
+    }
+
+    try {
+        // Fetch homepage config and store products in parallel
+        const [hpRes, prodRes] = await Promise.all([
+            fetch(API_BASE_URL + '/api/config/homepage'),
+            fetch(API_BASE_URL + '/api/products')
+        ]);
+
+        if (hpRes.ok) {
+            currentHomepageConfig = await hpRes.json();
+            const insta = currentHomepageConfig.instagram || {};
+            
+            const handleEl = document.getElementById('insta_handle');
+            if (handleEl) handleEl.value = (insta.handle || 'theethnictouch.co').replace('@', '');
+
+            const profileEl = document.getElementById('insta_profile_url');
+            if (profileEl) profileEl.value = insta.profile_url || 'https://www.instagram.com/theethnictouch.co';
+
+            currentReelsList = Array.isArray(insta.reels) ? insta.reels : [];
+        }
+
+        if (prodRes.ok) {
+            const prods = await prodRes.json();
+            allStoreProducts = Array.isArray(prods) ? prods : [];
+        }
+
+        renderReelsList();
+    } catch (err) {
+        console.error("Failed to load Instagram reels:", err);
+        if (container) {
+            container.innerHTML = `<div style="grid-column: 1 / -1; color: #e53e3e; padding: 2rem;">Error loading Instagram reels: ${err.message}</div>`;
+        }
+    }
+}
+
+function renderReelsList() {
+    const container = document.getElementById('reelsCardsContainer');
+    const badge = document.getElementById('reelsCountBadge');
+    if (badge) badge.innerText = currentReelsList.length;
+
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (currentReelsList.length === 0) {
+        container.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; background: #FAF8F5; border: 2px dashed #DCD5CB; border-radius: 12px;">
+                <p style="color: #6C6863; font-size: 1rem; margin-bottom: 1rem;">No shoppable reels configured yet.</p>
+                <button type="button" class="btn-primary" onclick="openAddReelModal()">+ Add Your First Reel</button>
+            </div>
+        `;
+        return;
+    }
+
+    currentReelsList.forEach((reel, index) => {
+        const prod = allStoreProducts.find(p => String(p.id) === String(reel.product_id || (reel.product ? reel.product.id : '')));
+        const cardThumb = reel.thumbnail || (prod ? prod.imageUrl : './images/kurthi_peach.png');
+        const isHit = reel.is_hit_reel || reel.isHitReel;
+        const badgeLabel = isHit ? '⭐ Hit Reel' : (reel.views || 'Latest Drop');
+
+        const card = document.createElement('div');
+        card.style.cssText = `
+            background: #FFFFFF;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            transition: transform 0.2s, box-shadow 0.2s;
+        `;
+
+        card.innerHTML = `
+            <!-- Visual Reel Header & Thumbnail Preview -->
+            <div style="position: relative; height: 260px; background: #2D2A26; overflow: hidden;">
+                <img src="${cardThumb}" alt="${reel.title || 'Reel'}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.9;">
+                
+                <!-- Badge Overlay -->
+                <div style="position: absolute; top: 12px; left: 12px; z-index: 2;">
+                    <span style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.74rem; font-weight: 700; background: ${isHit ? 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)' : 'rgba(0,0,0,0.6)'}; color: #FFF; backdrop-filter: blur(4px); box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+                        ${badgeLabel}
+                    </span>
+                </div>
+
+                <!-- Instagram Watermark Icon -->
+                <div style="position: absolute; top: 12px; right: 12px; z-index: 2; background: rgba(0,0,0,0.4); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FAF8F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                    </svg>
+                </div>
+
+                <!-- Center Play Watermark -->
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.3);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#FFF">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                </div>
+
+                <!-- Bottom stats bar on thumbnail -->
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 10px 12px; background: linear-gradient(transparent, rgba(0,0,0,0.8)); color: #FFF; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span>${reel.author || '@theethnictouch.co'}</span>
+                    <span>❤️ ${reel.likes || 'Trending'}</span>
+                </div>
+            </div>
+
+            <!-- Card Content Body -->
+            <div style="padding: 1.25rem; display: flex; flex-direction: column; flex: 1; justify-content: space-between;">
+                <div>
+                    <h4 style="font-size: 1rem; font-weight: 600; color: #2D2A26; margin: 0 0 0.4rem; line-height: 1.3;">
+                        ${reel.title || 'Untitled Reel'}
+                    </h4>
+                    <p style="font-size: 0.8rem; color: #6C6863; margin: 0 0 1rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                        ${reel.caption || 'No caption entered.'}
+                    </p>
+
+                    <!-- Linked Product Details Box -->
+                    <div style="background: #FAF8F5; border: 1px solid #EAE3D9; border-radius: 8px; padding: 0.75rem; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 10px;">
+                        ${prod ? `
+                            <img src="${prod.imageUrl}" alt="${prod.name}" style="width: 44px; height: 56px; object-fit: cover; border-radius: 4px; border: 1px solid #DDD;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 0.68rem; text-transform: uppercase; color: #5B8E7D; font-weight: 700; letter-spacing: 0.5px;">✓ Linked Product</div>
+                                <div style="font-size: 0.82rem; font-weight: 600; color: #2D2A26; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${prod.name}</div>
+                                <div style="font-size: 0.78rem; font-weight: 700; color: #A06C3E;">₹${Number(prod.price).toLocaleString('en-IN')}</div>
+                            </div>
+                        ` : `
+                            <div style="width: 44px; height: 56px; background: #EEE; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #999;">⚠️</div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 0.75rem; color: #e53e3e; font-weight: 600;">No Product Linked</div>
+                                <div style="font-size: 0.72rem; color: #888;">Select a product so users can shop this reel.</div>
+                            </div>
+                        `}
+                    </div>
+
+                    ${reel.instagram_url ? `
+                        <div style="font-size: 0.75rem; margin-bottom: 1rem;">
+                            <a href="${reel.instagram_url}" target="_blank" rel="noopener noreferrer" style="color: #A06C3E; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; word-break: break-all;">
+                                <span>🔗 View Reel on Instagram</span> ↗
+                            </a>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- Action Buttons & Reordering -->
+                <div style="border-top: 1px solid #F0ECE6; padding-top: 1rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+                    <!-- Order Reorder Buttons -->
+                    <div style="display: flex; gap: 4px;">
+                        <button type="button" onclick="moveReel(${index}, -1)" ${index === 0 ? 'disabled style="opacity: 0.4; cursor: not-allowed; padding: 4px 8px; background: #FAF8F5; border: 1px solid #DDD; border-radius: 4px;"' : 'style="cursor: pointer; padding: 4px 8px; background: #FAF8F5; border: 1px solid #DDD; border-radius: 4px;"'} title="Move Left / Prioritize" class="btn-sm">
+                            ←
+                        </button>
+                        <button type="button" onclick="moveReel(${index}, 1)" ${index === currentReelsList.length - 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed; padding: 4px 8px; background: #FAF8F5; border: 1px solid #DDD; border-radius: 4px;"' : 'style="cursor: pointer; padding: 4px 8px; background: #FAF8F5; border: 1px solid #DDD; border-radius: 4px;"'} title="Move Right" class="btn-sm">
+                            →
+                        </button>
+                    </div>
+
+                    <!-- Edit and Delete Buttons -->
+                    <div style="display: flex; gap: 6px;">
+                        <button type="button" class="btn-sm" onclick="openEditReelModal('${reel.id}')" style="background: #2D2A26; color: #FFF; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.78rem; font-weight: 600;">
+                            Edit Reel
+                        </button>
+                        <button type="button" class="btn-sm" onclick="deleteReel('${reel.id}')" style="background: #FFF; color: #E53E3E; border: 1px solid #FEB2B2; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.78rem;" title="Delete Reel">
+                            🗑
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(card);
+    });
+}
+
+function populateReelProductSelect(selectedProductId = '') {
+    const select = document.getElementById('reel_product_id');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Choose Product from Store Catalog --</option>';
+
+    allStoreProducts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.innerText = `${p.name} - ₹${Number(p.price).toLocaleString('en-IN')} (${p.category || 'Silhouettes'})`;
+        if (String(p.id) === String(selectedProductId)) {
+            opt.selected = true;
+        }
+        select.appendChild(opt);
+    });
+
+    handleReelProductSelect(selectedProductId);
+}
+
+function handleReelProductSelect(productId) {
+    const previewBox = document.getElementById('reelSelectedProductPreview');
+    const nameEl = document.getElementById('reelPreviewProdName');
+    const priceEl = document.getElementById('reelPreviewProdPrice');
+    const imgEl = document.getElementById('reelPreviewProdImg');
+
+    const prod = allStoreProducts.find(p => String(p.id) === String(productId));
+    if (prod && previewBox) {
+        previewBox.style.display = 'flex';
+        if (nameEl) nameEl.innerText = prod.name;
+        if (priceEl) priceEl.innerText = `₹${Number(prod.price).toLocaleString('en-IN')} (${prod.category || 'Straight Cut'})`;
+        if (imgEl) imgEl.src = prod.imageUrl;
+
+        // If thumbnail input is empty, auto-populate with product image
+        const thumbInput = document.getElementById('reel_thumbnail');
+        if (thumbInput && !thumbInput.value.trim()) {
+            thumbInput.value = prod.imageUrl;
+            updateReelThumbPreview(prod.imageUrl);
+        }
+    } else if (previewBox) {
+        previewBox.style.display = 'none';
+    }
+}
+
+function useProductImageAsThumbnail() {
+    const prodId = document.getElementById('reel_product_id').value;
+    const prod = allStoreProducts.find(p => String(p.id) === String(prodId));
+    if (prod) {
+        document.getElementById('reel_thumbnail').value = prod.imageUrl;
+        updateReelThumbPreview(prod.imageUrl);
+        showAdminAlert('Using product photo as reel thumbnail', 'Thumbnail Updated', 'success');
+    }
+}
+
+function updateReelThumbPreview(url) {
+    const box = document.getElementById('reelThumbImgPreviewBox');
+    const img = document.getElementById('reelThumbImgPreview');
+    if (!box || !img) return;
+
+    if (url && url.trim()) {
+        img.src = url.trim();
+        box.style.display = 'block';
+    } else {
+        box.style.display = 'none';
+    }
+}
+
+let reelFetchDebounceTimer = null;
+function handleReelUrlInput(url) {
+    const codeInput = document.getElementById('reel_code');
+    if (!url || !codeInput) return;
+
+    // Pattern matches /reel/CODE/ or /reel/CODE
+    const match = url.match(/\/reel\/([A-Za-z0-9_-]+)/);
+    if (match && match[1]) {
+        codeInput.value = match[1];
+
+        // Automatically trigger Instagram thumbnail fetch if thumbnail input is empty or using a fallback image
+        const thumbInput = document.getElementById('reel_thumbnail');
+        if (thumbInput && (!thumbInput.value.trim() || thumbInput.value.includes('/images/kurthi'))) {
+            clearTimeout(reelFetchDebounceTimer);
+            reelFetchDebounceTimer = setTimeout(() => {
+                fetchReelThumbnailFromInsta();
+            }, 500);
+        }
+    }
+}
+
+function openAddReelModal() {
+    document.getElementById('reelModalTitle').innerText = 'Add New Shoppable Reel';
+    document.getElementById('reelSubmitBtn').innerText = 'Save & Publish Reel';
+
+    document.getElementById('reel_id').value = `reel-${Date.now()}`;
+    document.getElementById('reel_title').value = '';
+    document.getElementById('reel_instagram_url').value = '';
+    document.getElementById('reel_code').value = '';
+    document.getElementById('reel_thumbnail').value = '';
+    document.getElementById('reel_caption').value = '';
+    document.getElementById('reel_is_hit').checked = false;
+    document.getElementById('reel_views').value = 'Latest Drop';
+    document.getElementById('reel_likes').value = 'Trending Hit';
+
+    updateReelThumbPreview('');
+    populateReelProductSelect('');
+
+    document.getElementById('reelModal').style.display = 'flex';
+}
+
+function openEditReelModal(reelIdOrIndex) {
+    let reel = currentReelsList.find(r => String(r.id) === String(reelIdOrIndex));
+    if (!reel && typeof reelIdOrIndex === 'number') {
+        reel = currentReelsList[reelIdOrIndex];
+    }
+    if (!reel && !isNaN(Number(reelIdOrIndex))) {
+        reel = currentReelsList[Number(reelIdOrIndex)];
+    }
+    if (!reel) {
+        showAdminAlert('Reel configuration not found', 'Error', 'error');
+        return;
+    }
+
+    const titleEl = document.getElementById('reelModalTitle');
+    if (titleEl) titleEl.innerText = `Edit Reel: ${reel.title || 'Shoppable Video'}`;
+
+    const submitBtn = document.getElementById('reelSubmitBtn');
+    if (submitBtn) submitBtn.innerText = 'Update Reel';
+
+    const idInput = document.getElementById('reel_id');
+    if (idInput) idInput.value = reel.id || `reel-${Date.now()}`;
+
+    const titleInput = document.getElementById('reel_title');
+    if (titleInput) titleInput.value = reel.title || '';
+
+    const urlInput = document.getElementById('reel_instagram_url');
+    if (urlInput) urlInput.value = reel.instagram_url || reel.instagramUrl || '';
+
+    const codeInput = document.getElementById('reel_code');
+    if (codeInput) codeInput.value = reel.reel_code || reel.reelCode || '';
+
+    const thumbInput = document.getElementById('reel_thumbnail');
+    if (thumbInput) thumbInput.value = reel.thumbnail || '';
+
+    const captionInput = document.getElementById('reel_caption');
+    if (captionInput) captionInput.value = reel.caption || '';
+
+    const isHitInput = document.getElementById('reel_is_hit');
+    if (isHitInput) isHitInput.checked = !!(reel.is_hit_reel || reel.isHitReel);
+
+    const viewsInput = document.getElementById('reel_views');
+    if (viewsInput) viewsInput.value = reel.views || '';
+
+    const likesInput = document.getElementById('reel_likes');
+    if (likesInput) likesInput.value = reel.likes || '';
+
+    updateReelThumbPreview(reel.thumbnail || '');
+    populateReelProductSelect(reel.product_id || (reel.product ? reel.product.id : ''));
+
+    const modal = document.getElementById('reelModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+async function handleSaveReel(event) {
+    event.preventDefault();
+
+    const reelId = document.getElementById('reel_id').value;
+    const title = document.getElementById('reel_title').value.trim();
+    const instaUrl = document.getElementById('reel_instagram_url').value.trim();
+    let reelCode = document.getElementById('reel_code').value.trim();
+    const prodId = document.getElementById('reel_product_id').value;
+    let thumbnail = document.getElementById('reel_thumbnail').value.trim();
+    const caption = document.getElementById('reel_caption').value.trim();
+    const isHit = document.getElementById('reel_is_hit').checked;
+    const views = document.getElementById('reel_views').value.trim() || (isHit ? 'Hit Reel' : 'Latest Drop');
+    const likes = document.getElementById('reel_likes').value.trim() || 'Trending Hit';
+
+    if (!reelCode && instaUrl) {
+        const match = instaUrl.match(/\/reel\/([A-Za-z0-9_-]+)/);
+        if (match && match[1]) reelCode = match[1];
+    }
+
+    // If thumbnail is still empty, attempt automatic fetch from Instagram before saving
+    if (!thumbnail && instaUrl && instaUrl.includes('/reel/')) {
+        try {
+            const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: instaUrl })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.thumbnail) {
+                    thumbnail = data.thumbnail;
+                    if (data.reelCode && !reelCode) reelCode = data.reelCode;
+                }
+            }
+        } catch (e) {
+            console.warn("Auto thumbnail fetch on save failed:", e);
+        }
+    }
+
+    if (!thumbnail && prodId) {
+        const prod = allStoreProducts.find(p => String(p.id) === String(prodId));
+        if (prod) thumbnail = prod.imageUrl;
+    }
+
+    const reelItem = {
+        id: reelId,
+        is_hit_reel: isHit,
+        instagram_url: instaUrl,
+        reel_code: reelCode,
+        title: title,
+        caption: caption,
+        author: `@${(document.getElementById('insta_handle').value || 'theethnictouch.co').replace('@', '')}`,
+        likes: likes,
+        views: views,
+        thumbnail: thumbnail,
+        product_id: prodId
+    };
+
+    const existingIdx = currentReelsList.findIndex(r => String(r.id) === String(reelId));
+    if (existingIdx >= 0) {
+        currentReelsList[existingIdx] = reelItem;
+    } else {
+        currentReelsList.push(reelItem);
+    }
+
+    const saved = await saveInstagramConfigToBackend();
+    if (saved) {
+        closeModals();
+        renderReelsList();
+        showAdminAlert(`Reel "${title}" saved and published to homepage!`, 'Reel Saved', 'success');
+    }
+}
+
+async function deleteReel(reelId) {
+    const reel = currentReelsList.find(r => String(r.id) === String(reelId));
+    const title = reel ? reel.title : 'this reel';
+
+    if (!confirm(`Are you sure you want to remove "${title}" from the homepage?`)) {
+        return;
+    }
+
+    currentReelsList = currentReelsList.filter(r => String(r.id) !== String(reelId));
+    const saved = await saveInstagramConfigToBackend();
+    if (saved) {
+        renderReelsList();
+        showAdminAlert('Reel removed from homepage.', 'Reel Deleted', 'success');
+    }
+}
+
+async function moveReel(index, direction) {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= currentReelsList.length) return;
+
+    // Swap elements
+    const temp = currentReelsList[index];
+    currentReelsList[index] = currentReelsList[targetIdx];
+    currentReelsList[targetIdx] = temp;
+
+    const saved = await saveInstagramConfigToBackend();
+    if (saved) {
+        renderReelsList();
+    }
+}
+
+async function saveInstagramGlobalSettings() {
+    const handle = (document.getElementById('insta_handle').value || '').trim().replace('@', '');
+    const profileUrl = (document.getElementById('insta_profile_url').value || '').trim();
+
+    const saved = await saveInstagramConfigToBackend(handle, profileUrl);
+    if (saved) {
+        showAdminAlert('Instagram handle and profile URL updated!', 'Settings Saved', 'success');
+    }
+}
+
+async function saveInstagramConfigToBackend(customHandle, customProfileUrl) {
+    try {
+        const handle = customHandle || (document.getElementById('insta_handle') ? document.getElementById('insta_handle').value.trim().replace('@', '') : 'theethnictouch.co');
+        const profileUrl = customProfileUrl || (document.getElementById('insta_profile_url') ? document.getElementById('insta_profile_url').value.trim() : 'https://www.instagram.com/theethnictouch.co');
+
+        const instaPayload = {
+            handle: handle || 'theethnictouch.co',
+            profile_url: profileUrl || 'https://www.instagram.com/theethnictouch.co',
+            reels: currentReelsList
+        };
+
+        const res = await fetch(API_BASE_URL + '/api/admin/config/instagram', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(instaPayload)
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${res.status}`);
+        }
+
+        return true;
+    } catch (err) {
+        console.error("Failed to save Instagram config to backend:", err);
+        showAdminAlert('Failed to save to server: ' + err.message, 'Save Error', 'error');
+        return false;
+    }
+}
+
+async function fetchReelThumbnailFromInsta() {
+    const urlInput = document.getElementById('reel_instagram_url');
+    const url = (urlInput ? urlInput.value : '').trim();
+    if (!url) {
+        showAdminAlert('Please enter an Instagram Reel URL first.', 'URL Required', 'error');
+        if (urlInput) urlInput.focus();
+        return;
+    }
+
+    const btn = document.getElementById('btnFetchInstaThumb');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Fetching...';
+    }
+
+    try {
+        const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ url: url })
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data.thumbnail) {
+            const thumbInput = document.getElementById('reel_thumbnail');
+            if (thumbInput) {
+                thumbInput.value = data.thumbnail;
+                updateReelThumbPreview(data.thumbnail);
+            }
+            if (data.reelCode && !document.getElementById('reel_code').value) {
+                document.getElementById('reel_code').value = data.reelCode;
+            }
+            showAdminAlert('Authentic Instagram Reel thumbnail successfully fetched and applied!', 'Thumbnail Loaded', 'success');
+        }
+    } catch (err) {
+        console.error("Failed to fetch reel thumbnail:", err);
+        showAdminAlert('Could not fetch thumbnail directly from Instagram: ' + err.message, 'Fetch Failed', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+async function syncAllInstaThumbnails() {
+    const btn = document.getElementById('btnSyncAllThumbs');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Syncing All Thumbnails...';
+    }
+
+    try {
+        let updatedCount = 0;
+        for (let i = 0; i < currentReelsList.length; i++) {
+            const r = currentReelsList[i];
+            const url = r.instagram_url || r.instagramUrl;
+            if (url) {
+                try {
+                    const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: url })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.thumbnail) {
+                            r.thumbnail = data.thumbnail;
+                            if (data.reelCode && !r.reel_code) r.reel_code = data.reelCode;
+                            updatedCount++;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Error syncing reel thumbnail for", url, e);
+                }
+            }
+        }
+
+        if (updatedCount > 0) {
+            await saveInstagramConfigToBackend();
+            renderReelsList();
+            showAdminAlert(`Successfully synced ${updatedCount} Instagram Reel thumbnails!`, 'Thumbnails Synced', 'success');
+        } else {
+            showAdminAlert('No thumbnails needed syncing.', 'Info', 'info');
+        }
+    } catch (err) {
+        showAdminAlert('Sync failed: ' + err.message, 'Error', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+window.loadInstagramReels = loadInstagramReels;
+window.renderReelsList = renderReelsList;
+window.openAddReelModal = openAddReelModal;
+window.openEditReelModal = openEditReelModal;
+window.handleReelUrlInput = handleReelUrlInput;
+window.handleReelProductSelect = handleReelProductSelect;
+window.useProductImageAsThumbnail = useProductImageAsThumbnail;
+window.updateReelThumbPreview = updateReelThumbPreview;
+window.handleSaveReel = handleSaveReel;
+window.deleteReel = deleteReel;
+window.moveReel = moveReel;
+window.saveInstagramGlobalSettings = saveInstagramGlobalSettings;
+window.fetchReelThumbnailFromInsta = fetchReelThumbnailFromInsta;
+window.syncAllInstaThumbnails = syncAllInstaThumbnails;
+
+// ==========================================
+// FLASH SPOTLIGHT DROP CONFIGURATION
+// ==========================================
+let currentFlashConfig = null;
+let flashProductsList = [];
+let flashCountdownInterval = null;
+let currentCountdownSeconds = 0;
+
+async function loadFlashDropConfig() {
+    const statusText = document.getElementById('fdStatusText');
+    if (statusText) statusText.innerText = "Loading Flash Drop Status...";
+
+    try {
+        const [hpRes, prodRes] = await Promise.all([
+            fetch(API_BASE_URL + '/api/config/homepage'),
+            fetch(API_BASE_URL + '/api/products')
+        ]);
+
+        if (prodRes.ok) {
+            flashProductsList = await prodRes.json();
+            populateFlashProductDropdown(flashProductsList);
+        }
+
+        if (hpRes.ok) {
+            const hpData = await hpRes.json();
+            currentFlashConfig = hpData.flash_drop || {};
+            applyFlashConfigToUI(currentFlashConfig);
+        }
+    } catch (err) {
+        console.error("Failed to load flash drop config:", err);
+        if (statusText) statusText.innerText = "Error loading settings";
+    }
+}
+
+function populateFlashProductDropdown(products) {
+    const select = document.getElementById('fd_product_select');
+    if (!select) return;
+
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Select a Kurti from Live Catalog --</option>';
+
+    products.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.name} — ₹${p.price} (${p.stock} in stock)`;
+        select.appendChild(opt);
+    });
+
+    if (currentVal) select.value = currentVal;
+}
+
+function getActiveFlashProduct() {
+    const isManual = document.getElementById('fd_mode_manual')?.checked;
+    const prodId = document.getElementById('fd_product_select')?.value;
+    
+    if (isManual && prodId) {
+        const manualProd = flashProductsList.find(p => String(p.id) === String(prodId));
+        if (manualProd) return manualProd;
+    }
+    
+    // Random mode: find the currently rotating product matching storefront Home.jsx deterministic cycle
+    const durHours = parseInt(document.getElementById('fd_random_hours')?.value) ?? 6;
+    const durMins = parseInt(document.getElementById('fd_random_mins')?.value) ?? 0;
+    const totalCycleMins = (durHours * 60) + durMins;
+    const cycleMs = (totalCycleMins > 0 ? totalCycleMins : 360) * 60 * 1000;
+    const cycleStart = currentFlashConfig?.cycle_started_at 
+        ? new Date(currentFlashConfig.cycle_started_at).getTime() 
+        : 0;
+    const elapsedMs = Math.max(0, Date.now() - cycleStart);
+    const cycleBlock = Math.floor(elapsedMs / cycleMs);
+
+    const inStockKurtis = flashProductsList.filter(p => {
+        const cat = (p.category || '').toLowerCase();
+        const name = (p.name || '').toLowerCase();
+        const isKurti = cat.includes('kurti') || cat.includes('tunic') || cat.includes('straight') || cat.includes('line') || name.includes('kurti');
+        return (p.stock || 0) > 0 && isKurti;
+    });
+    const pool = inStockKurtis.length > 0 
+        ? inStockKurtis 
+        : (flashProductsList.filter(p => (p.stock || 0) > 0).length > 0 ? flashProductsList.filter(p => (p.stock || 0) > 0) : flashProductsList);
+
+    if (pool.length === 0) {
+        return {
+            name: 'Pink Paisley Printed Straight Kurti',
+            price: 549,
+            imageUrl: './images/kurthi_peach.png',
+            stock: 5,
+            fabric: 'Cotton',
+            description: 'Crafted in 100% soft Jaipur cotton with vibrant floral paisley motifs.'
+        };
+    }
+
+    const index = Math.abs(cycleBlock) % pool.length;
+    return pool[index];
+}
+
+function startAdminFlashCountdown(hours, mins, secs) {
+    if (flashCountdownInterval) {
+        clearInterval(flashCountdownInterval);
+        flashCountdownInterval = null;
+    }
+
+    currentCountdownSeconds = (hours * 3600) + (mins * 60) + secs;
+
+    const renderTimer = () => {
+        if (currentCountdownSeconds < 0) currentCountdownSeconds = 0;
+        const h = Math.floor(currentCountdownSeconds / 3600);
+        const m = Math.floor((currentCountdownSeconds % 3600) / 60);
+        const s = currentCountdownSeconds % 60;
+
+        const pvHours = document.getElementById('pv_hours');
+        const pvMins = document.getElementById('pv_mins');
+        const pvSecs = document.getElementById('pv_secs');
+
+        if (pvHours) pvHours.innerText = String(h).padStart(2, '0');
+        if (pvMins) pvMins.innerText = String(m).padStart(2, '0');
+        if (pvSecs) pvSecs.innerText = String(s).padStart(2, '0');
+
+        const statusText = document.getElementById('fdStatusText');
+        if (statusText && currentFlashConfig) {
+            const isManual = currentFlashConfig.mode === 'manual';
+            if (isManual) {
+                const prod = flashProductsList.find(p => String(p.id) === String(currentFlashConfig.product_id));
+                const name = prod ? prod.name : 'Selected Kurti';
+                statusText.innerHTML = `🎯 <strong>Spotlight Active:</strong> ${name} (${h}h ${m}m ${s}s left before auto-revert)`;
+            } else {
+                statusText.innerHTML = `🔀 <strong>Auto Rotation Active:</strong> Randomly rotating products from DB (${h}h ${m}m ${s}s left in cycle)`;
+            }
+        }
+
+        if (currentCountdownSeconds <= 0) {
+            clearInterval(flashCountdownInterval);
+            flashCountdownInterval = null;
+            setTimeout(() => {
+                loadFlashDropConfig();
+            }, 1000);
+        }
+    };
+
+    renderTimer();
+
+    flashCountdownInterval = setInterval(() => {
+        currentCountdownSeconds--;
+        renderTimer();
+    }, 1000);
+}
+
+function applyFlashConfigToUI(cfg) {
+    const mode = cfg.mode === 'manual' ? 'manual' : 'random';
+    const isManual = mode === 'manual';
+
+    // Set radios
+    const radRandom = document.getElementById('fd_mode_random');
+    const radManual = document.getElementById('fd_mode_manual');
+    if (radRandom && radManual) {
+        radRandom.checked = !isManual;
+        radManual.checked = isManual;
+    }
+
+    // Manual controls card
+    const manualCard = document.getElementById('fd_manual_settings_card');
+    if (manualCard) {
+        manualCard.style.display = isManual ? 'block' : 'none';
+    }
+
+    // Product Select
+    const select = document.getElementById('fd_product_select');
+    if (select && cfg.product_id) {
+        select.value = cfg.product_id;
+        onFlashProductSelect();
+    }
+
+    // Cycle duration for random mode
+    const randHours = document.getElementById('fd_random_hours');
+    if (randHours) randHours.value = cfg.duration_hours !== undefined ? cfg.duration_hours : 6;
+
+    const randMins = document.getElementById('fd_random_mins');
+    if (randMins) randMins.value = cfg.duration_mins !== undefined ? cfg.duration_mins : 0;
+
+    // Duration for manual spotlight
+    const durHours = document.getElementById('fd_duration_hours');
+    if (durHours) durHours.value = cfg.duration_hours !== undefined ? cfg.duration_hours : 6;
+
+    const durMins = document.getElementById('fd_duration_mins');
+    if (durMins) durMins.value = cfg.duration_mins !== undefined ? cfg.duration_mins : 0;
+
+    // Active product (rotating kurti or manual selection)
+    const activeProd = getActiveFlashProduct();
+
+    // Scarcity & Copy (Section 3) - prefilled from active product or saved custom overrides
+    const badgeInput = document.getElementById('fd_badge_text');
+    if (badgeInput) badgeInput.value = cfg.badge_text || 'SELLING FAST';
+
+    const remStockInput = document.getElementById('fd_remaining_stock');
+    if (remStockInput) {
+        if (cfg.remaining_stock !== undefined && cfg.remaining_stock !== null && cfg.remaining_stock > 0) {
+            remStockInput.value = cfg.remaining_stock;
+        } else {
+            remStockInput.value = Math.max(1, Math.min(activeProd?.stock || 5, 8));
+        }
+    }
+
+    const totalStockInput = document.getElementById('fd_total_stock');
+    if (totalStockInput) totalStockInput.value = cfg.total_stock !== undefined ? cfg.total_stock : 25;
+
+    const titleInput = document.getElementById('fd_title');
+    if (titleInput) titleInput.value = cfg.title !== undefined ? cfg.title : 'Customer Favorite: ';
+
+    const highlightInput = document.getElementById('fd_highlight');
+    if (highlightInput) {
+        if (cfg.highlight && cfg.highlight.trim() !== '') {
+            highlightInput.value = cfg.highlight;
+        } else {
+            highlightInput.value = activeProd?.name || 'Pink Paisley Cotton Kurti';
+        }
+    }
+
+    const descInput = document.getElementById('fd_desc');
+    if (descInput) {
+        if (cfg.desc && cfg.desc.trim() !== '') {
+            descInput.value = cfg.desc;
+        } else {
+            descInput.value = activeProd?.description || `Crafted in 100% soft breathable ${activeProd?.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
+        }
+    }
+
+    const featureInput = document.getElementById('fd_feature_text');
+    if (featureInput) {
+        if (cfg.feature_text && cfg.feature_text.trim() !== '') {
+            featureInput.value = cfg.feature_text;
+        } else {
+            featureInput.value = activeProd?.fabric ? `100% Pure Breathable ${activeProd.fabric}` : '100% Pure Breathable Cotton';
+        }
+    }
+
+    updateFlashStatusBadge(cfg);
+    highlightSelectedModeCard();
+    onRandomCycleInput();
+    updateCalculatedExpiry();
+    updatePreviewCard();
+
+    // Start live countdown timer synchronized with DB
+    startAdminFlashCountdown(
+        cfg.hours_left !== undefined ? cfg.hours_left : 0,
+        cfg.minutes_left !== undefined ? cfg.minutes_left : 0,
+        cfg.seconds_left !== undefined ? cfg.seconds_left : 0
+    );
+}
+
+function updateFlashStatusBadge(cfg) {
+    const statusText = document.getElementById('fdStatusText');
+    const statusBadge = document.getElementById('fdStatusBadge');
+    if (!statusText || !statusBadge) return;
+
+    const h = cfg.hours_left !== undefined ? cfg.hours_left : 0;
+    const m = cfg.minutes_left !== undefined ? cfg.minutes_left : 0;
+
+    if (cfg.mode === 'manual' && cfg.product_id) {
+        const prod = flashProductsList.find(p => String(p.id) === String(cfg.product_id));
+        const name = prod ? prod.name : 'Selected Kurti';
+        statusBadge.style.background = '#ECFDF5';
+        statusBadge.style.color = '#065F46';
+        statusBadge.style.borderColor = '#A7F3D0';
+        statusText.innerHTML = `🎯 <strong>Spotlight Active:</strong> ${name} (${h}h ${m}m left before auto-revert)`;
+    } else {
+        statusBadge.style.background = '#EFF6FF';
+        statusBadge.style.color = '#1E40AF';
+        statusBadge.style.borderColor = '#BFDBFE';
+        statusText.innerHTML = `🔀 <strong>Auto Rotation Active:</strong> Randomly rotating products from DB (${h}h ${m}m left in cycle)`;
+    }
+}
+
+function onRandomCycleInput() {
+    const hours = parseInt(document.getElementById('fd_random_hours')?.value) || 0;
+    const mins = parseInt(document.getElementById('fd_random_mins')?.value) || 0;
+    const totalMins = (hours * 60) + mins;
+    const cycleDesc = document.getElementById('fd_random_cycle_desc');
+    if (cycleDesc) {
+        if (totalMins <= 0) {
+            cycleDesc.innerText = "Please specify a cycle interval greater than 0 mins.";
+            cycleDesc.style.color = "#DC2626";
+        } else {
+            let desc = "";
+            if (hours > 0 && mins > 0) desc = `${hours} hours and ${mins} mins`;
+            else if (hours > 0) desc = `${hours} hours`;
+            else desc = `${mins} minutes`;
+            cycleDesc.innerText = `Each random kurti from the catalog will remain spotlighted for ${desc} before automatically cycling to the next.`;
+            cycleDesc.style.color = "#666";
+        }
+    }
+}
+
+function populateSection3FromActiveProduct(force = false) {
+    const activeProd = getActiveFlashProduct();
+    if (!activeProd) return;
+
+    const badgeInput = document.getElementById('fd_badge_text');
+    const remStockInput = document.getElementById('fd_remaining_stock');
+    const titleInput = document.getElementById('fd_title');
+    const highlightInput = document.getElementById('fd_highlight');
+    const descInput = document.getElementById('fd_desc');
+    const featureInput = document.getElementById('fd_feature_text');
+
+    if (badgeInput && (force || !badgeInput.value)) {
+        badgeInput.value = 'SELLING FAST';
+    }
+    if (remStockInput && (force || !remStockInput.value)) {
+        remStockInput.value = Math.max(1, Math.min(activeProd.stock || 5, 8));
+    }
+    if (titleInput && (force || !titleInput.value)) {
+        titleInput.value = 'Customer Favorite: ';
+    }
+    if (highlightInput && (force || !highlightInput.value)) {
+        highlightInput.value = activeProd.name;
+    }
+    if (descInput && (force || !descInput.value)) {
+        descInput.value = activeProd.description || `Crafted in 100% soft breathable ${activeProd.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
+    }
+    if (featureInput && (force || !featureInput.value)) {
+        featureInput.value = activeProd.fabric ? `100% Pure Breathable ${activeProd.fabric}` : '100% Pure Breathable Cotton';
+    }
+
+    updatePreviewCard();
+    if (force) {
+        showAdminAlert(`Section 3 fields populated with active Kurti (${activeProd.name}) details!`, "Defaults Applied", "success");
+    }
+}
+
+function onFlashModeChange() {
+    const isManual = document.getElementById('fd_mode_manual').checked;
+    const manualCard = document.getElementById('fd_manual_settings_card');
+    if (manualCard) {
+        manualCard.style.display = isManual ? 'block' : 'none';
+    }
+
+    highlightSelectedModeCard();
+    if (!isManual) {
+        populateSection3FromActiveProduct(false);
+    } else {
+        onFlashProductSelect();
+    }
+    updateCalculatedExpiry();
+    updatePreviewCard();
+}
+
+function highlightSelectedModeCard() {
+    const isManual = document.getElementById('fd_mode_manual')?.checked;
+    const cardRandom = document.getElementById('card_mode_random');
+    const cycleBox = document.getElementById('fd_random_cycle_box');
+    const lblManual = document.getElementById('lbl_mode_manual');
+
+    if (cardRandom) {
+        cardRandom.style.borderColor = !isManual ? '#D4A373' : '#E5E7EB';
+        cardRandom.style.background = !isManual ? '#FAF5EE' : '#FAF9F6';
+    }
+    if (cycleBox) {
+        cycleBox.style.display = !isManual ? 'block' : 'none';
+    }
+    if (lblManual) {
+        lblManual.style.borderColor = isManual ? '#D4A373' : '#E5E7EB';
+        lblManual.style.background = isManual ? '#FAF5EE' : '#FAF9F6';
+    }
+
+    const pvBadge = document.getElementById('pv_mode_badge');
+    if (pvBadge) {
+        pvBadge.innerText = isManual ? 'Specific Spotlight (Auto-Expiry)' : 'Random Rotation';
+        pvBadge.style.background = isManual ? '#FEF3C7' : '#E0E7FF';
+        pvBadge.style.color = isManual ? '#B45309' : '#3730A3';
+    }
+}
+
+function onFlashProductSelect() {
+    const select = document.getElementById('fd_product_select');
+    const summaryCard = document.getElementById('fd_product_summary');
+    if (!select || !summaryCard) return;
+
+    const prodId = select.value;
+    const prod = flashProductsList.find(p => String(p.id) === String(prodId));
+
+    if (prod) {
+        summaryCard.style.display = 'flex';
+        document.getElementById('fd_summary_img').src = prod.imageUrl;
+        document.getElementById('fd_summary_name').innerText = prod.name;
+        document.getElementById('fd_summary_price').innerText = Number(prod.price).toLocaleString('en-IN');
+        document.getElementById('fd_summary_stock').innerText = prod.stock || 0;
+
+        // Auto-fill Section 3 inputs with chosen product details
+        const hl = document.getElementById('fd_highlight');
+        if (hl) hl.value = prod.name;
+
+        const desc = document.getElementById('fd_desc');
+        if (desc) desc.value = prod.description || `Crafted in 100% soft breathable ${prod.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
+
+        const remStock = document.getElementById('fd_remaining_stock');
+        if (remStock) remStock.value = Math.max(1, Math.min(prod.stock || 5, 8));
+
+        const feat = document.getElementById('fd_feature_text');
+        if (feat) feat.value = prod.fabric ? `100% Pure Breathable ${prod.fabric}` : '100% Pure Breathable Cotton';
+    } else {
+        summaryCard.style.display = 'none';
+    }
+
+    updatePreviewCard();
+}
+
+function updateCalculatedExpiry() {
+    const hours = parseInt(document.getElementById('fd_duration_hours')?.value) || 0;
+    const mins = parseInt(document.getElementById('fd_duration_mins')?.value) || 0;
+    const totalMinutes = (hours * 60) + mins;
+
+    const previewSpan = document.getElementById('fd_expiry_time_preview');
+    if (!previewSpan) return;
+
+    if (totalMinutes <= 0) {
+        previewSpan.innerText = "Please specify a duration greater than 0 mins";
+        return;
+    }
+
+    const future = new Date(Date.now() + totalMinutes * 60 * 1000);
+    const timeStr = future.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isToday = future.toDateString() === new Date().toDateString();
+    const datePrefix = isToday ? "Today" : future.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+    let durDesc = "";
+    if (hours > 0 && mins > 0) durDesc = `${hours} hours and ${mins} mins`;
+    else if (hours > 0) durDesc = `${hours} hours`;
+    else durDesc = `${mins} minutes`;
+
+    previewSpan.innerText = `${datePrefix} at ${timeStr} (in ${durDesc})`;
+}
+
+function updatePreviewCard() {
+    const activeProduct = getActiveFlashProduct();
+    if (!activeProduct) return;
+
+    const pvImg = document.getElementById('pv_img');
+    if (pvImg && activeProduct.imageUrl) pvImg.src = activeProduct.imageUrl;
+
+    const badgeVal = document.getElementById('fd_badge_text')?.value || 'SELLING FAST';
+    const pvBadge = document.getElementById('pv_badge');
+    if (pvBadge) pvBadge.innerText = badgeVal;
+
+    const titleVal = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
+    const pvTitle = document.getElementById('pv_title_prefix');
+    if (pvTitle) pvTitle.innerText = titleVal;
+
+    const customHl = document.getElementById('fd_highlight')?.value;
+    const pvHl = document.getElementById('pv_highlight');
+    if (pvHl) {
+        pvHl.innerText = (customHl && customHl.trim() !== '') ? customHl : activeProduct.name;
+    }
+
+    const descVal = document.getElementById('fd_desc')?.value;
+    const pvDesc = document.getElementById('pv_desc');
+    if (pvDesc) {
+        pvDesc.innerText = (descVal && descVal.trim() !== '')
+            ? descVal
+            : (activeProduct.description || `Crafted in 100% soft breathable ${activeProduct.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`);
+    }
+
+    const rem = parseInt(document.getElementById('fd_remaining_stock')?.value) || Math.max(1, Math.min(activeProduct.stock || 5, 8));
+    const tot = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
+
+    const pvRem = document.getElementById('pv_remaining');
+    if (pvRem) pvRem.innerText = rem;
+
+    const pvBar = document.getElementById('pv_meter_bar');
+    if (pvBar) {
+        const pct = Math.min(100, Math.max(10, Math.round(((tot - rem) / tot) * 100)));
+        pvBar.style.width = `${pct}%`;
+    }
+
+    const pvPrice = document.getElementById('pv_price');
+    if (pvPrice) pvPrice.innerText = Number(activeProduct.price).toLocaleString('en-IN');
+
+    const featVal = document.getElementById('fd_feature_text')?.value;
+    const pvFeat = document.getElementById('pv_feature');
+    if (pvFeat) {
+        pvFeat.innerText = (featVal && featVal.trim() !== '')
+            ? featVal
+            : (activeProduct.fabric ? `100% Pure Breathable ${activeProduct.fabric}` : '100% Pure Breathable Cotton');
+    }
+}
+
+async function saveFlashDropConfig() {
+    console.log("[FLASH DROP] saveFlashDropConfig clicked");
+    const saveBtn = document.getElementById('fdSaveBtn');
+    let originalText = saveBtn ? saveBtn.innerHTML : '<span>⚡ Save & Publish Flash Drop Settings</span>';
+
+    try {
+        const isManual = document.getElementById('fd_mode_manual')?.checked ?? false;
+        const mode = isManual ? 'manual' : 'random';
+        const productId = document.getElementById('fd_product_select')?.value || '';
+
+        let durationHours = 6;
+        let durationMins = 0;
+
+        if (isManual) {
+            durationHours = parseInt(document.getElementById('fd_duration_hours')?.value) || 0;
+            durationMins = parseInt(document.getElementById('fd_duration_mins')?.value) || 0;
+
+            if (!productId) {
+                showAdminAlert("Please choose a Kurti from the catalog to spotlight, or switch to 'Randomly Rotate Products from DB'.", "Select a Product", "warning");
+                document.getElementById('fd_product_select')?.focus();
+                return;
+            }
+            if (durationHours === 0 && durationMins === 0) {
+                showAdminAlert("Please specify a duration greater than 0 minutes for the spotlight timer.", "Duration Required", "warning");
+                document.getElementById('fd_duration_hours')?.focus();
+                return;
+            }
+        } else {
+            durationHours = parseInt(document.getElementById('fd_random_hours')?.value) || 0;
+            durationMins = parseInt(document.getElementById('fd_random_mins')?.value) || 0;
+
+            if (durationHours === 0 && durationMins === 0) {
+                durationHours = 6;
+                durationMins = 0;
+            }
+        }
+
+        const badgeText = document.getElementById('fd_badge_text')?.value?.trim() || 'SELLING FAST';
+        const remainingStock = parseInt(document.getElementById('fd_remaining_stock')?.value) || 4;
+        const totalStock = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
+        const title = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
+        const highlight = document.getElementById('fd_highlight')?.value?.trim() || '';
+        const desc = document.getElementById('fd_desc')?.value?.trim() || '';
+        const featureText = document.getElementById('fd_feature_text')?.value?.trim() || '100% Pure Breathable Cotton';
+
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = `<span>Saving & Publishing...</span>`;
+        }
+
+        const activeProduct = getActiveFlashProduct();
+        const activeProdId = isManual 
+            ? productId 
+            : (activeProduct?.id || (flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())?.id || ''));
+        const matchedProduct = flashProductsList.find(p => String(p.id) === String(activeProdId)) 
+            || flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())
+            || activeProduct;
+        const activeImageUrl = matchedProduct?.imageUrl || activeProduct?.imageUrl || '';
+        const activePrice = Number(matchedProduct?.price) || Number(activeProduct?.price) || 0;
+        const activeOrigPrice = Number(matchedProduct?.originalPrice) || Number(activeProduct?.originalPrice) || 0;
+
+        const payload = {
+            mode: mode,
+            product_id: activeProdId,
+            image_url: activeImageUrl,
+            price: activePrice,
+            original_price: activeOrigPrice,
+            duration_hours: durationHours,
+            duration_mins: durationMins,
+            badge_text: badgeText,
+            remaining_stock: remainingStock,
+            total_stock: totalStock,
+            title: title,
+            highlight: highlight,
+            desc: desc,
+            feature_text: featureText
+        };
+
+        console.log("[FLASH DROP] Sending payload to API:", payload);
+
+        const res = await fetch(API_BASE_URL + '/api/admin/config/flash-drop', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || errData.message || `HTTP ${res.status}`);
+        }
+
+        const resData = await res.json();
+        console.log("[FLASH DROP] Save success, response:", resData);
+
+        const successMsg = isManual 
+            ? `Flash Spotlight Drop activated for selected Kurti! It will run for ${durationHours}h ${durationMins}m and then automatically revert back to random rotation.`
+            : `Flash Spotlight Drop configured with ${durationHours}h ${durationMins}m rotation cycle and published successfully!`;
+
+        showAdminAlert(successMsg, "Flash Drop Published!", "success");
+        await loadFlashDropConfig();
+    } catch (err) {
+        console.error("[FLASH DROP] Save failed:", err);
+        showAdminAlert("Failed to save Flash Drop configuration: " + err.message, "Save Error", "error");
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalText;
+        }
+    }
+}
+
+window.loadFlashDropConfig = loadFlashDropConfig;
+window.onFlashModeChange = onFlashModeChange;
+window.onFlashProductSelect = onFlashProductSelect;
+window.onRandomCycleInput = onRandomCycleInput;
+window.populateSection3FromActiveProduct = populateSection3FromActiveProduct;
+window.updateCalculatedExpiry = updateCalculatedExpiry;
+window.updatePreviewCard = updatePreviewCard;
+window.saveFlashDropConfig = saveFlashDropConfig;
+
+
 

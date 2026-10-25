@@ -6,6 +6,7 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
 
     return (
         <div 
+            className="size-modal-backdrop"
             style={{
                 position: 'fixed',
                 top: 0,
@@ -24,6 +25,7 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
             onClick={onClose}
         >
             <div 
+                className="size-modal-sheet"
                 style={{
                     background: '#FFFFFF',
                     borderRadius: '24px',
@@ -37,6 +39,9 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
+                {/* Mobile Bottom Sheet Grab Indicator */}
+                <div className="size-modal-drag-handle" style={{ display: 'none' }}></div>
+
                 <button 
                     onClick={onClose}
                     style={{
@@ -45,36 +50,44 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
                         right: '1rem',
                         background: '#f5f5f5',
                         border: 'none',
-                        width: '32px',
-                        height: '32px',
+                        width: '34px',
+                        height: '34px',
                         borderRadius: '50%',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: '#666',
-                        transition: 'all 0.2s'
+                        transition: 'all 0.2s',
+                        zIndex: 2
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = '#ebebeb'; e.currentTarget.style.color = '#333'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = '#f5f5f5'; e.currentTarget.style.color = '#666'; }}
+                    aria-label="Close modal"
                 >
                     <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
                 
-                <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--color-primary)', fontSize: '1.3rem', fontFamily: 'var(--font-heading)' }}>Select Size</h3>
+                <h3 style={{ margin: '0 0 1.25rem 0', color: 'var(--color-primary)', fontSize: '1.25rem', fontFamily: 'var(--font-heading)' }}>Select Silhouette Size</h3>
                 
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center' }}>
-                    <div style={{ width: '80px', height: '100px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', alignItems: 'center' }}>
+                    <div style={{ width: '75px', height: '95px', borderRadius: '10px', overflow: 'hidden', flexShrink: 0, background: '#FAF8F5' }}>
                         <ImageWithSkeleton src={product.imageUrl} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
                     <div>
-                        <div style={{ fontWeight: '600', fontSize: '1rem', marginBottom: '0.25rem', color: '#333' }}>{product.name}</div>
-                        <div style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: '1.1rem' }}>₹{product.price.toLocaleString('en-IN')}</div>
+                        <div style={{ fontWeight: '600', fontSize: '0.96rem', marginBottom: '0.25rem', color: '#333' }}>{product.name}</div>
+                        <div style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '1.15rem' }}>₹{Number(product.price).toLocaleString('en-IN')}</div>
+                        <div style={{ fontSize: '0.74rem', color: '#5B8E7D', fontWeight: '600', marginTop: '2px' }}>
+                            ✓ Includes 2" Seam Alteration Margins
+                        </div>
                     </div>
                 </div>
                 
                 <div style={{ marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#666', marginBottom: '0.5rem' }}>
+                        <span>Available Sizes (Standard Fit):</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                         {product.sizes && product.sizes.map(size => {
                             const qty = (product.sizesStock && product.sizesStock[size] !== undefined) ? product.sizesStock[size] : -1;
                             const outOfStock = qty === 0;
@@ -85,17 +98,19 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
                                     disabled={outOfStock}
                                     onClick={() => onSelectSize(size)}
                                     style={{
-                                        padding: '0.6rem 1.2rem',
-                                        borderRadius: '8px',
-                                        border: `1px solid ${isSelected ? 'var(--color-primary)' : '#ddd'}`,
+                                        padding: '0.65rem 1rem',
+                                        borderRadius: '10px',
+                                        border: `1.5px solid ${isSelected ? 'var(--color-primary)' : '#E8E5E1'}`,
                                         background: isSelected ? 'var(--color-primary)' : (outOfStock ? '#f9f9f9' : '#fff'),
                                         color: isSelected ? '#fff' : (outOfStock ? '#aaa' : '#333'),
-                                        fontWeight: '500',
+                                        fontWeight: '600',
+                                        fontSize: '0.86rem',
                                         cursor: outOfStock ? 'not-allowed' : 'pointer',
                                         textDecoration: outOfStock ? 'line-through' : 'none',
                                         transition: 'all 0.2s',
                                         flex: '1 1 auto',
-                                        minWidth: '60px'
+                                        minWidth: '50px',
+                                        boxShadow: isSelected ? '0 4px 12px rgba(212, 163, 115, 0.3)' : 'none'
                                     }}
                                 >
                                     {size}
@@ -105,18 +120,20 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button 
                         onClick={onClose}
                         style={{
-                            flex: 1,
-                            padding: '0.8rem',
-                            borderRadius: '8px',
-                            background: '#f5f5f5',
-                            border: 'none',
+                            flex: 0.8,
+                            padding: '0.85rem',
+                            borderRadius: '10px',
+                            background: '#FAF8F5',
+                            border: '1px solid rgba(212, 163, 115, 0.3)',
                             fontWeight: '600',
-                            color: '#555',
-                            cursor: 'pointer'
+                            fontSize: '0.9rem',
+                            color: '#6C6863',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
                         }}
                     >
                         Cancel
@@ -125,17 +142,22 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
                         onClick={onAddToCart}
                         disabled={!selectedSize}
                         style={{
-                            flex: 1,
-                            padding: '0.8rem',
-                            borderRadius: '8px',
-                            background: selectedSize ? 'var(--color-primary)' : '#ccc',
+                            flex: 1.4,
+                            padding: '0.85rem',
+                            borderRadius: '10px',
+                            background: selectedSize 
+                                ? 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)' 
+                                : '#E5E7EB',
                             border: 'none',
-                            fontWeight: '600',
+                            fontWeight: '700',
+                            fontSize: '0.92rem',
                             color: '#fff',
-                            cursor: selectedSize ? 'pointer' : 'not-allowed'
+                            cursor: selectedSize ? 'pointer' : 'not-allowed',
+                            boxShadow: selectedSize ? '0 8px 22px rgba(212, 163, 115, 0.38)' : 'none',
+                            transition: 'all 0.25s'
                         }}
                     >
-                        Add to Cart
+                        Add to Wardrobe
                     </button>
                 </div>
                 
@@ -145,6 +167,30 @@ const SizeSelectionModal = ({ isOpen, onClose, product, selectedSize, onSelectSi
                 @keyframes modalSlideUp {
                     from { opacity: 0; transform: translateY(20px); }
                     to { opacity: 1; transform: translateY(0); }
+                }
+                @media (max-width: 600px) {
+                    .size-modal-backdrop {
+                        align-items: flex-end !important;
+                        padding: 0 !important;
+                    }
+                    .size-modal-sheet {
+                        border-radius: 26px 26px 0 0 !important;
+                        max-width: 100% !important;
+                        padding: 1.25rem 1.25rem 2.2rem 1.25rem !important;
+                        animation: sheetSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+                    }
+                    .size-modal-drag-handle {
+                        display: block !important;
+                        width: 38px;
+                        height: 4px;
+                        border-radius: 4px;
+                        background: #DDD8D3;
+                        margin: -4px auto 1rem auto;
+                    }
+                    @keyframes sheetSlideUp {
+                        from { transform: translateY(100%); }
+                        to { transform: translateY(0); }
+                    }
                 }
                 `}
             </style>
