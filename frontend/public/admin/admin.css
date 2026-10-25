@@ -967,19 +967,92 @@ form input:focus, form select:focus, form textarea:focus {
     display: none;
 }
 
+/* Scanner Card & Search Row (Desktop Base) */
+.scanner-card {
+    background: #FFF;
+    padding: 2.5rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 4px 14px rgba(45, 42, 38, 0.03);
+    max-width: 750px;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+.scanner-search-row {
+    display: flex;
+    gap: 0.8rem;
+    margin-bottom: 2rem;
+    align-items: stretch;
+}
+
+.scanner-input-wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.scanner-input-wrap input {
+    width: 100%;
+    height: 48px;
+    padding: 0 1.2rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    box-sizing: border-box;
+    font-family: inherit;
+    background: var(--color-surface);
+    transition: var(--transition-fast);
+}
+
+.scanner-input-wrap input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(197, 143, 88, 0.15);
+}
+
+.scanner-btns-wrap {
+    display: flex;
+    gap: 0.8rem;
+    flex-shrink: 0;
+}
+
+.scanner-btns-wrap button {
+    height: 48px;
+    padding: 0 1.5rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
 /* ==========================================================================
    RESPONSIVE MOBILE BREAKPOINT (< 900px)
    ========================================================================== */
 @media (max-width: 900px) {
-    /* 1. Body & Viewport scaling */
+    /* 1. Body & Viewport scaling with strict overflow protection */
     html {
         font-size: 14px;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
     }
 
     body {
         flex-direction: column;
         zoom: 1 !important;
         transform: none !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+        position: relative !important;
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
     }
 
     /* 2. Mobile Topbar - Strictly Single Horizontal Row */
@@ -997,10 +1070,11 @@ form input:focus, form select:focus, form textarea:focus {
         left: 0 !important;
         right: 0 !important;
         width: 100% !important;
+        max-width: 100vw !important;
         margin: 0 !important;
         padding: 0 1rem !important;
         box-sizing: border-box !important;
-        background: rgba(255, 255, 255, 0.96) !important;
+        background: rgba(255, 255, 255, 0.98) !important;
         backdrop-filter: blur(16px) !important;
         -webkit-backdrop-filter: blur(16px) !important;
         border-bottom: 1px solid var(--color-border) !important;
@@ -1126,77 +1200,114 @@ form input:focus, form select:focus, form textarea:focus {
         transform: translateX(0);
     }
 
-    /* 4. Mobile Bottom Navigation */
+    /* 4. Mobile Bottom Navigation (Guaranteed 100vw fit, zero horizontal clipping) */
     .mobile-bottom-nav {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: var(--mobile-bottom-nav-height);
-        background: rgba(255, 255, 255, 0.96);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-top: 1px solid var(--color-border);
-        z-index: 90;
-        padding-bottom: env(safe-area-inset-bottom, 0);
-        box-shadow: 0 -4px 16px rgba(45, 42, 38, 0.04);
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: var(--mobile-bottom-nav-height) !important;
+        background: rgba(255, 255, 255, 0.98) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-top: 1px solid var(--color-border) !important;
+        z-index: 990 !important;
+        padding: 0 2px !important;
+        padding-bottom: env(safe-area-inset-bottom, 0) !important;
+        box-shadow: 0 -4px 20px rgba(45, 42, 38, 0.08) !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        margin: 0 !important;
     }
 
     .bottom-nav-item {
-        background: transparent;
-        border: none;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 3px;
-        color: var(--color-text-muted);
-        font-family: var(--font-body);
-        font-size: 0.65rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: var(--transition-fast);
-        -webkit-tap-highlight-color: transparent;
+        background: transparent !important;
+        border: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 2px !important;
+        color: var(--color-text-muted) !important;
+        font-family: var(--font-body) !important;
+        font-size: 0.62rem !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        padding: 4px 1px !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        transition: var(--transition-fast) !important;
+        -webkit-tap-highlight-color: transparent !important;
+    }
+
+    .bottom-nav-item span {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        max-width: 100% !important;
+        font-size: 0.62rem !important;
+        letter-spacing: -0.2px !important;
+        line-height: 1.1 !important;
     }
 
     .bottom-nav-item svg {
-        transition: transform var(--transition-fast);
+        flex-shrink: 0 !important;
+        width: 19px !important;
+        height: 19px !important;
+        transition: transform var(--transition-fast) !important;
     }
 
     .bottom-nav-item.active {
-        color: var(--color-primary-dark);
-        font-weight: 700;
+        color: var(--color-primary-dark) !important;
+        font-weight: 700 !important;
     }
 
     .bottom-nav-item.active svg {
-        color: var(--color-primary-dark);
-        transform: translateY(-1px);
+        color: var(--color-primary-dark) !important;
+        transform: translateY(-1px) !important;
     }
 
     /* Elevated Center QR Scan Button */
     .bottom-nav-scan-highlight .scan-icon-bubble {
-        width: 44px;
-        height: 44px;
-        border-radius: var(--radius-full);
-        background: linear-gradient(135deg, #C58F58 0%, #A8733F 100%);
-        box-shadow: 0 4px 14px rgba(197, 143, 88, 0.45);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-top: -16px;
-        transition: transform var(--transition-fast);
+        width: 42px !important;
+        height: 42px !important;
+        min-width: 42px !important;
+        min-height: 42px !important;
+        border-radius: var(--radius-full) !important;
+        background: linear-gradient(135deg, #C58F58 0%, #A8733F 100%) !important;
+        box-shadow: 0 4px 14px rgba(197, 143, 88, 0.45) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin-top: -14px !important;
+        transition: transform var(--transition-fast) !important;
     }
 
     .bottom-nav-scan-highlight:active .scan-icon-bubble {
-        transform: scale(0.92);
+        transform: scale(0.92) !important;
     }
 
-    /* 5. Main Content on Mobile */
+    /* 5. Main Content on Mobile & Bottom Clearance */
     .content {
-        margin-left: 0;
-        padding: 1.25rem 1rem calc(var(--mobile-bottom-nav-height) + 2rem);
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+        padding: 1rem 1rem calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 2.5rem) !important;
+    }
+
+    .tab-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
     }
 
     .content-header, .content > header {
@@ -1219,7 +1330,174 @@ form input:focus, form select:focus, form textarea:focus {
         width: 100%;
     }
 
-    /* 6. Stats Grid 2-Column on Mobile */
+    /* 6. Pickup Scanner Mobile Layout */
+    .scanner-card {
+        padding: 1.25rem 1rem !important;
+        border-radius: var(--radius-md) !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+    }
+
+    .scanner-search-row {
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+        margin-bottom: 1.5rem !important;
+        width: 100% !important;
+    }
+
+    .scanner-input-wrap {
+        width: 100% !important;
+    }
+
+    .scanner-input-wrap input {
+        width: 100% !important;
+        height: 46px !important;
+        font-size: 0.95rem !important;
+    }
+
+    .scanner-btns-wrap {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.6rem !important;
+        width: 100% !important;
+    }
+
+    .scanner-btns-wrap button {
+        width: 100% !important;
+        height: 44px !important;
+        padding: 0 0.5rem !important;
+        font-size: 0.88rem !important;
+        justify-content: center !important;
+    }
+
+    .pickup-order-card {
+        padding: 1.25rem 1rem !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    .pickup-order-card > div[style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.85rem !important;
+    }
+
+    #poCardActionsContainer {
+        flex-direction: column !important;
+        gap: 0.6rem !important;
+    }
+
+    #poCardActionsContainer button {
+        width: 100% !important;
+        height: 44px !important;
+        justify-content: center !important;
+    }
+
+    /* 7. Orders Tab Mobile Filter Bar */
+    .orders-filter-bar {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.6rem !important;
+        width: 100% !important;
+        justify-content: stretch !important;
+    }
+
+    .orders-filter-bar > div {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 4px !important;
+    }
+
+    .orders-filter-bar label {
+        font-size: 0.75rem !important;
+        margin: 0 !important;
+        color: var(--color-text-muted) !important;
+        text-transform: uppercase !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.3px !important;
+    }
+
+    .orders-filter-bar select {
+        width: 100% !important;
+        height: 40px !important;
+        border-radius: var(--radius-sm) !important;
+        font-size: 0.85rem !important;
+        border: 1px solid var(--color-border) !important;
+        background: var(--color-surface) !important;
+    }
+
+    /* 8. Flash Spotlight Drop Mobile Optimization */
+    .flashdrop-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
+    }
+
+    .flashdrop-grid > div:last-child {
+        position: static !important;
+    }
+
+    /* 9. Shoppable Reels Header Mobile Layout */
+    .reels-header-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 1rem !important;
+    }
+
+    .reels-header-actions {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.6rem !important;
+        width: 100% !important;
+    }
+
+    .reels-header-actions button {
+        width: 100% !important;
+        justify-content: center !important;
+        padding: 0.7rem 0.5rem !important;
+        font-size: 0.82rem !important;
+    }
+
+    /* 10. Staff Add Member Form */
+    .staff-add-form {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.8rem !important;
+    }
+
+    .staff-add-form button {
+        width: 100% !important;
+        height: 44px !important;
+    }
+
+    /* 11. Responsive Card Padding & 2-Column Form Fields */
+    .tab-content > div[style*="padding: 2.5rem"],
+    .tab-content > div[style*="padding: 2rem"],
+    .tab-content [style*="padding: 2.5rem"],
+    .tab-content [style*="padding: 2rem"] {
+        padding: 1.25rem 1rem !important;
+        border-radius: var(--radius-md) !important;
+        box-sizing: border-box !important;
+        max-width: 100% !important;
+    }
+
+    #tab-spinwin [style*="grid-template-columns: 1fr 1fr"],
+    #tab-settings [style*="display: flex; gap: 1rem"] {
+        grid-template-columns: 1fr !important;
+        flex-direction: column !important;
+        gap: 1rem !important;
+    }
+
+    #tab-spinwin button[type="submit"],
+    #tab-settings .btn,
+    #tierForm button[type="submit"] {
+        width: 100% !important;
+        padding: 0.8rem 1rem !important;
+        height: 44px !important;
+        justify-content: center !important;
+    }
+
+    /* 12. Stats Grid 2-Column on Mobile */
     .stats-grid {
         grid-template-columns: 1fr 1fr;
         gap: 0.75rem;
@@ -1243,17 +1521,21 @@ form input:focus, form select:focus, form textarea:focus {
         gap: 0.75rem;
     }
 
-    /* 7. Tables on Mobile */
+    /* 13. Tables on Mobile */
     .table-container {
-        border-radius: var(--radius-md);
-        margin: 0 -0.25rem;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        border-radius: var(--radius-md) !important;
+        margin: 0 -0.25rem 1.5rem !important;
     }
 
     th, td {
         padding: 0.85rem 1rem;
     }
 
-    /* 8. Modals Bottom-Sheet on Mobile */
+    /* 14. Modals Bottom-Sheet on Mobile */
     .modal-overlay {
         align-items: flex-end;
         padding: 0;
@@ -1296,3 +1578,4 @@ form input:focus, form select:focus, form textarea:focus {
         flex: 1;
     }
 }
+
