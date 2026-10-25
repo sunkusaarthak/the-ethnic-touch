@@ -5,7 +5,7 @@ const About = () => {
     useSEO({
         title: "About Us | The Ethnic Touch - Jaipur Craftsmanship",
         description: "Discover our journey and commitment to authentic Jaipur textile craftsmanship, handpicked breathable cotton fabrics, and exclusive in-house kurti designs.",
-        canonicalUrl: "https://theethnictouch.com/about"
+        canonicalUrl: "https://www.theethnictouch.com/about"
     });
 
     return (

@@ -9,7 +9,7 @@ const ContactUs = () => {
     useSEO({
         title: "Contact Us & Hyderabad Store Location | The Ethnic Touch",
         description: "Visit our offline store near Khajaguda Lake in Hyderabad or reach out to customer care for orders, styling assistance, and inquiries.",
-        canonicalUrl: "https://theethnictouch.com/contact"
+        canonicalUrl: "https://www.theethnictouch.com/contact"
     });
 
     const { showAlert } = useAlert();

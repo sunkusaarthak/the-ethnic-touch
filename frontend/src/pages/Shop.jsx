@@ -17,34 +17,34 @@ const Shop = ({ productsGlobal, wishlist, toggleWishlist, globalSearch, setGloba
             return {
                 title: 'Straight Cut Kurtis | The Ethnic Touch',
                 description: 'Explore stylish 100% pure cotton straight-cut kurtis for office, college, and daily wear starting at ₹449.',
-                canonicalUrl: 'https://theethnictouch.com/shop/straight-cut'
+                canonicalUrl: 'https://www.theethnictouch.com/shop/straight-cut'
             };
         }
         if (routeCategory === 'anarkali') {
             return {
                 title: 'Flared Anarkali Kurtis | The Ethnic Touch',
                 description: 'Discover graceful Jaipur Anarkali kurtis in vibrant prints and pure breathable cotton.',
-                canonicalUrl: 'https://theethnictouch.com/shop/anarkali'
+                canonicalUrl: 'https://www.theethnictouch.com/shop/anarkali'
             };
         }
         if (routeCategory === 'tunic') {
             return {
                 title: 'Short Tunics & Tops | The Ethnic Touch',
                 description: 'Lightweight breezy cotton tunics and short kurtis under ₹599. Perfect for daily outings.',
-                canonicalUrl: 'https://theethnictouch.com/shop/tunic'
+                canonicalUrl: 'https://www.theethnictouch.com/shop/tunic'
             };
         }
         if (routeCategory === 'fusion') {
             return {
                 title: 'Fusion Wear & Indo-Western Kurtis | The Ethnic Touch',
                 description: 'Contemporary Indo-Western silhouettes blending authentic Jaipur craftsmanship with modern styling.',
-                canonicalUrl: 'https://theethnictouch.com/shop/fusion'
+                canonicalUrl: 'https://www.theethnictouch.com/shop/fusion'
             };
         }
         return {
             title: 'Shop All Kurtis & Tunics | The Ethnic Touch',
             description: 'Explore our complete collection of pure cotton kurtis, straight cut silhouettes, short tunics, and festive wear starting at ₹449.',
-            canonicalUrl: 'https://theethnictouch.com/shop'
+            canonicalUrl: 'https://www.theethnictouch.com/shop'
         };
     }, [routeCategory]);
 

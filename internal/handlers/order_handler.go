@@ -106,6 +106,47 @@ func (h *OrderHandler) HandleVerifyPayment(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (h *OrderHandler) HandleCancelOrder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	orderID := r.PathValue("id")
+	if orderID == "" {
+		orderID = r.URL.Query().Get("orderId")
+	}
+
+	if orderID == "" {
+		var req struct {
+			OrderID string `json:"orderId"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		orderID = req.OrderID
+	}
+
+	if orderID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"orderId is required"}`))
+		return
+	}
+
+	err := h.svc.CancelOrder(orderID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Order cancelled and locked products released",
+	})
+}
+
 func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
 	orderID := r.URL.Query().Get("orderId")
 	if orderID == "" {
@@ -337,3 +378,53 @@ func (h *OrderHandler) HandleDelhiveryWebhook(w http.ResponseWriter, r *http.Req
 
 	w.WriteHeader(http.StatusOK)
 }
+
+func (h *OrderHandler) HandleTriggerDelhiveryBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	orders, err := h.svc.GetAllOrders("")
+	if err != nil {
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
+		return
+	}
+
+	var paidDeliveryOrders []models.Order
+	for _, o := range orders {
+		if o.Status == "paid" && (o.CheckoutType == "delivery" || o.CheckoutType == "hyderabad_instant") && (o.TrackingNumber == "" || o.TrackingNumber == "Pending checkout / paid dispatch") {
+			paidDeliveryOrders = append(paidDeliveryOrders, o)
+		}
+	}
+
+	if len(paidDeliveryOrders) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "No pending paid delivery orders to dispatch",
+			"count":   0,
+		})
+		return
+	}
+
+	err = h.delhiverySvc.BatchPickup(paidDeliveryOrders)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": fmt.Sprintf("Failed to execute batch pickup: %v", err),
+		})
+		return
+	}
+
+	for _, o := range paidDeliveryOrders {
+		_ = h.svc.UpdateOrderStatus(o.ID, "shipped", o.RazorpayPaymentID, "DELHIVERY_DISPATCHED", time.Now().Format(time.RFC3339), o.UnlockedGift)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Delhivery batch pickup executed successfully",
+		"count":   len(paidDeliveryOrders),
+	})
+}
+

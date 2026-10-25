@@ -22,7 +22,7 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist, addToCart }) => {
     useSEO({
         title: "The Ethnic Touch | Pure Cotton Jaipur Kurtis & Ethnic Wear",
         description: "Shop handcrafted 100% pure cotton Jaipur kurtis, straight cut kurtis, short tunics, and festive Anarkalis. Premium quality, direct from Jaipur delivered across India & Hyderabad.",
-        canonicalUrl: "https://theethnictouch.com/"
+        canonicalUrl: "https://www.theethnictouch.com/"
     });
 
     const [spinConfig, setSpinConfig] = useState(null);

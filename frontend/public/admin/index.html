@@ -259,7 +259,7 @@
 
         <!-- Orders Tab -->
         <div id="tab-orders" class="tab-content">
-            <div class="orders-filter-bar" style="margin-bottom: 1rem; display: flex; justify-content: flex-end; gap: 1rem;">
+            <div class="orders-filter-bar" style="margin-bottom: 1rem; display: flex; justify-content: flex-end; gap: 1rem; flex-wrap: wrap; align-items: center;">
                 <div style="display: flex; align-items: center;">
                     <label for="ordersTypeFilter" style="font-weight: 500; font-size: 0.9rem; margin-right: 8px;">Type:</label>
                     <select id="ordersTypeFilter" style="padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; background: #fff;" onchange="renderOrders()">
@@ -275,6 +275,9 @@
                         <option value="all">All Orders (Including Pending/Abandoned)</option>
                     </select>
                 </div>
+                <button type="button" id="btnDelhiveryBatch" class="btn" onclick="triggerDelhiveryBatchPickup()" style="padding: 0.4rem 0.9rem; font-size: 0.85rem; background: #2D2A26; color: #fff; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    🚚 Dispatch Delhivery Batch
+                </button>
             </div>
             <div class="table-container">
                 <table id="ordersTable">

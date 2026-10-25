@@ -395,6 +395,11 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         modal: {
                             ondismiss: function() {
                                 setOrdering(false);
+                                if (data && data.orderId && !paymentCompleteRef.current) {
+                                    fetchWithAuth(`/api/orders/${data.orderId}/cancel`, {
+                                        method: 'POST'
+                                    }).catch(e => console.warn('Instant stock unlock error:', e));
+                                }
                             }
                         }
                     };

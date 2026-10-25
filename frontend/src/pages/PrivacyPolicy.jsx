@@ -5,7 +5,7 @@ const PrivacyPolicy = () => {
     useSEO({
         title: "Privacy Policy | The Ethnic Touch",
         description: "Read The Ethnic Touch privacy policy covering customer data protection, secure Razorpay payments, and confidential order processing.",
-        canonicalUrl: "https://theethnictouch.com/privacy-policy"
+        canonicalUrl: "https://www.theethnictouch.com/privacy-policy"
     });
 
     useEffect(() => {

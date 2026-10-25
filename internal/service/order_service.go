@@ -24,6 +24,7 @@ type OrderService interface {
 	GetAllOrders(email string) ([]models.Order, error)
 	ConfirmPickup(orderID string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
+	CancelOrder(orderID string) error
 	CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 }
 
@@ -367,6 +368,10 @@ func (s *orderService) CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 		}
 	}
 	return cleanedCount, nil
+}
+
+func (s *orderService) CancelOrder(orderID string) error {
+	return s.orderRepo.CancelPendingOrder(orderID)
 }
 
 func (s *orderService) UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error {
