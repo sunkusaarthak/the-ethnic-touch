@@ -60,7 +60,7 @@ const RenderProductCard = ({ product, wishlist, toggleWishlist, index = 99 }) =>
                         src={optimizedImageUrl}
                         alt={`${product.name} - Premium ${product.category || 'Kurti'} by The Ethnic Touch`}
                         loading={loadingStrategy}
-                        fetchpriority={fetchPriority}
+                        fetchPriority={fetchPriority}
                         className="product-image"
                     />
                 </div>

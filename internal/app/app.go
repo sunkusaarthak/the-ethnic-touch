@@ -15,6 +15,7 @@ import (
 	"ethnictouch/internal/cron"
 	"ethnictouch/internal/handlers"
 	"ethnictouch/internal/middleware"
+	"ethnictouch/internal/models"
 	"ethnictouch/internal/repository"
 	"ethnictouch/internal/service"
 )
@@ -78,11 +79,29 @@ func (a *App) setupRoutes() {
 	profileHandler := handlers.NewProfileHandler(profileSvc, configSvc)
 	cartHandler := handlers.NewCartHandler(cartSvc)
 	spinHandler := handlers.NewSpinHandler(profileSvc, couponSvc, configSvc)
-	configHandler := handlers.NewConfigHandler(configSvc)
+	configHandler := handlers.NewConfigHandler(configSvc, couponSvc)
 	staffHandler := handlers.NewStaffHandler(adminUserRepo)
 	contactHandler := handlers.NewContactHandler(contactSvc)
 	sitemapHandler := handlers.NewSitemapHandler(productSvc)
 	ogHandler := handlers.NewOgHandler(productSvc)
+
+	// Ensure active homepage welcome coupon exists and is active in coupons repository
+	if hpConfig, err := configSvc.GetHomepageConfig(); err == nil && hpConfig.VipVoucher.Code != "" {
+		code := strings.ToUpper(strings.TrimSpace(hpConfig.VipVoucher.Code))
+		disc := float64(hpConfig.VipVoucher.DiscountPercent)
+		if disc <= 0 {
+			disc = 10
+		}
+		_ = couponSvc.CreateCoupon(&models.Coupon{
+			ID:         "cp_" + strings.ToLower(code),
+			Code:       code,
+			Type:       "percentage",
+			Value:      disc,
+			MinOrder:   0,
+			IsActive:   true,
+			UsageLimit: 100000,
+		})
+	}
 
 	adminOnly := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin")
 	adminOrEmployee := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin", "employee")
@@ -131,6 +150,7 @@ func (a *App) setupRoutes() {
 
 	// Coupons & Gifting
 	a.Router.HandleFunc("/api/gift-tiers", couponHandler.HandleGetGiftTiers)
+	a.Router.HandleFunc("/api/admin/gift-tiers", adminOnly(http.HandlerFunc(couponHandler.HandleUpdateGiftTiers)).ServeHTTP)
 	a.Router.HandleFunc("/api/coupons/validate", rateLimiter.Limit(http.HandlerFunc(couponHandler.HandleValidateCoupon)).ServeHTTP)
 	
 	// Spin the Wheel
@@ -194,6 +214,15 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/config/checkout", configHandler.HandleGetCheckoutConfig)
 	a.Router.HandleFunc("/api/admin/config/checkout", adminOnly(http.HandlerFunc(configHandler.HandleUpdateCheckoutConfig)).ServeHTTP)
 
+	a.Router.HandleFunc("/api/config/homepage", configHandler.HandleGetHomepageConfig)
+	a.Router.HandleFunc("/api/admin/config/homepage", adminOnly(http.HandlerFunc(configHandler.HandleUpdateHomepageConfig)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/config/flash-drop", adminOnly(http.HandlerFunc(configHandler.HandleFlashDropConfig)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/config/instagram", adminOnly(http.HandlerFunc(configHandler.HandleUpdateInstagramConfig)).ServeHTTP)
+	a.Router.HandleFunc("/api/reels/fetch-thumbnail", configHandler.HandleFetchInstagramThumbnail)
+	a.Router.HandleFunc("/api/admin/reels/fetch-thumbnail", configHandler.HandleFetchInstagramThumbnail)
+	a.Router.HandleFunc("/api/admin/reels/sync-thumbnails", adminOnly(http.HandlerFunc(configHandler.HandleSyncAllInstagramThumbnails)).ServeHTTP)
+	a.Router.HandleFunc("/api/reels/video-url", configHandler.HandleGetInstagramReelVideo)
+
 	// User Profiles & Addresses
 	a.Router.HandleFunc("/api/profile", profileHandler.HandleProfile)
 	a.Router.HandleFunc("/api/profile/me", profileHandler.HandleProfile)
@@ -234,27 +263,48 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Direct match for /admin or /admin/
-		if path == "/admin" || path == "/admin/" {
+		// Direct match for /admin, /admin/, or /admin/index.html
+		if path == "/admin" || path == "/admin/" || path == "/admin/index.html" {
 			adminFile := frontendPublic + "/admin/index.html"
 			if _, err := os.Stat(frontendDist + "/admin/index.html"); err == nil {
 				adminFile = frontendDist + "/admin/index.html"
 			}
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
 			http.ServeFile(w, r, adminFile)
 			return
 		}
 
+		// Helper function to set cache-control headers based on asset path
+		setCacheHeaders := func(filePath string) {
+			if strings.HasPrefix(filePath, "/assets/") {
+				// Vite hashed assets (JS/CSS/fonts) are immutable
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else if strings.HasPrefix(filePath, "/images/") || strings.HasSuffix(filePath, ".png") || strings.HasSuffix(filePath, ".jpg") || strings.HasSuffix(filePath, ".jpeg") || strings.HasSuffix(filePath, ".webp") || strings.HasSuffix(filePath, ".svg") || strings.HasSuffix(filePath, ".ico") {
+				// Static images and icons
+				w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+			}
+		}
+
 		// Check if file exists in frontend/dist
 		if _, err := os.Stat(frontendDist + path); err == nil && path != "/" {
+			setCacheHeaders(path)
 			fsDist.ServeHTTP(w, r)
 			return
 		}
 
 		// Check if file exists in frontend/public
 		if _, err := os.Stat(frontendPublic + path); err == nil && path != "/" {
+			setCacheHeaders(path)
 			fsPublic.ServeHTTP(w, r)
 			return
 		}
+
+		// Fallback for React SPA (always no-cache so clients receive updated index immediately)
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 
 		// Fallback for React SPA
 		htmlPath := frontendDist + "/index.html"

@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { formatError } from '../utils/errors';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 const Auth = () => {
     const [step, setStep] = useState('phone'); // 'phone' | 'otp'
@@ -334,8 +335,10 @@ const Auth = () => {
                         border: '1.5px solid rgba(212, 163, 115, 0.3)'
                     }}>
                         <img 
-                            src="./images/login_art.png" 
+                            src={getOptimizedImageUrl('/images/login_art.png')} 
                             alt="Jaipur Handcrafted Block-Print Artwork" 
+                            loading="lazy"
+                            decoding="async"
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(45,42,38,0.35) 100%)' }} />

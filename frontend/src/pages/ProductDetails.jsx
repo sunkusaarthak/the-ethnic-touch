@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import Cart from './Cart';
 import ImageWithSkeleton from '../components/ImageWithSkeleton';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 import { API_BASE_URL } from '../data/config';
 import SizeSelectionModal from '../components/SizeSelectionModal';
 import SizeGuide from '../components/SizeGuide';
@@ -105,9 +106,10 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) 
         : 0;
 
-    const galleryImages = (product && product.galleryImages && product.galleryImages.length > 0) 
+    const rawGallery = (product && product.galleryImages && product.galleryImages.length > 0) 
         ? product.galleryImages 
         : (product ? [product.imageUrl] : []);
+    const galleryImages = rawGallery.map(img => getOptimizedImageUrl(img));
 
     const schemaJSON = useMemo(() => {
         if (!product) return null;
@@ -374,10 +376,9 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         .filter(p => p.id !== product.id)
         .slice(0, 4);
 
-    // Images are now served from Cloudflare R2 — no URL path transformations needed.
-    // The _width param is kept so all existing call sites remain valid.
+    // Images are now served from Cloudflare R2 CDN with immutable caching.
     // eslint-disable-next-line no-unused-vars
-    const optimizeCloudinaryUrl = (url, _width) => url || '';
+    const optimizeCloudinaryUrl = (url, _width) => getOptimizedImageUrl(url) || '';
 
     return (
         <div className="product-details-page-container" style={{maxWidth: '1200px', margin: '0 auto', minHeight: '80vh'}}>
@@ -713,7 +714,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                                         src={optimizeCloudinaryUrl(item.imageUrl, 500)} 
                                         alt={`${item.name} - Premium ${item.category || 'Ethnic Wear'} for Women`}
                                         loading="lazy"
-                                        onError={(e) => { e.target.src = './images/kurthi_peach.png'; }}
+                                        onError={(e) => { e.target.src = getOptimizedImageUrl('/images/kurthi_peach.png'); }}
                                     />
                                     <span className="recommended-badge">{item.category}</span>
                                 </div>

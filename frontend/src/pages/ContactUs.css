@@ -19,7 +19,7 @@
   position: absolute;
   width: 60%;
   height: 60%;
-  background-image: url('/images/silk_bg.png');
+  background-image: url('https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/images/silk_bg.png');
   background-size: cover;
   background-position: center;
   z-index: 0;
