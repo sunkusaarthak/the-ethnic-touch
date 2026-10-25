@@ -243,16 +243,16 @@
     border-radius: 28px;
     overflow: hidden;
     min-height: 520px;
-    display: flex;
+    display: grid;
+    grid-template-areas: "slide";
     align-items: center;
     box-shadow: 0 16px 45px rgba(45, 42, 38, 0.05);
     border: 1px solid rgba(212, 163, 115, 0.22);
 }
 
 .hero-slide {
-    position: absolute;
-    top: 0;
-    left: 0;
+    grid-area: slide;
+    position: relative !important;
     width: 100%;
     height: 100%;
     display: flex;
@@ -260,16 +260,15 @@
     padding: 3.5rem 4.5rem;
     gap: 3.5rem;
     opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1), transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-    transform: scale(0.98);
+    pointer-events: none;
+    z-index: 1;
+    transition: opacity 0.65s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hero-slide.active {
     opacity: 1;
-    visibility: visible;
-    transform: scale(1);
-    position: relative;
+    pointer-events: auto;
+    z-index: 2;
 }
 
 .hero-slide-text {
@@ -300,6 +299,7 @@
     color: #2D2A26; /* Soft Roasted Espresso */
     margin-bottom: 1.1rem;
     font-weight: 500;
+    min-height: 2.36em;
 }
 
 .hero-slide-title span {
@@ -313,6 +313,7 @@
     line-height: 1.68;
     margin-bottom: 2.2rem;
     max-width: 520px;
+    min-height: 3.36em;
 }
 
 .hero-actions-row {
@@ -320,6 +321,7 @@
     align-items: center;
     gap: 1.5rem;
     flex-wrap: wrap;
+    min-height: 48px;
 }
 
 .btn-hero-primary {
@@ -1769,27 +1771,36 @@
     }
     .reel-modal-container {
         flex-direction: column;
-        max-height: 94vh;
-        overflow-y: auto;
+        height: auto;
+        max-height: 92dvh;
+        overflow: hidden;
         border-radius: 20px;
     }
     .reel-modal-video-side {
         width: 100%;
-        min-height: 440px;
-        height: 52vh;
-        max-height: 500px;
+        height: 38dvh;
+        min-height: 180px;
+        max-height: 280px;
         background: #000;
         position: relative;
+        flex-shrink: 0;
     }
     .reel-video-wrapper,
     .reel-native-video,
     .reel-video-poster {
-        min-height: 440px;
+        min-height: 180px;
         height: 100%;
-        max-height: 500px;
+        max-height: 280px;
+        object-fit: cover;
     }
     .reel-modal-shop-side {
-        padding: 1.25rem 1rem;
+        padding: 0.75rem 0.95rem 0.85rem;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        overflow-y: auto;
     }
     .reel-modal-close-btn {
         top: 0.75rem;
@@ -2118,13 +2129,18 @@
     .hero-slider-container {
         min-height: auto !important;
         border-radius: 24px !important;
+        display: grid !important;
+        grid-template-areas: "slide" !important;
     }
     .hero-slide {
+        grid-area: slide !important;
+        position: relative !important;
         flex-direction: column !important;
         padding: 2.25rem 1.5rem 3.25rem !important;
         gap: 1.5rem !important;
         text-align: center !important;
         align-items: center !important;
+        height: 100% !important;
     }
     .hero-slide-text {
         width: 100% !important;
@@ -2134,9 +2150,13 @@
         flex-direction: column !important;
         align-items: center !important;
     }
+    .hero-slide-title {
+        min-height: 2.4em !important;
+    }
     .hero-slide-desc {
         margin: 0 auto 1.35rem !important;
         max-width: 440px !important;
+        min-height: 3.2em !important;
     }
     .hero-actions-row {
         display: flex !important;
@@ -2146,6 +2166,7 @@
         gap: 1.25rem !important;
         width: 100% !important;
         flex-wrap: wrap !important;
+        min-height: 46px !important;
     }
     .hero-slide-visual {
         width: 100% !important;
@@ -2285,28 +2306,43 @@
     .hero-slider-container {
         border-radius: 20px !important;
         border: 1px solid rgba(212, 163, 115, 0.2) !important;
+        display: grid !important;
+        grid-template-areas: "slide" !important;
+        min-height: auto !important;
     }
     .hero-slide {
+        grid-area: slide !important;
+        position: relative !important;
         padding: 1.5rem 1rem 3rem !important;
         gap: 1.1rem !important;
         align-items: center !important;
+        height: 100% !important;
     }
     .hero-tag-pill {
         font-size: 0.65rem !important;
         padding: 4px 12px !important;
         margin-bottom: 0.5rem !important;
         letter-spacing: 1.4px !important;
+        min-height: 24px !important;
+        display: inline-flex !important;
+        align-items: center !important;
     }
     .hero-slide-title {
         font-size: 1.62rem !important;
         line-height: 1.2 !important;
         margin-bottom: 0.45rem !important;
+        min-height: 2.4em !important;
     }
     .hero-slide-desc {
         font-size: 0.84rem !important;
         line-height: 1.52 !important;
         margin: 0 auto 1.1rem !important;
         max-width: 310px !important;
+        min-height: 3.04em !important;
+        display: -webkit-box !important;
+        -webkit-line-clamp: 2 !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
     }
     .hero-actions-row {
         display: flex !important;
@@ -2317,6 +2353,7 @@
         width: 100% !important;
         margin-bottom: 0.35rem !important;
         flex-wrap: wrap !important;
+        min-height: 44px !important;
     }
     .btn-hero-primary {
         padding: 0.72rem 1.6rem !important;

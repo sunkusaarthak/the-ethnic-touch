@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Play, Heart, Eye, ShoppingBag, X, ExternalLink, Loader2, Check } from 'lucide-react';
 import { featuredReels as defaultReels, INSTAGRAM_HANDLE, INSTAGRAM_PROFILE_URL } from '../../data/instagramReels';
@@ -101,12 +101,58 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
     const [videoLoading, setVideoLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
 
+    const isClosingViaPopstateRef = useRef(false);
+
+    const closeReelModal = useCallback(() => {
+        setActiveReel(null);
+        if (typeof window !== 'undefined' && window.history.state?.instaReelModal) {
+            isClosingViaPopstateRef.current = true;
+            window.history.back();
+        }
+    }, []);
+
     useEffect(() => {
         const handleResize = () => {
             setIsMobile(window.innerWidth <= 768);
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Popstate listener for mobile Back button / gesture
+    useEffect(() => {
+        const handlePopState = () => {
+            if (isClosingViaPopstateRef.current) {
+                isClosingViaPopstateRef.current = false;
+                return;
+            }
+            if (activeReel) {
+                setActiveReel(null);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [activeReel]);
+
+    // Keyboard Escape listener
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape' && activeReel) {
+                closeReelModal();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeReel, closeReelModal]);
+
+    // Clean up any remaining modal history state on unmount
+    useEffect(() => {
+        return () => {
+            if (typeof window !== 'undefined' && window.history.state?.instaReelModal) {
+                window.history.back();
+            }
+        };
     }, []);
 
     // Resolve direct progressive MP4 video URL for inline mobile and desktop playback
@@ -190,6 +236,22 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
         setActiveReel(reel);
         setSelectedSize(firstInStock);
         setAddedSuccess(false);
+
+        // Push history entry so mobile hardware/browser Back button closes modal
+        try {
+            window.history.pushState({ instaReelModal: true }, '');
+        } catch (err) {
+            console.warn('Could not push history state for modal', err);
+        }
+    };
+
+    const handleViewProduct = (e, prodId) => {
+        if (e) e.preventDefault();
+        if (typeof window !== 'undefined' && window.history.state?.instaReelModal) {
+            window.history.replaceState(null, '');
+        }
+        setActiveReel(null);
+        navigate(`/product/${prodId}/kurti`);
     };
 
     // Action handlers: Click card plays reel inline on website; Click Shop Piece redirects directly to shop
@@ -313,7 +375,7 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
             {activeReel && (
                 <div 
                     className="reel-modal-backdrop"
-                    onClick={() => setActiveReel(null)}
+                    onClick={closeReelModal}
                 >
                     <div 
                         className="reel-modal-container"
@@ -321,7 +383,7 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                     >
                         <button 
                             className="reel-modal-close-btn"
-                            onClick={() => setActiveReel(null)}
+                            onClick={closeReelModal}
                             aria-label="Close modal"
                         >
                             <X size={18} />
@@ -390,18 +452,18 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                                                 style={{ 
                                                     background: 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)', 
                                                     color: '#FFF',
-                                                    padding: '0.75rem 1.4rem',
+                                                    padding: isMobile ? '0.55rem 1.15rem' : '0.75rem 1.4rem',
                                                     borderRadius: '999px',
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
                                                     gap: '8px',
-                                                    fontSize: '0.84rem',
+                                                    fontSize: isMobile ? '0.78rem' : '0.84rem',
                                                     fontWeight: '600',
                                                     boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                                                     textDecoration: 'none'
                                                 }}
                                             >
-                                                <Play size={15} fill="#FFF" /> Watch Video on Instagram App
+                                                <Play size={isMobile ? 13 : 15} fill="#FFF" /> Watch Video on Instagram App
                                             </a>
                                         </div>
                                     </div>
@@ -412,48 +474,48 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                         {/* Right Side: Shoppable Piece Details */}
                         <div className="reel-modal-shop-side">
                             <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>
-                                    <ShoppingBag size={14} /> As Seen in This Reel
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', fontSize: isMobile ? '0.72rem' : '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: isMobile ? '0.2rem' : '0.5rem' }}>
+                                    <ShoppingBag size={isMobile ? 12 : 14} /> As Seen in This Reel
                                 </div>
-                                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', color: 'var(--color-text)', marginBottom: '0.4rem' }}>
+                                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: isMobile ? '1.12rem' : '1.4rem', color: 'var(--color-text)', marginBottom: isMobile ? '0.15rem' : '0.4rem', lineHeight: 1.25 }}>
                                     {activeProduct.name}
                                 </h3>
-                                <p style={{ fontSize: '0.88rem', color: '#6C6863', lineHeight: '1.5', marginBottom: '1.25rem' }}>
+                                <p style={{ fontSize: isMobile ? '0.76rem' : '0.88rem', color: '#6C6863', lineHeight: '1.4', marginBottom: isMobile ? '0.45rem' : '1.25rem', whiteSpace: isMobile ? 'nowrap' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {activeReel.caption || `${activeProduct.fabric || 'Pure Cotton'} kurti crafted for everyday elegance.`}
                                 </p>
 
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: '#FAF8F5', borderRadius: '14px', marginBottom: '1.5rem', border: '1px solid rgba(0,0,0,0.04)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.65rem' : '1rem', padding: isMobile ? '0.4rem 0.65rem' : '1rem', background: '#FAF8F5', borderRadius: '12px', marginBottom: isMobile ? '0.45rem' : '1.5rem', border: '1px solid rgba(0,0,0,0.04)' }}>
                                     <img 
                                         src={activeProduct.imageUrl} 
                                         alt={activeProduct.name} 
-                                        style={{ width: '60px', height: '80px', objectFit: 'cover', borderRadius: '8px' }} 
+                                        style={{ width: isMobile ? '40px' : '60px', height: isMobile ? '52px' : '80px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }} 
                                     />
-                                    <div>
-                                        <div style={{ fontSize: '0.76rem', color: '#8C8781', textTransform: 'uppercase' }}>
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontSize: isMobile ? '0.68rem' : '0.76rem', color: '#8C8781', textTransform: 'uppercase' }}>
                                             {activeProduct.category}
                                         </div>
-                                        <div style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--color-text)' }}>
+                                        <div style={{ fontSize: isMobile ? '1.05rem' : '1.2rem', fontWeight: '700', color: 'var(--color-text)' }}>
                                             ₹{(Number(activeProduct?.price) || 549).toLocaleString('en-IN')}
                                         </div>
-                                        <div style={{ fontSize: '0.74rem', color: '#5B8E7D', fontWeight: '600', marginTop: '2px' }}>
+                                        <div style={{ fontSize: isMobile ? '0.68rem' : '0.74rem', color: '#5B8E7D', fontWeight: '600', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                             ✓ 100% Pure Breathable Jaipur {activeProduct.fabric || 'Cotton'}
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Dynamic Size Picker from Database */}
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', marginBottom: '0.5rem' }}>
+                                <div style={{ marginBottom: isMobile ? '0.45rem' : '1.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: isMobile ? '0.76rem' : '0.82rem', marginBottom: isMobile ? '0.25rem' : '0.5rem' }}>
                                         <strong style={{ color: 'var(--color-text)' }}>Choose Size:</strong>
                                         {selectedStockQty > 0 && selectedStockQty <= 3 ? (
-                                            <span style={{ color: '#D97706', fontWeight: '600', fontSize: '0.78rem' }}>
+                                            <span style={{ color: '#D97706', fontWeight: '600', fontSize: isMobile ? '0.72rem' : '0.78rem' }}>
                                                 Only {selectedStockQty} left in size {selectedSize}!
                                             </span>
                                         ) : (
-                                            <span style={{ color: 'var(--color-primary)', fontWeight: '600' }}>Standard Indian Fit</span>
+                                            <span style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: isMobile ? '0.72rem' : '0.78rem' }}>Standard Indian Fit</span>
                                         )}
                                     </div>
-                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', gap: isMobile ? '6px' : '8px', flexWrap: 'nowrap', width: '100%' }}>
                                         {activeSizes.map(sz => {
                                             const stockQty = activeSizesStock && activeSizesStock[sz] !== undefined ? activeSizesStock[sz] : -1;
                                             const isOutOfStock = stockQty === 0;
@@ -467,7 +529,7 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                                                     onClick={() => !isOutOfStock && setSelectedSize(sz)}
                                                     title={isOutOfStock ? `${sz} is Out of Stock` : (stockQty > 0 && stockQty <= 3 ? `Only ${stockQty} left!` : `Size ${sz}`)}
                                                     style={{
-                                                        padding: '0.55rem 1rem',
+                                                        padding: isMobile ? '0.35rem 0.5rem' : '0.55rem 1rem',
                                                         borderRadius: '8px',
                                                         border: `1.5px solid ${
                                                             isSelected 
@@ -481,13 +543,13 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                                                             ? '#FFF' 
                                                             : (isOutOfStock ? '#AAA' : 'var(--color-text)'),
                                                         fontWeight: '600',
-                                                        fontSize: '0.84rem',
+                                                        fontSize: isMobile ? '0.76rem' : '0.84rem',
                                                         cursor: isOutOfStock ? 'not-allowed' : 'pointer',
                                                         textDecoration: isOutOfStock ? 'line-through' : 'none',
                                                         opacity: isOutOfStock ? 0.6 : 1,
                                                         transition: 'all 0.2s ease',
                                                         flex: '1 1 auto',
-                                                        minWidth: '45px',
+                                                        minWidth: isMobile ? '34px' : '45px',
                                                         boxShadow: isSelected ? '0 4px 12px rgba(212, 163, 115, 0.25)' : 'none'
                                                     }}
                                                 >
@@ -497,7 +559,7 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                                         })}
                                     </div>
                                     {isCurrentSizeOutOfStock && selectedSize && (
-                                        <div style={{ fontSize: '0.76rem', color: '#DC2626', marginTop: '6px', fontWeight: '500' }}>
+                                        <div style={{ fontSize: '0.74rem', color: '#DC2626', marginTop: '4px', fontWeight: '500' }}>
                                             Size {selectedSize} is sold out. Please select another size.
                                         </div>
                                     )}
@@ -517,11 +579,11 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                                                 ? '#D1D5DB' 
                                                 : 'linear-gradient(135deg, #D4A373 0%, #C49363 100%)'),
                                         color: '#FFF',
-                                        padding: '0.95rem',
-                                        borderRadius: '12px',
+                                        padding: isMobile ? '0.68rem 1rem' : '0.95rem',
+                                        borderRadius: '10px',
                                         border: 'none',
                                         fontWeight: '700',
-                                        fontSize: '0.95rem',
+                                        fontSize: isMobile ? '0.88rem' : '0.95rem',
                                         cursor: (!selectedSize || isCurrentSizeOutOfStock || !hasAnyInStock) ? 'not-allowed' : 'pointer',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -548,14 +610,14 @@ const InstaReelsShowcase = ({ instagramConfig, productsGlobal = [], addToCart })
                                     )}
                                 </button>
                                 
-                                <div style={{ textAlign: 'center', marginTop: '0.85rem' }}>
-                                    <Link 
-                                        to={`/product/${activeProduct.id}/kurti`} 
-                                        style={{ fontSize: '0.82rem', color: '#8C8781', textDecoration: 'underline' }}
-                                        onClick={() => setActiveReel(null)}
+                                <div style={{ textAlign: 'center', marginTop: isMobile ? '0.35rem' : '0.85rem' }}>
+                                    <a 
+                                        href={`/product/${activeProduct.id}/kurti`} 
+                                        style={{ fontSize: isMobile ? '0.74rem' : '0.82rem', color: '#8C8781', textDecoration: 'underline' }}
+                                        onClick={(e) => handleViewProduct(e, activeProduct.id)}
                                     >
                                         View Full Product Specifications & Zoom
-                                    </Link>
+                                    </a>
                                 </div>
                             </div>
                         </div>
