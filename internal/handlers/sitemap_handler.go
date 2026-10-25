@@ -35,13 +35,14 @@ func (h *SitemapHandler) HandleSitemap(w http.ResponseWriter, r *http.Request) {
 	urlset := URLSet{
 		URLs: []URL{
 			{Loc: baseURL + "/", ChangeFreq: "daily", Priority: "1.0"},
-			{Loc: baseURL + "/shop", ChangeFreq: "daily", Priority: "0.9"},
-			{Loc: baseURL + "/about", ChangeFreq: "monthly", Priority: "0.8"},
+			{Loc: baseURL + "/shop", ChangeFreq: "daily", Priority: "0.95"},
+			{Loc: baseURL + "/shop/straight-cut", ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/shop/anarkali", ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/shop/tunic", ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/shop/fusion", ChangeFreq: "weekly", Priority: "0.85"},
+			{Loc: baseURL + "/about", ChangeFreq: "monthly", Priority: "0.7"},
 			{Loc: baseURL + "/contact", ChangeFreq: "monthly", Priority: "0.7"},
-			{Loc: baseURL + "/shop/straight-cut", ChangeFreq: "weekly", Priority: "0.8"},
-			{Loc: baseURL + "/shop/anarkali", ChangeFreq: "weekly", Priority: "0.8"},
-			{Loc: baseURL + "/shop/tunic", ChangeFreq: "weekly", Priority: "0.8"},
-			{Loc: baseURL + "/shop/fusion", ChangeFreq: "weekly", Priority: "0.8"},
+			{Loc: baseURL + "/privacy-policy", ChangeFreq: "yearly", Priority: "0.3"},
 		},
 	}
 

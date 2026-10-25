@@ -8,6 +8,7 @@ import { API_BASE_URL } from '../data/config';
 import SizeSelectionModal from '../components/SizeSelectionModal';
 import SizeGuide from '../components/SizeGuide';
 import ZoomableImage from '../components/ZoomableImage';
+import useSEO from '../utils/useSEO';
 
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
@@ -17,6 +18,18 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     const [localProduct, setLocalProduct] = useState(null);
     const [isFetchingDelta, setIsFetchingDelta] = useState(true);
     const [notFound, setNotFound] = useState(false);
+
+    const product = localProduct || globalProduct;
+
+    useSEO({
+        title: product ? `${product.name} | The Ethnic Touch` : 'Jaipur Kurti | The Ethnic Touch',
+        description: product 
+            ? `Buy ${product.name} crafted in pure Jaipur ${product.fabric || 'cotton'}. ₹${product.price}. Available in sizes ${(product.sizes || []).join(', ')}. Free delivery & easy dispatch.`
+            : 'Shop authentic handcrafted pure cotton Jaipur kurtis at The Ethnic Touch.',
+        canonicalUrl: product 
+            ? `https://theethnictouch.com/product/${product.id}/${product.name ? product.name.toLowerCase().replace(/[\s\/]+/g, '-') : ''}`
+            : 'https://theethnictouch.com/shop'
+    });
 
     useEffect(() => {
         // Reset state when ID changes
@@ -51,7 +64,6 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
         return () => controller.abort();
     }, [id, globalProduct]);
 
-    const product = localProduct;
     const hasSizes = product?.sizes && product.sizes.length > 0;
     const isOutOfStock = hasSizes ? !product.sizes.some(sz => (product.sizesStock && product.sizesStock[sz] !== undefined ? product.sizesStock[sz] : -1) !== 0) : false;
 

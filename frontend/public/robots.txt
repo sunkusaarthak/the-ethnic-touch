@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+Allow: /favicon*
+Allow: /sitemap.xml
 
-# Sitemap: https://yourdomain.com/sitemap.xml
+Sitemap: https://theethnictouch.com/sitemap.xml

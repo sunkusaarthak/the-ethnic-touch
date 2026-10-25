@@ -1,6 +1,13 @@
 import React from 'react';
+import useSEO from '../utils/useSEO';
 
 const About = () => {
+    useSEO({
+        title: "About Us | The Ethnic Touch - Jaipur Craftsmanship",
+        description: "Discover our journey and commitment to authentic Jaipur textile craftsmanship, handpicked breathable cotton fabrics, and exclusive in-house kurti designs.",
+        canonicalUrl: "https://theethnictouch.com/about"
+    });
+
     return (
         <div className="about-page" style={{ padding: '60px 20px', maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
             <h1 style={{ fontSize: '2.5rem', marginBottom: '20px', color: 'var(--color-primary)' }}>Welcome to The Ethnic Touch</h1>
