@@ -28,8 +28,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
             ? `Buy ${product.name} crafted in pure Jaipur ${product.fabric || 'cotton'}. ₹${product.price}. Available in sizes ${(product.sizes || []).join(', ')}. Free delivery & easy dispatch.`
             : 'Shop authentic handcrafted pure cotton Jaipur kurtis at The Ethnic Touch.',
         canonicalUrl: product 
-            ? `https://theethnictouch.com/product/${product.id}/${createProductSlug(product.name)}`
-            : 'https://theethnictouch.com/shop'
+            ? `https://www.theethnictouch.com/product/${product.id}/${createProductSlug(product.name)}`
+            : 'https://www.theethnictouch.com/shop'
     });
 
     useEffect(() => {
@@ -200,17 +200,17 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                 "@type": "ListItem",
                 "position": 1,
                 "name": "Home",
-                "item": "https://theethnictouch.com/"
+                "item": "https://www.theethnictouch.com/"
             },{
                 "@type": "ListItem",
                 "position": 2,
                 "name": "Shop",
-                "item": "https://theethnictouch.com/shop"
+                "item": "https://www.theethnictouch.com/shop"
             },{
                 "@type": "ListItem",
                 "position": 3,
                 "name": product.category || "Collection",
-                "item": `https://theethnictouch.com/shop/${(product.category || "").toLowerCase().replace(" ", "-")}`
+                "item": `https://www.theethnictouch.com/shop/${(product.category || "").toLowerCase().replace(" ", "-")}`
             },{
                 "@type": "ListItem",
                 "position": 4,

@@ -330,7 +330,7 @@ func (a *App) setupRoutes() {
 					if err == nil {
 						htmlContent := string(htmlBytes)
 						// Create dynamic meta tags
-						imageURL := "https://theethnictouch.com/api/og-image/" + product.ID + ".jpg"
+						imageURL := "https://www.theethnictouch.com/api/og-image/" + product.ID + ".jpg"
 						
 						// Check availability for Schema
 						availability := "https://schema.org/OutOfStock"
@@ -363,7 +363,7 @@ func (a *App) setupRoutes() {
 								}
 							}
 							</script>
-						`, product.Name, imageURL, product.Description, "https://theethnictouch.com"+path, product.Price, availability)
+						`, product.Name, imageURL, product.Description, "https://www.theethnictouch.com"+path, product.Price, availability)
 
 						twitterPrice := fmt.Sprintf("₹%.0f", product.Price)
 						dynamicTags := fmt.Sprintf(`
@@ -384,7 +384,7 @@ func (a *App) setupRoutes() {
 							<meta name="twitter:label1" content="Price">
 							<meta name="twitter:data1" content="%s">
 							%s
-						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://theethnictouch.com"+path, product.Price, availability, product.Name, product.Description, imageURL, twitterPrice, jsonLD)						
+						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://www.theethnictouch.com"+path, product.Price, availability, product.Name, product.Description, imageURL, twitterPrice, jsonLD)						
 						htmlContent = strings.Replace(htmlContent, "<!-- DYNAMIC_META_TAGS -->", dynamicTags, 1)
 						
 						w.Header().Set("Content-Type", "text/html; charset=utf-8")

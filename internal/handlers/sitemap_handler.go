@@ -49,7 +49,7 @@ func createSlug(name string) string {
 }
 
 func (h *SitemapHandler) HandleSitemap(w http.ResponseWriter, r *http.Request) {
-	baseURL := "https://theethnictouch.com"
+	baseURL := "https://www.theethnictouch.com"
 	today := time.Now().Format("2006-01-02")
 
 	urlset := URLSet{

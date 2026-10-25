@@ -12,4 +12,4 @@ Disallow: /profile
 Disallow: /complete-profile
 Disallow: /api/
 
-Sitemap: https://theethnictouch.com/sitemap.xml
+Sitemap: https://www.theethnictouch.com/sitemap.xml
