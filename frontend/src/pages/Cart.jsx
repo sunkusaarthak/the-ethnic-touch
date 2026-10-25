@@ -48,8 +48,8 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
             .catch(() => {});
     }, []);
 
-    const handleCoupon = async () => {
-        const cleanCode = (couponCode || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const applyCouponCode = async (codeToApply) => {
+        const cleanCode = (codeToApply || couponCode || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
         if (!cleanCode) {
             setMsg('Please enter a coupon code');
             return;
@@ -65,15 +65,34 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
             const discountAmount = data.discountAmount !== undefined ? data.discountAmount : (coupon.type === 'fixed' ? coupon.value : (subtotal * coupon.value) / 100);
             
             onApplyCoupon({ code: coupon.code, amt: discountAmount });
+            setCouponCode(coupon.code);
+            try {
+                localStorage.removeItem('pendingCoupon');
+            } catch (_) {}
             if (coupon.code.includes('KURTHI')) {
                 setMsg(`Applied: ₹${discountAmount} off a single Kurthi!`);
             } else {
-                setMsg(`Applied: ₹${discountAmount} off your entire cart!`);
+                setMsg(`Applied: ₹${discountAmount} off (${coupon.type === 'percentage' ? coupon.value + '%' : '₹' + coupon.value}) on your order!`);
             }
         } catch (err) {
             setMsg(err.message || 'Validation failed');
         }
     };
+
+    const handleCoupon = () => applyCouponCode(couponCode);
+
+    useEffect(() => {
+        try {
+            const pending = localStorage.getItem('pendingCoupon');
+            if (pending && !discount) {
+                const clean = pending.trim().toUpperCase();
+                setCouponCode(clean);
+                if (subtotal > 0) {
+                    applyCouponCode(clean);
+                }
+            }
+        } catch (_) {}
+    }, [subtotal, discount]);
 
     // Calculate progression details
     const unlockedTiers = tiers.filter(t => subtotal >= t.threshold);
@@ -173,7 +192,7 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                                 </div>
                                                 {itemQty > 1 && (
                                                     <div style={{fontSize:'0.7rem', color:'#888', marginTop:'1px'}}>
-                                                        (₹{item.price.toLocaleString('en-IN')} each)
+                                                        (₹{Number(item.price || 0).toLocaleString('en-IN')} each)
                                                     </div>
                                                 )}
                                             </div>
@@ -399,8 +418,21 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                 <span style={{fontWeight: '600', color: '#2D2A26'}}>₹{subtotal.toLocaleString('en-IN')}</span>
                             </div>
                             {discount && (
-                                <div style={{display: 'flex', justifyContent: 'space-between', color: '#2E7D32', fontWeight: '500'}}>
-                                    <span>Discount ({discount.code})</span>
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#2E7D32', fontWeight: '500'}}>
+                                    <span style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                        Discount ({discount.code})
+                                        <button 
+                                            type="button" 
+                                            onClick={() => {
+                                                onApplyCoupon(null);
+                                                setMsg('');
+                                                setCouponCode('');
+                                            }}
+                                            style={{background: 'none', border: 'none', color: '#C62828', cursor: 'pointer', fontSize: '0.72rem', textDecoration: 'underline', padding: 0}}
+                                        >
+                                            Remove
+                                        </button>
+                                    </span>
                                     <span>-₹{discount.amt.toLocaleString('en-IN')}</span>
                                 </div>
                             )}

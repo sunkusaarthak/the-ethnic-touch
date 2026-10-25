@@ -13,7 +13,9 @@ type CouponService interface {
 	ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo, userID string) (*models.Coupon, float64, error)
 	GetAllCoupons() ([]models.Coupon, error)
 	CreateCoupon(c *models.Coupon) error
+	DeleteCoupon(code string) error
 	GetGiftTiers() ([]models.GiftTier, error)
+	SaveGiftTiers(tiers []models.GiftTier) error
 }
 
 type couponService struct {
@@ -108,6 +110,14 @@ func (s *couponService) CreateCoupon(c *models.Coupon) error {
 	return s.repo.CreateCoupon(c)
 }
 
+func (s *couponService) DeleteCoupon(code string) error {
+	return s.repo.DeleteCoupon(code)
+}
+
 func (s *couponService) GetGiftTiers() ([]models.GiftTier, error) {
 	return s.repo.GetGiftTiers()
+}
+
+func (s *couponService) SaveGiftTiers(tiers []models.GiftTier) error {
+	return s.repo.SaveGiftTiers(tiers)
 }

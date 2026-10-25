@@ -70,6 +70,12 @@ func (m *mockCouponRepo) CreateCoupon(c *models.Coupon) error {
 	return nil
 }
 
+func (m *mockCouponRepo) DeleteCoupon(code string) error {
+	upper := strings.ToUpper(strings.TrimSpace(code))
+	delete(m.coupons, upper)
+	return nil
+}
+
 func (m *mockCouponRepo) IncrementUsage(code string) error {
 	upper := strings.ToUpper(strings.TrimSpace(code))
 	if c, ok := m.coupons[upper]; ok {
@@ -80,6 +86,11 @@ func (m *mockCouponRepo) IncrementUsage(code string) error {
 
 func (m *mockCouponRepo) GetGiftTiers() ([]models.GiftTier, error) {
 	return m.tiers, nil
+}
+
+func (m *mockCouponRepo) SaveGiftTiers(tiers []models.GiftTier) error {
+	m.tiers = tiers
+	return nil
 }
 
 func TestCouponService_ValidateCoupon(t *testing.T) {

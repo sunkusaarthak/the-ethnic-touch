@@ -2,6 +2,10 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
+	"time"
+
 	"ethnictouch/internal/models"
 )
 
@@ -9,8 +13,10 @@ type CouponRepository interface {
 	GetByCode(code string) (*models.Coupon, error)
 	GetAllCoupons() ([]models.Coupon, error)
 	CreateCoupon(c *models.Coupon) error
+	DeleteCoupon(code string) error
 	IncrementUsage(code string) error
 	GetGiftTiers() ([]models.GiftTier, error)
+	SaveGiftTiers(tiers []models.GiftTier) error
 }
 
 type postgresCouponRepo struct {
@@ -53,10 +59,35 @@ func (r *postgresCouponRepo) GetAllCoupons() ([]models.Coupon, error) {
 }
 
 func (r *postgresCouponRepo) CreateCoupon(c *models.Coupon) error {
+	code := strings.ToUpper(strings.TrimSpace(c.Code))
+	if code == "" {
+		return fmt.Errorf("coupon code cannot be empty")
+	}
+	c.Code = code
+
+	if c.ID == "" {
+		c.ID = fmt.Sprintf("cp_%d", time.Now().UnixNano())
+	}
+	if c.Type == "" {
+		c.Type = "percentage"
+	}
+
 	_, err := r.db.Exec(`
 		INSERT INTO coupons (id, code, type, value, min_order, expiry_date, is_active, usage_limit, used_count, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (code) DO UPDATE SET
+			type = EXCLUDED.type,
+			value = EXCLUDED.value,
+			min_order = EXCLUDED.min_order,
+			expiry_date = EXCLUDED.expiry_date,
+			is_active = EXCLUDED.is_active,
+			usage_limit = EXCLUDED.usage_limit`,
 		c.ID, c.Code, c.Type, c.Value, c.MinOrder, c.ExpiryDate, c.IsActive, c.UsageLimit, c.UsedCount, c.UserID)
+	return err
+}
+
+func (r *postgresCouponRepo) DeleteCoupon(code string) error {
+	_, err := r.db.Exec(`DELETE FROM coupons WHERE UPPER(TRIM(code)) = UPPER(TRIM($1))`, code)
 	return err
 }
 
@@ -83,4 +114,36 @@ func (r *postgresCouponRepo) GetGiftTiers() ([]models.GiftTier, error) {
 		}
 	}
 	return tiers, nil
+}
+
+func (r *postgresCouponRepo) SaveGiftTiers(tiers []models.GiftTier) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM gift_tiers"); err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO gift_tiers (name, threshold, reward_type, discount_type, discount_value, coupon_format, physical_name, coupon_expiry_days)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, t := range tiers {
+		expiry := t.CouponExpiryDays
+		if expiry <= 0 {
+			expiry = 30
+		}
+		if _, err := stmt.Exec(t.Name, t.Threshold, t.RewardType, t.DiscountType, t.DiscountValue, t.CouponFormat, t.PhysicalName, expiry); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }

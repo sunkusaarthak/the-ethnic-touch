@@ -104,6 +104,8 @@ func (m *mockConfigServiceForCheckout) ResetNewUserKurthiCounter() error { retur
 func (m *mockConfigServiceForCheckout) ResetOrderKurthiCounter() error { return nil }
 func (m *mockConfigServiceForCheckout) GetAuthConfig() (*models.AuthConfig, error) { return nil, nil }
 func (m *mockConfigServiceForCheckout) UpdateAuthConfig(config *models.AuthConfig) error { return nil }
+func (m *mockConfigServiceForCheckout) GetHomepageConfig() (*models.HomepageConfig, error) { return nil, nil }
+func (m *mockConfigServiceForCheckout) UpdateHomepageConfig(config *models.HomepageConfig) error { return nil }
 
 func TestCheckoutFlows_OfflinePickupAndInstantDelivery(t *testing.T) {
 	orderRepo := &mockOrderRepoForCheckoutFlows{orders: make(map[string]*models.Order)}

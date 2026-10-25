@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
@@ -75,11 +78,33 @@ func (h *CouponHandler) HandleAdminCoupons(w http.ResponseWriter, r *http.Reques
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(coupons)
 	} else if r.Method == http.MethodPost {
-		var c models.Coupon
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+		var req struct {
+			models.Coupon
+			IsActive *bool `json:"isActive"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid payload", http.StatusBadRequest)
 			return
 		}
+
+		c := req.Coupon
+		c.Code = strings.ToUpper(strings.TrimSpace(c.Code))
+		if c.Code == "" {
+			http.Error(w, "Coupon code is required", http.StatusBadRequest)
+			return
+		}
+		if c.ID == "" {
+			c.ID = fmt.Sprintf("cp_%d", time.Now().UnixNano())
+		}
+		if c.Type == "" {
+			c.Type = "percentage"
+		}
+		if req.IsActive != nil {
+			c.IsActive = *req.IsActive
+		} else {
+			c.IsActive = true
+		}
+
 		if err := h.svc.CreateCoupon(&c); err != nil {
 			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 			return
@@ -87,6 +112,25 @@ func (h *CouponHandler) HandleAdminCoupons(w http.ResponseWriter, r *http.Reques
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(c)
+	} else if r.Method == http.MethodDelete {
+		code := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("code")))
+		if code == "" {
+			var delReq struct {
+				Code string `json:"code"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&delReq)
+			code = strings.ToUpper(strings.TrimSpace(delReq.Code))
+		}
+		if code == "" {
+			http.Error(w, "Coupon code is required", http.StatusBadRequest)
+			return
+		}
+		if err := h.svc.DeleteCoupon(code); err != nil {
+			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"message": "Coupon deleted successfully"})
 	} else {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -141,4 +185,29 @@ func (h *CouponHandler) HandleGetGiftTiers(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tiers)
+}
+
+func (h *CouponHandler) HandleUpdateGiftTiers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var tiers []models.GiftTier
+	if err := json.NewDecoder(r.Body).Decode(&tiers); err != nil {
+		http.Error(w, "Invalid input data: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.svc.SaveGiftTiers(tiers); err != nil {
+		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Gift tiers saved successfully",
+		"count":   len(tiers),
+	})
 }
