@@ -10,16 +10,17 @@ import (
 
 func StartDelhiveryCron(orderRepo repository.OrderRepository, delhiverySvc service.DelhiveryService) {
 	go func() {
+		istLocation := time.FixedZone("IST", 5*3600+30*60)
 		for {
-			now := time.Now()
-			// Calculate next 1:30 PM
-			nextRun := time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location())
+			now := time.Now().In(istLocation)
+			// Calculate next 1:30 PM IST (Cutoff for same day shipping)
+			nextRun := time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, istLocation)
 			if now.After(nextRun) {
 				nextRun = nextRun.Add(24 * time.Hour)
 			}
 
 			sleepDuration := nextRun.Sub(now)
-			log.Printf("[Cron] Next Delhivery batch pickup scheduled in %v (at %v)", sleepDuration, nextRun)
+			log.Printf("[Cron] Next Delhivery batch pickup scheduled in %v (at %v IST)", sleepDuration, nextRun.Format("2006-01-02 15:04:05"))
 			time.Sleep(sleepDuration)
 
 			// Run task

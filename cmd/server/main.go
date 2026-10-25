@@ -42,6 +42,8 @@ func main() {
 	stopChannel := make(chan os.Signal, 1)
 	signal.Notify(stopChannel, os.Interrupt, syscall.SIGTERM)
 
+	application.StartBackgroundJobs()
+
 	go func() {
 		if err := application.Run(port); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("Server crashed", "error", err)

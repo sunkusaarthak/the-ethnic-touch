@@ -146,6 +146,9 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/orders/verify", orderHandler.HandleVerifyPayment)
 	a.Router.HandleFunc("/api/verify-payment", orderHandler.HandleVerifyPayment)
 
+	a.Router.HandleFunc("/api/orders/{id}/cancel", orderHandler.HandleCancelOrder)
+	a.Router.HandleFunc("/api/orders/cancel", orderHandler.HandleCancelOrder)
+
 	a.Router.HandleFunc("/api/profile/orders", orderHandler.HandleGetOrder)
 
 	// Coupons & Gifting
@@ -159,6 +162,7 @@ func (a *App) setupRoutes() {
 	// Admin API Endpoints
 	a.Router.HandleFunc("/api/admin/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/orders/confirm-pickup", adminOrEmployee(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/delhivery/batch-pickup", adminOnly(http.HandlerFunc(orderHandler.HandleTriggerDelhiveryBatch)).ServeHTTP)
 	
 	a.Router.HandleFunc("/api/admin/profiles", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/edit", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
@@ -414,6 +418,16 @@ func (a *App) Run(port string) error {
 
 func (a *App) StartBackgroundJobs() {
 	go func() {
+		// Run initial cleanup immediately upon startup (useful when waking up from Render spin-down)
+		if a.OrderService != nil {
+			cleaned, err := a.OrderService.CleanupAbandonedOrders(15 * time.Minute)
+			if err != nil {
+				a.Logger.Error("Failed initial cleanup of abandoned orders", "error", err)
+			} else if cleaned > 0 {
+				a.Logger.Info("Cleaned abandoned orders on server startup", "count", cleaned)
+			}
+		}
+
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {

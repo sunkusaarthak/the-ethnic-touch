@@ -481,7 +481,7 @@ func (r *postgresOrderRepo) GetPendingDeliveryOrders() ([]models.Order, error) {
 		COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
 		COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
 		COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') 
-		FROM orders WHERE status = 'paid' AND checkout_type = 'delivery'`)
+		FROM orders WHERE status = 'paid' AND (checkout_type = 'delivery' OR checkout_type = 'hyderabad_instant')`)
 	if err != nil {
 		return nil, err
 	}

@@ -644,10 +644,13 @@ async function loadDashboard() {
         const orderList = Array.isArray(orders) ? orders : [];
         const couponList = Array.isArray(coupons) ? coupons : [];
 
-        const revenue = orderList.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        // Realized settled revenue only: exclude abandoned, cancelled, and unpaid orders
+        const settledStatuses = ['paid', 'shipped', 'picked_up', 'dispatched_instant'];
+        const settledOrders = orderList.filter(o => settledStatuses.includes(o.status));
+        const revenue = settledOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
         document.getElementById('stat-revenue').innerText = `₹${revenue.toLocaleString('en-IN')}`;
-        document.getElementById('stat-orders').innerText = orderList.length;
+        document.getElementById('stat-orders').innerText = settledOrders.length;
         document.getElementById('stat-coupons').innerText = couponList.length;
 
         const pendingPickups = orderList.filter(o => o.checkoutType === 'pickup' && o.paymentMethod === 'offline_qr' && o.status === 'pending_payment').length;
@@ -808,6 +811,33 @@ function renderOrders() {
 }
 
 window.renderOrders = renderOrders;
+
+window.triggerDelhiveryBatchPickup = async function() {
+    const btn = document.getElementById('btnDelhiveryBatch');
+    const originalText = btn ? btn.innerHTML : '🚚 Dispatch Delhivery Batch';
+    if (!confirm("Are you sure you want to trigger Delhivery batch pickup for all pending paid delivery orders?")) {
+        return;
+    }
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '🚚 Dispatching...';
+        }
+        const res = await fetchJsonSafe('/api/admin/delhivery/batch-pickup', {
+            method: 'POST',
+            headers: getAuthHeader()
+        });
+        alert(res.message || `Dispatched ${res.count || 0} order(s).`);
+        await loadOrders();
+    } catch (err) {
+        alert("Failed to trigger Delhivery batch: " + (err.message || err));
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+};
 
 
 function resetProductFormState() {
