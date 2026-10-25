@@ -8,12 +8,17 @@ const Footer = () => (
             <p style={{ maxWidth: '600px', margin: '0 auto', fontSize: '0.95rem', lineHeight: '1.6', color: '#555' }}>
                 The Ethnic Touch is a contemporary ethnic fashion brand dedicated to bringing you authentic, high-quality Jaipur kurtis. Every piece in our collection is uniquely designed in-house, made with carefully selected premium fabrics, and crafted directly in Jaipur. We bridge timeless tradition with modern comfort—offering exclusive collections in our physical store and shipping nationwide through our online store.
             </p>
-            <div className="footer-links" style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+            <div className="footer-links" style={{ display: 'flex', gap: '1.25rem', justifyContent: 'center', marginTop: '1.5rem', flexWrap: 'wrap', fontWeight: '500' }}>
+                <Link to="/shop" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem', fontWeight: '600' }}>Shop All Kurtis</Link>
+                <Link to="/shop/straight-cut" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Straight Cut</Link>
+                <Link to="/shop/anarkali" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Anarkali</Link>
+                <Link to="/shop/tunic" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Short Tunics</Link>
+                <Link to="/shop/fusion" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Fusion Wear</Link>
                 <Link to="/about" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>About Us</Link>
-                <Link to="/blog" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Style Guide & Journal</Link>
-                <Link to="/privacy-policy" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Privacy Policy</Link>
                 <Link to="/contact" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Contact Us</Link>
-                <a href="https://share.google/eSxLvWitpLTqdQkn3" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Visit Hyderabad Store</a>
+                <Link to="/blog" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Style Journal</Link>
+                <Link to="/privacy-policy" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Privacy Policy</Link>
+                <a href="https://share.google/eSxLvWitpLTqdQkn3" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>Hyderabad Store</a>
             </div>
             <p className="copyright" style={{ marginTop: '2rem' }}>&copy; 2026 The Ethnic Touch. All rights reserved.</p>
         </div>

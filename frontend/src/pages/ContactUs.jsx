@@ -2,9 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAlert } from '../context/AlertContext';
 import { User, Mail, Phone, Clipboard, CheckCircle, ChevronRight, Send } from 'lucide-react';
 import { formatError } from '../utils/errors';
+import useSEO from '../utils/useSEO';
 import './ContactUs.css';
 
 const ContactUs = () => {
+    useSEO({
+        title: "Contact Us & Hyderabad Store Location | The Ethnic Touch",
+        description: "Visit our offline store near Khajaguda Lake in Hyderabad or reach out to customer care for orders, styling assistance, and inquiries.",
+        canonicalUrl: "https://theethnictouch.com/contact"
+    });
+
     const { showAlert } = useAlert();
     const [formData, setFormData] = useState({
         name: '',

@@ -1,6 +1,13 @@
 import React, { useEffect } from 'react';
+import useSEO from '../utils/useSEO';
 
 const PrivacyPolicy = () => {
+    useSEO({
+        title: "Privacy Policy | The Ethnic Touch",
+        description: "Read The Ethnic Touch privacy policy covering customer data protection, secure Razorpay payments, and confidential order processing.",
+        canonicalUrl: "https://theethnictouch.com/privacy-policy"
+    });
+
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
