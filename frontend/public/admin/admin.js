@@ -11,7 +11,31 @@ const firebaseConfig = {
     appId: "1:565024605742:web:0452b9b88a65be9d67c1bf"
 };
 
-const API_BASE_URL = (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('theethnictouch.com')) ? 'https://the-ethnic-touch-backend.onrender.com' : '';
+const getApiBaseUrl = () => {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const backendParam = urlParams.get('backend');
+        if (backendParam) {
+            localStorage.setItem('ADMIN_API_BASE_URL', backendParam);
+            return backendParam.replace(/\/+$/, '');
+        }
+    } catch (_) {}
+
+    try {
+        const stored = localStorage.getItem('ADMIN_API_BASE_URL');
+        if (stored) {
+            return stored.replace(/\/+$/, '');
+        }
+    } catch (_) {}
+
+    if (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('theethnictouch.com')) {
+        return 'https://tet-backend-1.onrender.com';
+    }
+
+    return '';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 let auth;
 
