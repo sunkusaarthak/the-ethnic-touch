@@ -108,4 +108,40 @@ func TestCORSMiddleware(t *testing.T) {
 			t.Errorf("Expected Access-Control-Allow-Origin header to match origin")
 		}
 	})
+
+	t.Run("Allowed Render Frontend Origin", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/config/homepage", nil)
+		req.Header.Set("Origin", "https://the-ethnic-touch-frontend-2.onrender.com")
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Header().Get("Access-Control-Allow-Origin") != "https://the-ethnic-touch-frontend-2.onrender.com" {
+			t.Errorf("Expected CORS allow origin for the-ethnic-touch-frontend-2.onrender.com, got %q", rr.Header().Get("Access-Control-Allow-Origin"))
+		}
+	})
+
+	t.Run("Dynamic Render Domain Origin", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/config/homepage", nil)
+		req.Header.Set("Origin", "https://the-ethnic-touch-preview-pr12.onrender.com")
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Header().Get("Access-Control-Allow-Origin") != "https://the-ethnic-touch-preview-pr12.onrender.com" {
+			t.Errorf("Expected CORS allow origin for dynamic Render preview, got %q", rr.Header().Get("Access-Control-Allow-Origin"))
+		}
+	})
+
+	t.Run("Blocked Unauthorized Origin", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/config/homepage", nil)
+		req.Header.Set("Origin", "https://malicious-site.com")
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("Expected no Access-Control-Allow-Origin for unauthorized origin, got %q", rr.Header().Get("Access-Control-Allow-Origin"))
+		}
+	})
 }
