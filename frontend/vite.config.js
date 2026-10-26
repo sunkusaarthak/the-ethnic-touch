@@ -15,18 +15,13 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        name: 'sync-admin-api-url',
+        name: 'sync-admin-env',
         closeBundle() {
-          if (!apiUrl) return
-          const adminJsPath = path.resolve(__dirname, 'dist/admin/admin.js')
-          if (fs.existsSync(adminJsPath)) {
-            let content = fs.readFileSync(adminJsPath, 'utf8')
-            content = content.replace(
-              /https:\/\/(the-ethnic-touch-backend|tet-backend-1)\.onrender\.com/g,
-              apiUrl
-            )
-            fs.writeFileSync(adminJsPath, content, 'utf8')
-            console.log(`[Vite Plugin] Synchronized admin.js API_BASE_URL with VITE_API_BASE_URL: ${apiUrl}`)
+          const adminDir = path.resolve(__dirname, 'dist/admin')
+          if (fs.existsSync(adminDir)) {
+            const envContent = `// Injected from Render Environment Variables during build\nwindow.__ENV__ = {\n  VITE_API_BASE_URL: ${JSON.stringify(apiUrl)}\n};\n`
+            fs.writeFileSync(path.join(adminDir, 'env.js'), envContent, 'utf8')
+            console.log(`[Vite Plugin] Generated dist/admin/env.js with VITE_API_BASE_URL: "${apiUrl}"`)
           }
         }
       }

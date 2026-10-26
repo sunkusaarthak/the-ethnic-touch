@@ -28,6 +28,11 @@ const getApiBaseUrl = () => {
         }
     } catch (_) {}
 
+    // 3. Render environment variable (injected at build time into window.__ENV__)
+    if (window.__ENV__ && window.__ENV__.VITE_API_BASE_URL) {
+        return window.__ENV__.VITE_API_BASE_URL.replace(/\/+$/, '');
+    }
+
     if (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('theethnictouch.com')) {
         return 'https://tet-backend-1.onrender.com';
     }
