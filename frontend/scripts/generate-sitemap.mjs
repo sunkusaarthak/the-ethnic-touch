@@ -35,8 +35,10 @@ const staticRoutes = [
 async function fetchProducts() {
     const endpoints = [
         'http://localhost:8080/api/products',
+        process.env.VITE_API_BASE_URL ? `${process.env.VITE_API_BASE_URL.replace(/\/+$/, '')}/api/products` : null,
+        'https://tet-backend-1.onrender.com/api/products',
         'https://the-ethnic-touch-backend.onrender.com/api/products'
-    ];
+    ].filter(Boolean);
 
     for (const url of endpoints) {
         try {
