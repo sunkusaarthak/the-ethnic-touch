@@ -59,6 +59,17 @@ func (m *mockConcurrentOrderRepo) UpdateOrderStatus(orderID, status, paymentID, 
 	return nil
 }
 
+func (m *mockConcurrentOrderRepo) ConfirmStorePickup(orderID string) error { return nil }
+func (m *mockConcurrentOrderRepo) CancelPendingOrder(orderID string) error { return nil }
+func (m *mockConcurrentOrderRepo) GetPendingDeliveryOrders() ([]models.Order, error) { return nil, nil }
+func (m *mockConcurrentOrderRepo) UpdateOrderPaymentMethod(orderID, method string) error { return nil }
+func (m *mockConcurrentOrderRepo) UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error { return nil }
+func (m *mockConcurrentOrderRepo) ConfirmPreorderPickup(orderID, adminEmail, notes string) error { return nil }
+func (m *mockConcurrentOrderRepo) MarkPreorderPickupReady(orderID string) error { return nil }
+func (m *mockConcurrentOrderRepo) GetPreorderPickupOrders(filter string) ([]models.Order, error) { return nil, nil }
+func (m *mockConcurrentOrderRepo) GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error) { return nil, nil }
+func (m *mockConcurrentOrderRepo) MarkPickupNotificationSent(orderID string) error { return nil }
+
 func TestConcurrentStockDepletion_OversellProtection(t *testing.T) {
 	prodRepo := &mockConcurrentProductRepo{stock: 1, name: "Flash Sale Silk Saree"}
 	orderRepo := &mockConcurrentOrderRepo{productRepo: prodRepo}

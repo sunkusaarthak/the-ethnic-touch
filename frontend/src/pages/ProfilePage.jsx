@@ -781,7 +781,34 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                     <CopyButton text={order.id} label="Copy ID" />
                                                 </div>
                                                 <div>
-                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: '#b97a66', fontWeight: '500', textTransform: 'uppercase' }}>{order.status}</span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                        {order.isPreorder && (
+                                                            <span style={{ fontSize: '0.72rem', background: '#7c3aed', color: '#ffffff', padding: '2px 8px', borderRadius: '12px', fontWeight: '700', letterSpacing: '0.5px' }}>
+                                                                PREORDER
+                                                            </span>
+                                                        )}
+                                                        {order.fulfilmentType === 'PREORDER_STORE_PICKUP' && (
+                                                            <span style={{ fontSize: '0.72rem', background: '#f3e8ff', color: '#7e22ce', padding: '2px 8px', borderRadius: '12px', fontWeight: '600' }}>
+                                                                🏪 Store Pickup
+                                                            </span>
+                                                        )}
+                                                        {order.fulfilmentType === 'PREORDER_HOME_DELIVERY' && (
+                                                            <span style={{ fontSize: '0.72rem', background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: '12px', fontWeight: '600' }}>
+                                                                🚚 Preorder Delivery
+                                                            </span>
+                                                        )}
+                                                        <span style={{ 
+                                                            fontSize: 'var(--font-size-sm)', 
+                                                            color: order.status === 'READY_FOR_PICKUP' ? '#15803d' : order.status === 'COLLECTED' ? '#166534' : '#b97a66', 
+                                                            background: order.status === 'READY_FOR_PICKUP' ? '#dcfce7' : order.status === 'COLLECTED' ? '#f0fdf4' : 'transparent',
+                                                            padding: ['READY_FOR_PICKUP', 'COLLECTED'].includes(order.status) ? '2px 8px' : '0',
+                                                            borderRadius: '12px',
+                                                            fontWeight: '600', 
+                                                            textTransform: 'uppercase' 
+                                                        }}>
+                                                            {order.status === 'READY_FOR_PICKUP' ? 'Ready for Pickup 🎉' : order.status === 'COLLECTED' ? 'Collected ✓' : order.status}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -797,6 +824,11 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                                  <li key={it.productId || idx} style={{ fontSize: 'var(--font-size-sm)', color: '#333', padding: '0.4rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                      <div>
                                                                          <span>{it.productName || it.productId}</span>
+                                                                         {(it.isPreorder || order.isPreorder) && (
+                                                                             <span style={{ fontSize: '0.65rem', background: '#f3e8ff', color: '#7e22ce', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '700' }}>
+                                                                                 PREORDER
+                                                                             </span>
+                                                                         )}
                                                                          {it.size && (
                                                                              <span style={{ fontSize: 'var(--font-size-xs)', background: '#fff0e9', color: '#b97a66', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '500' }}>
                                                                                  Size: {it.size}
@@ -846,6 +878,46 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                     <CopyButton text={order.unlockedGift} label="Copy Code" />
                                                 </div>
                                             )}
+
+                                            {(order.fulfilmentType === 'PREORDER_STORE_PICKUP' || order.checkoutType === 'pickup') && (() => {
+                                                let snap = {};
+                                                if (order.pickupLocationSnapshot) {
+                                                    try {
+                                                        snap = JSON.parse(order.pickupLocationSnapshot);
+                                                    } catch (_) {}
+                                                }
+                                                const locName = snap.locationName || 'The Ethnic Touch Store';
+                                                const address = snap.address || 'ESCI road, Kajaguda lake.';
+                                                const city = snap.city || 'Hyderabad';
+                                                const state = snap.state || 'Telangana';
+                                                const zip = snap.zipCode || '500032';
+
+                                                // Format address cleanly without ever producing broken commas or dashes
+                                                const addrParts = [address, city, state].filter(Boolean);
+                                                let formattedAddress = addrParts.join(', ');
+                                                if (zip && formattedAddress) {
+                                                    formattedAddress += ` - ${zip}`;
+                                                }
+
+                                                return (
+                                                    <div style={{ marginTop: '0.8rem', background: '#FAF3ED', border: '1px solid #FFE5D9', borderRadius: '6px', padding: '0.75rem 1rem', fontSize: '0.82rem', color: '#5C5854' }}>
+                                                        <strong style={{ color: '#8F5E36' }}>📍 Pickup Location: {locName}</strong>
+                                                        {formattedAddress && <div style={{ marginTop: '0.2rem' }}>{formattedAddress}</div>}
+                                                        <div style={{ marginTop: '0.25rem', color: '#78716c', fontSize: '0.78rem' }}>
+                                                            {snap.estimatedPickupDate && <span>Ready window: <strong>{snap.estimatedPickupDate}</strong> &bull; </span>}
+                                                            {snap.availability ? <span>Timings: <strong>{snap.availability}</strong></span> : <span>Timings: <strong>Fri - Sun, 7PM - 11PM</strong></span>}
+                                                            {snap.contactInfo && <span> &bull; Desk: <strong>{snap.contactInfo}</strong></span>}
+                                                        </div>
+                                                        {snap.mapsLink && (
+                                                            <div style={{ marginTop: '0.35rem' }}>
+                                                                <a href={snap.mapsLink} target="_blank" rel="noopener noreferrer" style={{ color: '#b97a66', fontWeight: '600', textDecoration: 'underline' }}>
+                                                                    View Store on Google Maps ↗
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     ))}
                                 </div>

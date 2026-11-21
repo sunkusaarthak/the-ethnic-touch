@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"math"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"ethnictouch/internal/models"
@@ -26,22 +29,28 @@ type OrderService interface {
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
 	CancelOrder(orderID string) error
 	CleanupAbandonedOrders(cutoff time.Duration) (int, error)
+	ConfirmPreorderPickup(orderID, adminEmail, notes string) error
+	MarkPreorderPickupReady(orderID string) error
+	MarkAllPreorderPickupReady() (int, error)
+	GetPreorderPickupOrders(filter string) ([]models.Order, error)
+	GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error)
+	SendPickupReadyNotification(order *models.Order, pickupCfg *models.PreorderPickupConfig) error
 }
 
 type orderService struct {
-	orderRepo   repository.OrderRepository
-	couponSvc   CouponService
-	productRepo repository.ProductRepository
-	configSvc   ConfigService
+	orderRepo    repository.OrderRepository
+	couponSvc    CouponService
+	productRepo  repository.ProductRepository
+	configSvc    ConfigService
 	delhiverySvc DelhiveryService
 }
 
 func NewOrderService(orderRepo repository.OrderRepository, couponSvc CouponService, productRepo repository.ProductRepository, configSvc ConfigService, delhiverySvc DelhiveryService) OrderService {
 	return &orderService{
-		orderRepo:   orderRepo,
-		couponSvc:   couponSvc,
-		productRepo: productRepo,
-		configSvc:   configSvc,
+		orderRepo:    orderRepo,
+		couponSvc:    couponSvc,
+		productRepo:  productRepo,
+		configSvc:    configSvc,
 		delhiverySvc: delhiverySvc,
 	}
 }
@@ -73,7 +82,8 @@ func createRazorpayOrder(amount float64, receipt string, keyID string, keySecret
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("razorpay api status %d", resp.StatusCode)
+		respBytes, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("razorpay api status %d: %s", resp.StatusCode, string(respBytes))
 	}
 
 	var rzpResp struct {
@@ -88,6 +98,13 @@ func createRazorpayOrder(amount float64, receipt string, keyID string, keySecret
 func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Order, string, string, error) {
 	if len(req.Items) == 0 {
 		return nil, "", "", errors.New("no items in order")
+	}
+
+	// Validate preorder fulfilment type
+	if req.IsPreorder {
+		if req.FulfilmentType != models.FulfilmentTypePreorderHomeDelivery && req.FulfilmentType != models.FulfilmentTypePreorderStorePickup {
+			return nil, "", "", errors.New("invalid preorder fulfilment type: must be PREORDER_HOME_DELIVERY or PREORDER_STORE_PICKUP")
+		}
 	}
 
 	var subtotal float64
@@ -129,7 +146,7 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 				Quantity:  item.Quantity,
 			}
 		}
-		
+
 		_, amt, err := s.couponSvc.ValidateCoupon(req.CouponCode, subtotal, cartItemsInfo, req.UserID)
 		if err == nil {
 			discountAmt = amt
@@ -147,7 +164,7 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 	}
 
 	var shippingCost float64
-	if req.CheckoutType == "delivery" && finalTotal < threshold && req.ShippingZIPCode != "" {
+	if req.CheckoutType == "delivery" && req.FulfilmentType != models.FulfilmentTypePreorderStorePickup && finalTotal < threshold && req.ShippingZIPCode != "" {
 		totalQuantity := 0
 		for _, item := range req.Items {
 			totalQuantity += item.Quantity
@@ -164,16 +181,70 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 	}
 	finalTotal += shippingCost
 
+	var pickupLocationSnapshot string
+	if req.FulfilmentType == models.FulfilmentTypePreorderStorePickup {
+		shippingCost = 0
+		finalTotal = subtotal - discountAmt
+		snapshotCfg := models.PreorderPickupConfig{
+			LocationName: "The Ethnic Touch Flagship Store",
+			Address:      "ESCI road, Kajaguda lake.",
+			City:         "Hyderabad",
+			State:        "Telangana",
+			ZipCode:      "500032",
+			Availability: "Fri - Sun, 7PM - 11PM",
+		}
+		if pickupCfg, cfgErr := s.configSvc.GetPreorderPickupConfig(); cfgErr == nil && pickupCfg != nil {
+			if pickupCfg.LocationName != "" {
+				snapshotCfg.LocationName = pickupCfg.LocationName
+			}
+			if pickupCfg.Address != "" {
+				snapshotCfg.Address = pickupCfg.Address
+			}
+			if pickupCfg.City != "" {
+				snapshotCfg.City = pickupCfg.City
+			}
+			if pickupCfg.State != "" {
+				snapshotCfg.State = pickupCfg.State
+			}
+			if pickupCfg.ZipCode != "" {
+				snapshotCfg.ZipCode = pickupCfg.ZipCode
+			}
+			if pickupCfg.Availability != "" {
+				snapshotCfg.Availability = pickupCfg.Availability
+			}
+			if pickupCfg.EstimatedPickupDate != "" {
+				snapshotCfg.EstimatedPickupDate = pickupCfg.EstimatedPickupDate
+			}
+			if pickupCfg.ContactInfo != "" {
+				snapshotCfg.ContactInfo = pickupCfg.ContactInfo
+			}
+			if pickupCfg.MapsLink != "" {
+				snapshotCfg.MapsLink = pickupCfg.MapsLink
+			}
+			if pickupCfg.Instructions != "" {
+				snapshotCfg.Instructions = pickupCfg.Instructions
+			}
+		}
+		if snapshotBytes, marshalErr := json.Marshal(snapshotCfg); marshalErr == nil {
+			pickupLocationSnapshot = string(snapshotBytes)
+		}
+	}
+
 	orderID := "ORD_" + fmt.Sprint(time.Now().UnixNano()/1000000)
 
 	var providerOrderID string
 	var checkoutURL string
 	orderStatus := "pending"
 
+	paymentProv := strings.ToLower(os.Getenv("PAYMENT_PROVIDER"))
+
 	if req.PaymentMethod == "offline_qr" {
 		providerOrderID = "OFFLINE_QR"
 		checkoutURL = "/checkout-success"
 		orderStatus = "pending_payment"
+	} else if paymentProv == "mock" {
+		providerOrderID = "MOCK_" + orderID[4:]
+		checkoutURL = "/mock-payment?orderId=" + orderID
 	} else {
 		keyID := os.Getenv("RAZORPAY_KEY_ID")
 		keySecret := os.Getenv("RAZORPAY_KEY_SECRET")
@@ -182,33 +253,37 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 			rzpOrderID, err := createRazorpayOrder(finalTotal, orderID, keyID, keySecret)
 			if err == nil && rzpOrderID != "" {
 				providerOrderID = rzpOrderID
+				checkoutURL = "razorpay"
 			} else {
-				providerOrderID = "RZP_" + orderID[4:]
+				slog.Error("Razorpay API order creation failed", "error", err)
+				return nil, "", "", fmt.Errorf("failed to initiate payment gateway: %w", err)
 			}
 		} else {
-			providerOrderID = "RZP_" + orderID[4:]
+			providerOrderID = "MOCK_" + orderID[4:]
+			checkoutURL = "/mock-payment?orderId=" + orderID
 		}
-		checkoutURL = "razorpay"
 	}
 
 	order := &models.Order{
-		ID:              orderID,
-		CustomerEmail:   req.CustomerEmail,
-		TotalAmount:     finalTotal,
-		DiscountAmt:     discountAmt,
-		CouponCode:      req.CouponCode,
-		Status:          orderStatus,
-		CreatedAt:       time.Now().Format(time.RFC3339),
-		RazorpayOrderID: providerOrderID,
-		ShippingName:    req.ShippingName,
-		ShippingPhone:   req.ShippingPhone,
-		ShippingAddress: req.ShippingAddress,
-		ShippingCity:    req.ShippingCity,
-		ShippingState:   req.ShippingState,
-		ShippingZIPCode: req.ShippingZIPCode,
-		CheckoutType:    req.CheckoutType,
-		PaymentMethod:   req.PaymentMethod,
-		Items:           orderItems,
+		ID:                     orderID,
+		CustomerEmail:          req.CustomerEmail,
+		TotalAmount:            finalTotal,
+		DiscountAmt:            discountAmt,
+		CouponCode:             req.CouponCode,
+		Status:                 orderStatus,
+		CreatedAt:              time.Now().Format(time.RFC3339),
+		RazorpayOrderID:        providerOrderID,
+		ShippingName:           req.ShippingName,
+		ShippingPhone:          req.ShippingPhone,
+		ShippingAddress:        req.ShippingAddress,
+		ShippingCity:           req.ShippingCity,
+		ShippingState:          req.ShippingState,
+		ShippingZIPCode:        req.ShippingZIPCode,
+		CheckoutType:           req.CheckoutType,
+		PaymentMethod:          req.PaymentMethod,
+		Items:                  orderItems,
+		FulfilmentType:         req.FulfilmentType,
+		PickupLocationSnapshot: pickupLocationSnapshot,
 	}
 
 	appliedCouponCode := ""
@@ -261,7 +336,7 @@ func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) (*models.Or
 	// 1. Calculate Gift based on TotalAmount
 	var unlockedGift, giftType, giftCode, giftExpiryDate string
 	tiers, _ := s.couponSvc.GetGiftTiers()
-	
+
 	// Tiers should be checked to find the highest threshold met
 	var highestTier *models.GiftTier
 	for i := range tiers {
@@ -283,7 +358,7 @@ func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) (*models.Or
 			if format == "" {
 				format = "GFT-[RAND]"
 			}
-			giftCode = "" 
+			giftCode = ""
 			for i := 0; i < len(format); i++ {
 				if i+6 <= len(format) && format[i:i+6] == "[RAND]" {
 					giftCode += randSuffix
@@ -315,11 +390,17 @@ func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) (*models.Or
 	}
 
 	resp := &models.OrderVerifyResponse{
-		Message:        "Payment verified and order finalized successfully",
-		UnlockedGift:   unlockedGift,
-		GiftType:       giftType,
-		GiftCode:       giftCode,
-		GiftExpiryDate: giftExpiryDate,
+		Message:                "Payment verified and order finalized successfully",
+		UnlockedGift:           unlockedGift,
+		GiftType:               giftType,
+		GiftCode:               giftCode,
+		GiftExpiryDate:         giftExpiryDate,
+		TrackingNumber:         o.TrackingNumber,
+		CheckoutType:           o.CheckoutType,
+		FulfilmentType:         o.FulfilmentType,
+		IsPreorder:             o.FulfilmentType != "" || o.IsPreorder,
+		PickupLocationSnapshot: o.PickupLocationSnapshot,
+		Amount:                 o.TotalAmount,
 	}
 	return resp, nil
 }
@@ -351,7 +432,7 @@ func (s *orderService) CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 			createdAt, parseErr := time.Parse(time.RFC3339, o.CreatedAt)
 			if parseErr == nil {
 				isPickup := o.CheckoutType == "pickup" || o.PaymentMethod == "offline_qr"
-				
+
 				shouldCancel := false
 				if isPickup {
 					shouldCancel = createdAt.Before(thresholdTimePickup)
@@ -376,4 +457,68 @@ func (s *orderService) CancelOrder(orderID string) error {
 
 func (s *orderService) UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error {
 	return s.orderRepo.UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift)
+}
+
+func (s *orderService) ConfirmPreorderPickup(orderID, adminEmail, notes string) error {
+	err := s.orderRepo.ConfirmPreorderPickup(orderID, adminEmail, notes)
+	if err != nil && err.Error() == "order already collected" {
+		return nil
+	}
+	return err
+}
+
+func (s *orderService) MarkPreorderPickupReady(orderID string) error {
+	return s.orderRepo.MarkPreorderPickupReady(orderID)
+}
+
+func (s *orderService) MarkAllPreorderPickupReady() (int, error) {
+	count, err := s.orderRepo.MarkAllPreorderPickupReady()
+	if err != nil {
+		return 0, err
+	}
+
+	go func() {
+		orders, err := s.orderRepo.GetPreorderPickupOrders("ready_for_pickup")
+		if err == nil {
+			pickupCfg, _ := s.configSvc.GetPreorderPickupConfig()
+			if pickupCfg == nil {
+				pickupCfg = &models.PreorderPickupConfig{}
+			}
+			for i := range orders {
+				_ = s.SendPickupReadyNotification(&orders[i], pickupCfg)
+			}
+		}
+	}()
+
+	return count, nil
+}
+
+func (s *orderService) GetPreorderPickupOrders(filter string) ([]models.Order, error) {
+	return s.orderRepo.GetPreorderPickupOrders(filter)
+}
+
+func (s *orderService) GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error) {
+	return s.orderRepo.GetPreorderPickupAudit(orderID)
+}
+
+func (s *orderService) SendPickupReadyNotification(order *models.Order, pickupCfg *models.PreorderPickupConfig) error {
+	if order.PickupNotificationSent {
+		return nil
+	}
+	snapshotCfg := pickupCfg
+	if order.PickupLocationSnapshot != "" {
+		var snapshot models.PreorderPickupConfig
+		if err := json.Unmarshal([]byte(order.PickupLocationSnapshot), &snapshot); err == nil {
+			snapshotCfg = &snapshot
+		}
+	}
+	mapsInfo := ""
+	if snapshotCfg.MapsLink != "" {
+		mapsInfo = " | Maps: " + snapshotCfg.MapsLink
+	}
+	fmt.Printf("[PICKUP NOTIFICATION] Order: %s | Customer: %s | Location: %s | Address: %s%s | Instructions: %s | Availability: %s | Contact: %s | Pickup Date: %s\n",
+		order.ID, order.CustomerEmail, snapshotCfg.LocationName, snapshotCfg.Address,
+		mapsInfo, snapshotCfg.Instructions, snapshotCfg.Availability,
+		snapshotCfg.ContactInfo, snapshotCfg.EstimatedPickupDate)
+	return s.orderRepo.MarkPickupNotificationSent(order.ID)
 }

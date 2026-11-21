@@ -14,6 +14,7 @@ type CartItemResponse struct {
 	ImageURL    string  `json:"imageUrl"`
 	Quantity    int     `json:"quantity"`
 	Size        string  `json:"size"`
+	IsPreorder  bool    `json:"isPreorder"`
 }
 
 type CartRepository interface {
@@ -37,7 +38,7 @@ func NewCartRepository(db *sql.DB) CartRepository {
 
 func (r *postgresCartRepo) GetCart(userID string) ([]CartItemResponse, error) {
 	rows, err := r.db.Query(`
-		SELECT p.id, c.id, p.name, p.description, p.price, COALESCE(p.image_url, ''), c.quantity, COALESCE(c.size, '')
+		SELECT p.id, c.id, p.name, p.description, p.price, COALESCE(p.image_url, ''), c.quantity, COALESCE(c.size, ''), COALESCE(p.is_preorder, FALSE)
 		FROM cart_items c 
 		JOIN products p ON c.product_id = p.id 
 		WHERE c.user_id = $1 
@@ -50,7 +51,7 @@ func (r *postgresCartRepo) GetCart(userID string) ([]CartItemResponse, error) {
 	var items []CartItemResponse
 	for rows.Next() {
 		var it CartItemResponse
-		if err := rows.Scan(&it.ID, &it.CartID, &it.Name, &it.Description, &it.Price, &it.ImageURL, &it.Quantity, &it.Size); err == nil {
+		if err := rows.Scan(&it.ID, &it.CartID, &it.Name, &it.Description, &it.Price, &it.ImageURL, &it.Quantity, &it.Size, &it.IsPreorder); err == nil {
 			items = append(items, it)
 		}
 	}

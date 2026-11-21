@@ -19,14 +19,14 @@ const getApiBaseUrl = () => {
             localStorage.setItem('ADMIN_API_BASE_URL', backendParam);
             return backendParam.replace(/\/+$/, '');
         }
-    } catch (_) {}
+    } catch (_) { }
 
     try {
         const stored = localStorage.getItem('ADMIN_API_BASE_URL');
         if (stored) {
             return stored.replace(/\/+$/, '');
         }
-    } catch (_) {}
+    } catch (_) { }
 
     // 3. Render environment variable (injected at build time into window.__ENV__)
     if (window.__ENV__ && window.__ENV__.VITE_API_BASE_URL) {
@@ -44,7 +44,7 @@ const API_BASE_URL = getApiBaseUrl();
 
 let auth;
 
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminApp() {
 
     // Initialize Firebase
     if (typeof firebase !== 'undefined') {
@@ -107,7 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Monitor url hashes for scanner scanning trigger
     handleUrlHashChange();
     window.addEventListener('hashchange', handleUrlHashChange);
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminApp);
+} else {
+    initAdminApp();
+}
 
 // ==========================================
 // STAFF MANAGEMENT (RBAC)
@@ -466,8 +472,23 @@ function initAuthFlow() {
     const overlay = document.getElementById('adminLoginOverlay');
     const errorMsg = document.getElementById('loginErrorMsg');
 
+    console.log("[Admin Auth] Initializing auth flow. Button found:", !!loginBtn);
+
+    if (auth.getRedirectResult) {
+        auth.getRedirectResult().catch(err => {
+            if (err && err.code) {
+                console.error("[Admin Auth] Redirect login error:", err);
+                if (errorMsg) {
+                    errorMsg.innerText = err.message || "Authentication failed.";
+                    errorMsg.style.display = 'block';
+                }
+            }
+        });
+    }
+
     auth.onAuthStateChanged(async (user) => {
         if (user) {
+            console.log("[Admin Auth] User detected:", user.email);
             try {
                 const token = await user.getIdToken();
                 localStorage.setItem('adminToken', token);
@@ -479,9 +500,10 @@ function initAuthFlow() {
                     const data = await res.json();
                     currentUserRole = data.role;
                     currentUserEmail = data.email;
+                    console.log("[Admin Auth] Verified with backend, role:", currentUserRole);
 
                     // Hide overlay
-                    overlay.style.display = 'none';
+                    if (overlay) overlay.style.display = 'none';
 
                     // Apply RBAC UI
                     applyRoleBasedUI();
@@ -489,35 +511,80 @@ function initAuthFlow() {
                     // Load default tab
                     loadDashboard();
                 } else {
-                    // Unauthorized
-                    auth.signOut();
-                    localStorage.removeItem('adminToken');
-                    errorMsg.innerText = "Access Denied. You do not have permission to view the Admin Portal.";
-                    errorMsg.style.display = 'block';
-                    overlay.style.display = 'flex';
+                    const errText = await res.text();
+                    console.warn("[Admin Auth] Backend rejected user:", user.email, errText);
+                    if (res.status === 403) {
+                        auth.signOut();
+                        localStorage.removeItem('adminToken');
+                    }
+                    if (errorMsg) {
+                        if (res.status === 403) {
+                            errorMsg.innerText = `Access Denied for ${user.email}. You do not have admin permissions in the database.`;
+                        } else {
+                            errorMsg.innerText = `Backend communication error (${res.status}). The Go backend server may be restarting or unreachable. Please try refreshing.`;
+                        }
+                        errorMsg.style.display = 'block';
+                    }
+                    if (overlay) overlay.style.display = 'flex';
                 }
             } catch (err) {
-                console.error("Auth error", err);
-                errorMsg.innerText = "An error occurred during authentication.";
-                errorMsg.style.display = 'block';
-                overlay.style.display = 'flex';
+                console.error("[Admin Auth] Auth verification error", err);
+                if (errorMsg) {
+                    errorMsg.innerText = "An error occurred during authentication: " + err.message;
+                    errorMsg.style.display = 'block';
+                }
+                if (overlay) overlay.style.display = 'flex';
             }
         } else {
-            // Not logged in
             localStorage.removeItem('adminToken');
-            overlay.style.display = 'flex';
+            if (overlay) overlay.style.display = 'flex';
         }
     });
 
     if (loginBtn) {
-        loginBtn.addEventListener('click', async () => {
+        loginBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            console.log("[Admin Auth] Sign in button clicked!");
+            if (errorMsg) errorMsg.style.display = 'none';
+
+            if (!auth) {
+                if (errorMsg) {
+                    errorMsg.innerText = "Firebase Auth is not ready. Please refresh the page.";
+                    errorMsg.style.display = 'block';
+                }
+                return;
+            }
+
             const provider = new firebase.auth.GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+
             try {
+                loginBtn.disabled = true;
+                const oldContent = loginBtn.innerHTML;
+                loginBtn.innerText = "Opening Google Sign-In...";
                 await auth.signInWithPopup(provider);
+                loginBtn.innerHTML = oldContent;
             } catch (err) {
-                console.error("Google Login Failed", err);
-                errorMsg.innerText = err.message;
-                errorMsg.style.display = 'block';
+                console.error("[Admin Auth] Google Login Failed", err);
+                if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+                    try {
+                        await auth.signInWithRedirect(provider);
+                        return;
+                    } catch (redirectErr) { }
+                }
+                if (errorMsg) {
+                    let userFriendlyMsg = err.message;
+                    if (err.code === 'auth/popup-blocked') {
+                        userFriendlyMsg = "Popup was blocked by your browser. Please allow popups for this site.";
+                    } else if (err.code === 'auth/unauthorized-domain') {
+                        userFriendlyMsg = `Domain (${window.location.hostname}) is not authorized in Firebase Console -> Authentication -> Settings -> Authorized domains.`;
+                    }
+                    errorMsg.innerText = userFriendlyMsg;
+                    errorMsg.style.display = 'block';
+                }
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg><span>Sign in with Google</span>`;
             }
         });
     }
@@ -652,6 +719,10 @@ async function loadTabData(target) {
     if (target === 'spinwin') loadSpinWin();
     if (target === 'profiles') loadProfiles();
     if (target === 'staff') loadStaff();
+    if (target === 'preorder') {
+        loadPreorderPickupConfig();
+        loadPreorderOrders('');
+    }
     if (target === 'pickup-scanner') {
         const card = document.getElementById('pickupOrderCard');
         const msg = document.getElementById('scannerMessage');
@@ -713,7 +784,7 @@ async function loadProducts() {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><img src="${p.imageUrl}" style="width:44px; height:52px; border-radius:4px; object-fit:cover;"></td>
-                <td style="font-weight:500">${p.name}</td>
+                <td style="font-weight:500">${p.name}${p.isPreorder ? ' <span style="display:inline-block; margin-left:6px; background:#f3e8ff; color:#7e22ce; padding:2px 7px; border-radius:12px; font-size:0.7rem; font-weight:700; border:1px solid #d8b4fe;">PREORDER</span>' : ''}</td>
                 <td><span style="background:#f5f5f5; padding:2px 8px; border-radius:4px; font-size:0.8rem;">${p.category}</span></td>
                 <td>₹${p.price.toLocaleString('en-IN')}</td>
                 <td>${p.stock}</td>
@@ -767,7 +838,7 @@ function renderOrders() {
                 return false;
             }
         }
-        
+
         // 2. Type Filter
         if (typeFilterValue === 'pickup') {
             if (o.checkoutType !== 'pickup') return false;
@@ -841,7 +912,7 @@ function renderOrders() {
 
 window.renderOrders = renderOrders;
 
-window.triggerDelhiveryBatchPickup = async function() {
+window.triggerDelhiveryBatchPickup = async function () {
     const btn = document.getElementById('btnDelhiveryBatch');
     const originalText = btn ? btn.innerHTML : '🚚 Dispatch Delhivery Batch';
     if (!confirm("Are you sure you want to trigger Delhivery batch pickup for all pending paid delivery orders?")) {
@@ -870,6 +941,7 @@ window.triggerDelhiveryBatchPickup = async function() {
 
 
 function resetProductFormState() {
+    if (document.getElementById('p_is_preorder')) document.getElementById('p_is_preorder').checked = false;
     const form = document.getElementById('productForm');
     if (form) form.reset();
 
@@ -935,6 +1007,7 @@ function openEditProductModal(productId) {
     document.getElementById('p_new_arrival').checked = !!p.isNewArrival;
     document.getElementById('p_best_seller').checked = !!p.isBestSeller;
     document.getElementById('p_featured').checked = !!p.isFeatured;
+    if (document.getElementById('p_is_preorder')) document.getElementById('p_is_preorder').checked = !!p.isPreorder;
 
     // Populate sizes & stock values
     const sizeChecks = document.querySelectorAll('.size-check');
@@ -1041,7 +1114,8 @@ async function handleAddProduct(e) {
         tags: document.getElementById('p_tags').value.trim(),
         isNewArrival: document.getElementById('p_new_arrival').checked,
         isBestSeller: document.getElementById('p_best_seller').checked,
-        isFeatured: document.getElementById('p_featured').checked
+        isFeatured: document.getElementById('p_featured').checked,
+        isPreorder: document.getElementById('p_is_preorder') ? document.getElementById('p_is_preorder').checked : false
     };
 
     const method = isEdit ? 'PUT' : 'POST';
@@ -1973,6 +2047,15 @@ function displayPickupOrderDetails(order) {
     document.getElementById('poCardOrderId').innerHTML = `Order #${order.id} <button type="button" onclick="copyTextToClipboard('${order.id}', this)" style="margin-left:8px; padding:2px 8px; font-size:0.75rem; border-radius:4px; border:1px solid #ddd; background:#fff; cursor:pointer">Copy ID</button>`;
     document.getElementById('poCardCustomer').innerText = order.customerEmail;
     document.getElementById('poCardCheckoutType').innerText = order.checkoutType === 'pickup' ? '🏪 Boutique Pickup' : order.checkoutType;
+    let coTypeLabel = order.checkoutType;
+    if (order.fulfilmentType === 'PREORDER_STORE_PICKUP') {
+        coTypeLabel = '🏪 Preorder Store Pickup';
+    } else if (order.checkoutType === 'pickup') {
+        coTypeLabel = '🏪 Boutique Store Pickup';
+    } else if (order.fulfilmentType === 'PREORDER_HOME_DELIVERY') {
+        coTypeLabel = '🚚 Preorder Home Delivery';
+    }
+    document.getElementById('poCardCheckoutType').innerText = coTypeLabel;
     document.getElementById('poCardPaymentMethod').innerText = order.paymentMethod === 'offline_qr' ? '💳 Offline UPI QR Pass' : '🌐 Paid Online (RazorPay)';
     document.getElementById('poCardDate').innerText = new Date(order.createdAt).toLocaleString();
     document.getElementById('poCardAmount').innerText = `₹${order.totalAmount.toLocaleString('en-IN')}`;
@@ -1984,247 +2067,260 @@ function displayPickupOrderDetails(order) {
     let badgeBg = '#ffe0b2';
     let badgeColor = '#e65100';
     if (order.status === 'picked_up') {
-        badgeBg = '#e8f5e9';
-        badgeColor = '#2e7d32';
-    } else if (order.status === 'ready_for_pickup') {
-        badgeBg = '#fff8e1';
-        badgeColor = '#f57f17';
-    } else if (order.status === 'pending_payment') {
-        badgeBg = '#ffebee';
-        badgeColor = '#c62828';
-    } else if (order.status === 'paid') {
-        badgeBg = '#e3f2fd';
-        badgeColor = '#0d47a1';
-    }
-    badge.style.backgroundColor = badgeBg;
-    badge.style.color = badgeColor;
+        if (order.status === 'picked_up' || order.status === 'COLLECTED') {
+            badgeBg = '#e8f5e9';
+            badgeColor = '#2e7d32';
+        } else if (order.status === 'ready_for_pickup') {
+            badgeBg = '#fff8e1';
+            badgeColor = '#f57f17';
+        } else if (order.status === 'ready_for_pickup' || order.status === 'READY_FOR_PICKUP') {
+            badgeBg = '#dcfce7';
+            badgeColor = '#15803d';
+        } else if (order.status === 'pending_payment') {
+            badgeBg = '#ffebee';
+            badgeColor = '#c62828';
+        } else if (order.status === 'paid') {
+            badgeBg = '#e3f2fd';
+            badgeColor = '#0d47a1';
+        }
+        badge.style.backgroundColor = badgeBg;
+        badge.style.color = badgeColor;
 
-    // Items list
-    const itemsList = document.getElementById('poCardItemsList');
-    itemsList.innerHTML = '';
-    if (order.items && order.items.length > 0) {
-        order.items.forEach(it => {
-            const qty = it.quantity || 1;
-            const unitPrice = it.priceAtQty || 0;
-            const lineTotal = unitPrice * qty;
-            const li = document.createElement('li');
-            li.innerHTML = `<strong>${it.productName || it.productId}</strong> ${it.size ? `<span style="font-size:0.8rem; background:#fff0e9; color:#b97a66; padding:1px 5px; border-radius:3px; margin-left:4px">Size: ${it.size}</span>` : ''} &times; <strong>${qty}</strong> — <strong>₹${lineTotal.toLocaleString('en-IN')}</strong> ${qty > 1 ? `<small style="color:#888">(₹${unitPrice.toLocaleString('en-IN')} each)</small>` : ''}`;
-            itemsList.appendChild(li);
-        });
-    } else {
-        itemsList.innerHTML = '<li style="color:#999; font-style:italic">No items logged for this order.</li>';
-    }
-
-    // Actions Container
-    const actions = document.getElementById('poCardActionsContainer');
-    actions.innerHTML = '';
-
-    if (order.status === 'picked_up') {
-        const infoMsg = document.createElement('div');
-        infoMsg.style.cssText = 'padding: 0.8rem; background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; border-radius: 8px; font-weight: 500; font-size: 0.9rem; flex: 1; text-align: center;';
-        infoMsg.innerText = '✓ Order is already Picked Up & Fulfilled.';
-        actions.appendChild(infoMsg);
-    } else if (order.checkoutType !== 'pickup') {
-        const warnMsg = document.createElement('div');
-        warnMsg.style.cssText = 'padding: 0.8rem; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 8px; font-size: 0.9rem; flex: 1;';
-        warnMsg.innerHTML = `⚠️ <strong>Warning:</strong> This order fulfillment method is <strong>${order.checkoutType}</strong>. Verify dispatch details instead.`;
-        actions.appendChild(warnMsg);
-    } else {
-        // Render verification details & Action button!
-        const btn = document.createElement('button');
-        btn.className = 'btn-primary';
-        btn.style.cssText = 'padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600; flex: 1;';
-
-        if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
-            btn.innerText = 'Verify Offline UPI Payment & Complete Pickup';
-            btn.style.backgroundColor = '#d0883b';
+        // Items list
+        const itemsList = document.getElementById('poCardItemsList');
+        itemsList.innerHTML = '';
+        if (order.items && order.items.length > 0) {
+            order.items.forEach(it => {
+                const qty = it.quantity || 1;
+                const unitPrice = it.priceAtQty || 0;
+                const lineTotal = unitPrice * qty;
+                const li = document.createElement('li');
+                li.innerHTML = `<strong>${it.productName || it.productId}</strong> ${it.size ? `<span style="font-size:0.8rem; background:#fff0e9; color:#b97a66; padding:1px 5px; border-radius:3px; margin-left:4px">Size: ${it.size}</span>` : ''} &times; <strong>${qty}</strong> — <strong>₹${lineTotal.toLocaleString('en-IN')}</strong> ${qty > 1 ? `<small style="color:#888">(₹${unitPrice.toLocaleString('en-IN')} each)</small>` : ''}`;
+                itemsList.appendChild(li);
+            });
         } else {
-            btn.innerText = 'Confirm Store Pickup & Release Items';
+            itemsList.innerHTML = '<li style="color:#999; font-style:italic">No items logged for this order.</li>';
         }
 
-        btn.onclick = () => confirmStorePickup(order.id);
-        actions.appendChild(btn);
-    }
+        // Actions Container
+        const actions = document.getElementById('poCardActionsContainer');
+        actions.innerHTML = '';
 
-    cardEl.style.display = 'block';
-}
+        if (order.status === 'picked_up') {
+            if (order.status === 'picked_up' || order.status === 'COLLECTED') {
+                const infoMsg = document.createElement('div');
+                infoMsg.style.cssText = 'padding: 0.8rem; background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; border-radius: 8px; font-weight: 500; font-size: 0.9rem; flex: 1; text-align: center;';
+                infoMsg.innerText = '✓ Order is already Picked Up & Fulfilled.';
+                actions.appendChild(infoMsg);
+            } else if (order.checkoutType !== 'pickup') {
+            } else if (order.checkoutType !== 'pickup' && order.fulfilmentType !== 'PREORDER_STORE_PICKUP') {
+                const warnMsg = document.createElement('div');
+                warnMsg.style.cssText = 'padding: 0.8rem; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 8px; font-size: 0.9rem; flex: 1;';
+                warnMsg.innerHTML = `⚠️ <strong>Warning:</strong> This order fulfillment method is <strong>${order.checkoutType}</strong>. Verify dispatch details instead.`;
+                actions.appendChild(warnMsg);
+            } else {
+                // Render verification details & Action button!
+                const btn = document.createElement('button');
+                btn.className = 'btn-primary';
+                btn.style.cssText = 'padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600; flex: 1;';
 
-async function confirmStorePickup(orderId) {
-    if (!confirm(`Are you sure you want to confirm pickup for Order #${orderId}?`)) return;
+                if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
+                    if (order.fulfilmentType === 'PREORDER_STORE_PICKUP') {
+                        btn.innerText = 'Confirm Preorder Collection & Release Items';
+                        btn.style.backgroundColor = '#7c3aed';
+                        btn.onclick = () => confirmPreorderPickup(order.id);
+                    } else if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
+                        btn.innerText = 'Verify Offline UPI Payment & Complete Pickup';
+                        btn.style.backgroundColor = '#d0883b';
+                        btn.onclick = () => confirmStorePickup(order.id);
+                    } else {
+                        btn.innerText = 'Confirm Store Pickup & Release Items';
+                        btn.onclick = () => confirmStorePickup(order.id);
+                    }
 
-    try {
-        const res = await fetch(API_BASE_URL + '/api/admin/orders/confirm-pickup', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeader()
-            },
-            body: JSON.stringify({ orderId: orderId })
-        });
+                    btn.onclick = () => confirmStorePickup(order.id);
+                    actions.appendChild(btn);
+                }
 
-        if (res.ok) {
-            showScannerMessage(`Order #${orderId} has been successfully verified, payment confirmed/checked, and marked as picked_up!`, "green", "#f4fbf7");
-            // Reload order details
-            searchPickupOrder(orderId);
-            // Refresh order list if general table is open
-            loadOrders();
-        } else {
-            const errData = await res.json().catch(() => ({}));
-            showScannerMessage(`Failed to confirm pickup: ${errData.error || 'Server error'}`, "red", "#fff5f5");
-        }
-    } catch (err) {
-        showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
-    }
-}
+                cardEl.style.display = 'block';
+            }
 
-function handleUrlHashChange() {
-    const hash = window.location.hash || '';
-    if (hash.startsWith('#pickup-scanner') || hash.startsWith('#confirm-pickup')) {
-        const qIdx = hash.indexOf('?');
-        let orderId = '';
-        if (qIdx !== -1) {
-            const params = new URLSearchParams(hash.slice(qIdx));
-            orderId = params.get('orderId') || '';
-        }
+            async function confirmStorePickup(orderId) {
+                if (!confirm(`Are you sure you want to confirm pickup for Order #${orderId}?`)) return;
 
-        // Find matching li in navigation
-        const pickupTab = document.querySelector('nav li[data-tab="pickup-scanner"]');
-        if (pickupTab) {
-            const tabs = document.querySelectorAll('nav li');
-            const contents = document.querySelectorAll('.tab-content');
+                try {
+                    const res = await fetch(API_BASE_URL + '/api/admin/orders/confirm-pickup', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify({ orderId: orderId })
+                    });
 
-            tabs.forEach(t => t.classList.remove('active'));
-            pickupTab.classList.add('active');
-
-            contents.forEach(c => c.classList.remove('active'));
-            const targetEl = document.getElementById('tab-pickup-scanner');
-            if (targetEl) targetEl.classList.add('active');
-
-            const pickupTitle = pickupTab.getAttribute('data-title') || pickupTab.querySelector('.nav-label')?.innerText || pickupTab.innerText;
-            document.getElementById('pageTitle').innerText = (pickupTitle || '').trim();
-            updateHeaderActions('pickup-scanner');
-
-            if (orderId) {
-                const inputEl = document.getElementById('scannerOrderIdInput');
-                if (inputEl) {
-                    inputEl.value = orderId;
-                    searchPickupOrder(orderId);
+                    if (res.ok) {
+                        showScannerMessage(`Order #${orderId} has been successfully verified, payment confirmed/checked, and marked as picked_up!`, "green", "#f4fbf7");
+                        // Reload order details
+                        searchPickupOrder(orderId);
+                        // Refresh order list if general table is open
+                        loadOrders();
+                    } else {
+                        const errData = await res.json().catch(() => ({}));
+                        showScannerMessage(`Failed to confirm pickup: ${errData.error || 'Server error'}`, "red", "#fff5f5");
+                    }
+                } catch (err) {
+                    showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
                 }
             }
-        }
-    }
-}
 
-window.triggerSearchPickupOrder = triggerSearchPickupOrder;
-window.searchPickupOrder = searchPickupOrder;
-window.confirmStorePickup = confirmStorePickup;
-window.handleUrlHashChange = handleUrlHashChange;
+            function handleUrlHashChange() {
+                const hash = window.location.hash || '';
+                if (hash.startsWith('#pickup-scanner') || hash.startsWith('#confirm-pickup')) {
+                    const qIdx = hash.indexOf('?');
+                    let orderId = '';
+                    if (qIdx !== -1) {
+                        const params = new URLSearchParams(hash.slice(qIdx));
+                        orderId = params.get('orderId') || '';
+                    }
 
-async function loadAuthConfig() {
-    try {
-        const res = await fetch(API_BASE_URL + '/api/config/auth');
-        if (res.ok) {
-            const data = await res.json();
-            document.getElementById('auth_phone_enabled').checked = data.phone_auth_enabled;
-        }
+                    // Find matching li in navigation
+                    const pickupTab = document.querySelector('nav li[data-tab="pickup-scanner"]');
+                    if (pickupTab) {
+                        const tabs = document.querySelectorAll('nav li');
+                        const contents = document.querySelectorAll('.tab-content');
 
-        loadCheckoutConfig();
-    } catch (err) {
-        console.error("Failed to load auth config:", err);
-    }
-}
+                        tabs.forEach(t => t.classList.remove('active'));
+                        pickupTab.classList.add('active');
 
-async function saveAuthConfig() {
-    try {
-        const payload = {
-            phone_auth_enabled: document.getElementById('auth_phone_enabled').checked
-        };
-        const res = await fetch(API_BASE_URL + '/api/admin/config/auth', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeader()
-            },
-            body: JSON.stringify(payload)
-        });
+                        contents.forEach(c => c.classList.remove('active'));
+                        const targetEl = document.getElementById('tab-pickup-scanner');
+                        if (targetEl) targetEl.classList.add('active');
 
-        if (!res.ok) throw new Error("Failed to update auth config");
-        showAdminAlert('Authentication settings updated!', 'Success', 'success');
-    } catch (err) {
-        console.error("Failed to save auth config:", err);
-        showAdminAlert(err.message, 'Error', 'error');
-    }
-}
+                        const pickupTitle = pickupTab.getAttribute('data-title') || pickupTab.querySelector('.nav-label')?.innerText || pickupTab.innerText;
+                        document.getElementById('pageTitle').innerText = (pickupTitle || '').trim();
+                        updateHeaderActions('pickup-scanner');
 
-window.loadAuthConfig = loadAuthConfig;
-window.saveAuthConfig = saveAuthConfig;
+                        if (orderId) {
+                            const inputEl = document.getElementById('scannerOrderIdInput');
+                            if (inputEl) {
+                                inputEl.value = orderId;
+                                searchPickupOrder(orderId);
+                            }
+                        }
+                    }
+                }
+            }
 
-async function loadCheckoutConfig() {
-    try {
-        const res = await fetch(API_BASE_URL + '/api/config/checkout');
-        if (res.ok) {
-            const data = await res.json();
-            document.getElementById('chk_standard_delivery').checked = data.standard_delivery_enabled;
-            document.getElementById('chk_hyderabad_instant').checked = data.hyderabad_instant_enabled;
-            document.getElementById('chk_store_pickup_prepay').checked = data.store_pickup_prepay_enabled;
-            document.getElementById('chk_store_pickup_instore').checked = data.store_pickup_pay_in_store_enabled;
-        }
-    } catch (err) {
-        console.error("Failed to load checkout config:", err);
-    }
-}
+            window.triggerSearchPickupOrder = triggerSearchPickupOrder;
+            window.searchPickupOrder = searchPickupOrder;
+            window.confirmStorePickup = confirmStorePickup;
+            window.handleUrlHashChange = handleUrlHashChange;
 
-async function saveCheckoutConfig() {
-    try {
-        const payload = {
-            standard_delivery_enabled: document.getElementById('chk_standard_delivery').checked,
-            hyderabad_instant_enabled: document.getElementById('chk_hyderabad_instant').checked,
-            store_pickup_prepay_enabled: document.getElementById('chk_store_pickup_prepay').checked,
-            store_pickup_pay_in_store_enabled: document.getElementById('chk_store_pickup_instore').checked
-        };
-        const res = await fetch(API_BASE_URL + '/api/admin/config/checkout', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeader()
-            },
-            body: JSON.stringify(payload)
-        });
+            async function loadAuthConfig() {
+                try {
+                    const res = await fetch(API_BASE_URL + '/api/config/auth');
+                    if (res.ok) {
+                        const data = await res.json();
+                        document.getElementById('auth_phone_enabled').checked = data.phone_auth_enabled;
+                    }
 
-        if (!res.ok) throw new Error("Failed to update checkout config");
-        showAdminAlert('Checkout settings updated!', 'Success', 'success');
-    } catch (err) {
-        console.error("Failed to save checkout config:", err);
-        showAdminAlert(err.message, 'Error', 'error');
-    }
-}
+                    loadCheckoutConfig();
+                } catch (err) {
+                    console.error("Failed to load auth config:", err);
+                }
+            }
 
-window.loadCheckoutConfig = loadCheckoutConfig;
-window.saveCheckoutConfig = saveCheckoutConfig;
+            async function saveAuthConfig() {
+                try {
+                    const payload = {
+                        phone_auth_enabled: document.getElementById('auth_phone_enabled').checked
+                    };
+                    const res = await fetch(API_BASE_URL + '/api/admin/config/auth', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify(payload)
+                    });
 
-// --- Support Tab Logic ---
+                    if (!res.ok) throw new Error("Failed to update auth config");
+                    showAdminAlert('Authentication settings updated!', 'Success', 'success');
+                } catch (err) {
+                    console.error("Failed to save auth config:", err);
+                    showAdminAlert(err.message, 'Error', 'error');
+                }
+            }
 
-async function loadSupport() {
-    const tbody = document.querySelector('#supportTable tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
-    try {
-        const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch(API_BASE_URL + '/api/admin/contact', {
-            headers: { 'Authorization': 'Bearer ' + idToken }
-        });
-        if (!res.ok) throw new Error("Failed to load support requests");
+            window.loadAuthConfig = loadAuthConfig;
+            window.saveAuthConfig = saveAuthConfig;
 
-        const data = await res.json();
-        const messages = data.messages || [];
-        updateSupportBadge(data.unreadCount || 0);
+            async function loadCheckoutConfig() {
+                try {
+                    const res = await fetch(API_BASE_URL + '/api/config/checkout');
+                    if (res.ok) {
+                        const data = await res.json();
+                        document.getElementById('chk_standard_delivery').checked = data.standard_delivery_enabled;
+                        document.getElementById('chk_hyderabad_instant').checked = data.hyderabad_instant_enabled;
+                        document.getElementById('chk_store_pickup_prepay').checked = data.store_pickup_prepay_enabled;
+                        document.getElementById('chk_store_pickup_instore').checked = data.store_pickup_pay_in_store_enabled;
+                    }
+                } catch (err) {
+                    console.error("Failed to load checkout config:", err);
+                }
+            }
 
-        if (messages.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7">No support requests found.</td></tr>';
-            return;
-        }
+            async function saveCheckoutConfig() {
+                try {
+                    const payload = {
+                        standard_delivery_enabled: document.getElementById('chk_standard_delivery').checked,
+                        hyderabad_instant_enabled: document.getElementById('chk_hyderabad_instant').checked,
+                        store_pickup_prepay_enabled: document.getElementById('chk_store_pickup_prepay').checked,
+                        store_pickup_pay_in_store_enabled: document.getElementById('chk_store_pickup_instore').checked
+                    };
+                    const res = await fetch(API_BASE_URL + '/api/admin/config/checkout', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify(payload)
+                    });
 
-        tbody.innerHTML = messages.map(msg => `
+                    if (!res.ok) throw new Error("Failed to update checkout config");
+                    showAdminAlert('Checkout settings updated!', 'Success', 'success');
+                } catch (err) {
+                    console.error("Failed to save checkout config:", err);
+                    showAdminAlert(err.message, 'Error', 'error');
+                }
+            }
+
+            window.loadCheckoutConfig = loadCheckoutConfig;
+            window.saveCheckoutConfig = saveCheckoutConfig;
+
+            // --- Support Tab Logic ---
+
+            async function loadSupport() {
+                const tbody = document.querySelector('#supportTable tbody');
+                if (!tbody) return;
+                tbody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
+                try {
+                    const idToken = await auth.currentUser.getIdToken();
+                    const res = await fetch(API_BASE_URL + '/api/admin/contact', {
+                        headers: { 'Authorization': 'Bearer ' + idToken }
+                    });
+                    if (!res.ok) throw new Error("Failed to load support requests");
+
+                    const data = await res.json();
+                    const messages = data.messages || [];
+                    updateSupportBadge(data.unreadCount || 0);
+
+                    if (messages.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7">No support requests found.</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = messages.map(msg => `
             <tr style="background: ${msg.status === 'unread' ? '#fff6f6' : 'transparent'}">
                 <td>${new Date(msg.createdAt).toLocaleString()}</td>
                 <td><strong>${msg.name}</strong></td>
@@ -2237,135 +2333,135 @@ async function loadSupport() {
                 <td><span class="badge ${msg.status === 'unread' ? 'danger' : 'success'}">${msg.status}</span></td>
                 <td>
                     ${msg.status === 'unread'
-                ? `<button onclick="markSupportRead(${msg.id})" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Mark Read</button>`
-                : `<button disabled class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; opacity: 0.6;">Read</button>`
-            }
+                            ? `<button onclick="markSupportRead(${msg.id})" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Mark Read</button>`
+                            : `<button disabled class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; opacity: 0.6;">Read</button>`
+                        }
                 </td>
             </tr>
         `).join('');
-    } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="7" style="color:red">Error: ' + err.message + '</td></tr>';
-    }
-}
+                } catch (err) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="color:red">Error: ' + err.message + '</td></tr>';
+                }
+            }
 
-async function markSupportRead(id) {
-    try {
-        const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch(`${API_BASE_URL}/api/admin/contact/${id}/read`, {
-            method: 'PUT',
-            headers: { 'Authorization': 'Bearer ' + idToken }
-        });
-        if (!res.ok) throw new Error("Failed to mark as read");
-        loadSupport();
-    } catch (err) {
-        showAdminAlert(err.message, 'Error', 'error');
-    }
-}
+            async function markSupportRead(id) {
+                try {
+                    const idToken = await auth.currentUser.getIdToken();
+                    const res = await fetch(`${API_BASE_URL}/api/admin/contact/${id}/read`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': 'Bearer ' + idToken }
+                    });
+                    if (!res.ok) throw new Error("Failed to mark as read");
+                    loadSupport();
+                } catch (err) {
+                    showAdminAlert(err.message, 'Error', 'error');
+                }
+            }
 
-function updateSupportBadge(count) {
-    const badge = document.getElementById('support-badge');
-    if (badge) {
-        if (count > 0) {
-            badge.style.display = 'inline-block';
-            badge.innerText = count;
-        } else {
-            badge.style.display = 'none';
-        }
-    }
-}
+            function updateSupportBadge(count) {
+                const badge = document.getElementById('support-badge');
+                if (badge) {
+                    if (count > 0) {
+                        badge.style.display = 'inline-block';
+                        badge.innerText = count;
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            }
 
-async function pollUnreadSupportCount() {
-    if (!auth || !auth.currentUser) return;
-    try {
-        const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch(API_BASE_URL + '/api/admin/contact', {
-            headers: { 'Authorization': 'Bearer ' + idToken }
-        });
-        if (res.ok) {
-            const data = await res.json();
-            updateSupportBadge(data.unreadCount || 0);
-        }
-    } catch (err) { }
-}
+            async function pollUnreadSupportCount() {
+                if (!auth || !auth.currentUser) return;
+                try {
+                    const idToken = await auth.currentUser.getIdToken();
+                    const res = await fetch(API_BASE_URL + '/api/admin/contact', {
+                        headers: { 'Authorization': 'Bearer ' + idToken }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        updateSupportBadge(data.unreadCount || 0);
+                    }
+                } catch (err) { }
+            }
 
-// Poll every 60 seconds
-setInterval(pollUnreadSupportCount, 60000);
-window.markSupportRead = markSupportRead;
+            // Poll every 60 seconds
+            setInterval(pollUnreadSupportCount, 60000);
+            window.markSupportRead = markSupportRead;
 
-// ==========================================
-// INSTAGRAM REELS & SHOPPABLE SHOWCASE LOGIC
-// ==========================================
+            // ==========================================
+            // INSTAGRAM REELS & SHOPPABLE SHOWCASE LOGIC
+            // ==========================================
 
-let currentHomepageConfig = null;
-let currentReelsList = [];
-let allStoreProducts = [];
+            let currentHomepageConfig = null;
+            let currentReelsList = [];
+            let allStoreProducts = [];
 
-async function loadInstagramReels() {
-    const container = document.getElementById('reelsCardsContainer');
-    if (container) {
-        container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: #888;">Loading Instagram Reels & Store Catalog...</div>';
-    }
+            async function loadInstagramReels() {
+                const container = document.getElementById('reelsCardsContainer');
+                if (container) {
+                    container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: #888;">Loading Instagram Reels & Store Catalog...</div>';
+                }
 
-    try {
-        // Fetch homepage config and store products in parallel
-        const [hpRes, prodRes] = await Promise.all([
-            fetch(API_BASE_URL + '/api/config/homepage'),
-            fetch(API_BASE_URL + '/api/products')
-        ]);
+                try {
+                    // Fetch homepage config and store products in parallel
+                    const [hpRes, prodRes] = await Promise.all([
+                        fetch(API_BASE_URL + '/api/config/homepage'),
+                        fetch(API_BASE_URL + '/api/products')
+                    ]);
 
-        if (hpRes.ok) {
-            currentHomepageConfig = await hpRes.json();
-            const insta = currentHomepageConfig.instagram || {};
-            
-            const handleEl = document.getElementById('insta_handle');
-            if (handleEl) handleEl.value = (insta.handle || 'theethnictouch.co').replace('@', '');
+                    if (hpRes.ok) {
+                        currentHomepageConfig = await hpRes.json();
+                        const insta = currentHomepageConfig.instagram || {};
 
-            const profileEl = document.getElementById('insta_profile_url');
-            if (profileEl) profileEl.value = insta.profile_url || 'https://www.instagram.com/theethnictouch.co';
+                        const handleEl = document.getElementById('insta_handle');
+                        if (handleEl) handleEl.value = (insta.handle || 'theethnictouch.co').replace('@', '');
 
-            currentReelsList = Array.isArray(insta.reels) ? insta.reels : [];
-        }
+                        const profileEl = document.getElementById('insta_profile_url');
+                        if (profileEl) profileEl.value = insta.profile_url || 'https://www.instagram.com/theethnictouch.co';
 
-        if (prodRes.ok) {
-            const prods = await prodRes.json();
-            allStoreProducts = Array.isArray(prods) ? prods : [];
-        }
+                        currentReelsList = Array.isArray(insta.reels) ? insta.reels : [];
+                    }
 
-        renderReelsList();
-    } catch (err) {
-        console.error("Failed to load Instagram reels:", err);
-        if (container) {
-            container.innerHTML = `<div style="grid-column: 1 / -1; color: #e53e3e; padding: 2rem;">Error loading Instagram reels: ${err.message}</div>`;
-        }
-    }
-}
+                    if (prodRes.ok) {
+                        const prods = await prodRes.json();
+                        allStoreProducts = Array.isArray(prods) ? prods : [];
+                    }
 
-function renderReelsList() {
-    const container = document.getElementById('reelsCardsContainer');
-    const badge = document.getElementById('reelsCountBadge');
-    if (badge) badge.innerText = currentReelsList.length;
+                    renderReelsList();
+                } catch (err) {
+                    console.error("Failed to load Instagram reels:", err);
+                    if (container) {
+                        container.innerHTML = `<div style="grid-column: 1 / -1; color: #e53e3e; padding: 2rem;">Error loading Instagram reels: ${err.message}</div>`;
+                    }
+                }
+            }
 
-    if (!container) return;
-    container.innerHTML = '';
+            function renderReelsList() {
+                const container = document.getElementById('reelsCardsContainer');
+                const badge = document.getElementById('reelsCountBadge');
+                if (badge) badge.innerText = currentReelsList.length;
 
-    if (currentReelsList.length === 0) {
-        container.innerHTML = `
+                if (!container) return;
+                container.innerHTML = '';
+
+                if (currentReelsList.length === 0) {
+                    container.innerHTML = `
             <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; background: #FAF8F5; border: 2px dashed #DCD5CB; border-radius: 12px;">
                 <p style="color: #6C6863; font-size: 1rem; margin-bottom: 1rem;">No shoppable reels configured yet.</p>
                 <button type="button" class="btn-primary" onclick="openAddReelModal()">+ Add Your First Reel</button>
             </div>
         `;
-        return;
-    }
+                    return;
+                }
 
-    currentReelsList.forEach((reel, index) => {
-        const prod = allStoreProducts.find(p => String(p.id) === String(reel.product_id || (reel.product ? reel.product.id : '')));
-        const cardThumb = reel.thumbnail || (prod ? prod.imageUrl : './images/kurthi_peach.png');
-        const isHit = reel.is_hit_reel || reel.isHitReel;
-        const badgeLabel = isHit ? '⭐ Hit Reel' : (reel.views || 'Latest Drop');
+                currentReelsList.forEach((reel, index) => {
+                    const prod = allStoreProducts.find(p => String(p.id) === String(reel.product_id || (reel.product ? reel.product.id : '')));
+                    const cardThumb = reel.thumbnail || (prod ? prod.imageUrl : './images/kurthi_peach.png');
+                    const isHit = reel.is_hit_reel || reel.isHitReel;
+                    const badgeLabel = isHit ? '⭐ Hit Reel' : (reel.views || 'Latest Drop');
 
-        const card = document.createElement('div');
-        card.style.cssText = `
+                    const card = document.createElement('div');
+                    card.style.cssText = `
             background: #FFFFFF;
             border: 1px solid rgba(0,0,0,0.08);
             border-radius: 12px;
@@ -2376,7 +2472,7 @@ function renderReelsList() {
             transition: transform 0.2s, box-shadow 0.2s;
         `;
 
-        card.innerHTML = `
+                    card.innerHTML = `
             <!-- Visual Reel Header & Thumbnail Preview -->
             <div style="position: relative; height: 260px; background: #2D2A26; overflow: hidden;">
                 <img src="${cardThumb}" alt="${reel.title || 'Reel'}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.9;">
@@ -2473,1044 +2569,1461 @@ function renderReelsList() {
             </div>
         `;
 
-        container.appendChild(card);
-    });
-}
+                    container.appendChild(card);
+                });
+            }
 
-function populateReelProductSelect(selectedProductId = '') {
-    const select = document.getElementById('reel_product_id');
-    if (!select) return;
+            function populateReelProductSelect(selectedProductId = '') {
+                const select = document.getElementById('reel_product_id');
+                if (!select) return;
 
-    select.innerHTML = '<option value="">-- Choose Product from Store Catalog --</option>';
+                select.innerHTML = '<option value="">-- Choose Product from Store Catalog --</option>';
 
-    allStoreProducts.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.innerText = `${p.name} - ₹${Number(p.price).toLocaleString('en-IN')} (${p.category || 'Silhouettes'})`;
-        if (String(p.id) === String(selectedProductId)) {
-            opt.selected = true;
-        }
-        select.appendChild(opt);
-    });
+                allStoreProducts.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.innerText = `${p.name} - ₹${Number(p.price).toLocaleString('en-IN')} (${p.category || 'Silhouettes'})`;
+                    if (String(p.id) === String(selectedProductId)) {
+                        opt.selected = true;
+                    }
+                    select.appendChild(opt);
+                });
 
-    handleReelProductSelect(selectedProductId);
-}
+                handleReelProductSelect(selectedProductId);
+            }
 
-function handleReelProductSelect(productId) {
-    const previewBox = document.getElementById('reelSelectedProductPreview');
-    const nameEl = document.getElementById('reelPreviewProdName');
-    const priceEl = document.getElementById('reelPreviewProdPrice');
-    const imgEl = document.getElementById('reelPreviewProdImg');
+            function handleReelProductSelect(productId) {
+                const previewBox = document.getElementById('reelSelectedProductPreview');
+                const nameEl = document.getElementById('reelPreviewProdName');
+                const priceEl = document.getElementById('reelPreviewProdPrice');
+                const imgEl = document.getElementById('reelPreviewProdImg');
 
-    const prod = allStoreProducts.find(p => String(p.id) === String(productId));
-    if (prod && previewBox) {
-        previewBox.style.display = 'flex';
-        if (nameEl) nameEl.innerText = prod.name;
-        if (priceEl) priceEl.innerText = `₹${Number(prod.price).toLocaleString('en-IN')} (${prod.category || 'Straight Cut'})`;
-        if (imgEl) imgEl.src = prod.imageUrl;
+                const prod = allStoreProducts.find(p => String(p.id) === String(productId));
+                if (prod && previewBox) {
+                    previewBox.style.display = 'flex';
+                    if (nameEl) nameEl.innerText = prod.name;
+                    if (priceEl) priceEl.innerText = `₹${Number(prod.price).toLocaleString('en-IN')} (${prod.category || 'Straight Cut'})`;
+                    if (imgEl) imgEl.src = prod.imageUrl;
 
-        // If thumbnail input is empty, auto-populate with product image
-        const thumbInput = document.getElementById('reel_thumbnail');
-        if (thumbInput && !thumbInput.value.trim()) {
-            thumbInput.value = prod.imageUrl;
-            updateReelThumbPreview(prod.imageUrl);
-        }
-    } else if (previewBox) {
-        previewBox.style.display = 'none';
-    }
-}
-
-function useProductImageAsThumbnail() {
-    const prodId = document.getElementById('reel_product_id').value;
-    const prod = allStoreProducts.find(p => String(p.id) === String(prodId));
-    if (prod) {
-        document.getElementById('reel_thumbnail').value = prod.imageUrl;
-        updateReelThumbPreview(prod.imageUrl);
-        showAdminAlert('Using product photo as reel thumbnail', 'Thumbnail Updated', 'success');
-    }
-}
-
-function updateReelThumbPreview(url) {
-    const box = document.getElementById('reelThumbImgPreviewBox');
-    const img = document.getElementById('reelThumbImgPreview');
-    if (!box || !img) return;
-
-    if (url && url.trim()) {
-        img.src = url.trim();
-        box.style.display = 'block';
-    } else {
-        box.style.display = 'none';
-    }
-}
-
-let reelFetchDebounceTimer = null;
-function handleReelUrlInput(url) {
-    const codeInput = document.getElementById('reel_code');
-    if (!url || !codeInput) return;
-
-    // Pattern matches /reel/CODE/ or /reel/CODE
-    const match = url.match(/\/reel\/([A-Za-z0-9_-]+)/);
-    if (match && match[1]) {
-        codeInput.value = match[1];
-
-        // Automatically trigger Instagram thumbnail fetch if thumbnail input is empty or using a fallback image
-        const thumbInput = document.getElementById('reel_thumbnail');
-        if (thumbInput && (!thumbInput.value.trim() || thumbInput.value.includes('/images/kurthi'))) {
-            clearTimeout(reelFetchDebounceTimer);
-            reelFetchDebounceTimer = setTimeout(() => {
-                fetchReelThumbnailFromInsta();
-            }, 500);
-        }
-    }
-}
-
-function openAddReelModal() {
-    document.getElementById('reelModalTitle').innerText = 'Add New Shoppable Reel';
-    document.getElementById('reelSubmitBtn').innerText = 'Save & Publish Reel';
-
-    document.getElementById('reel_id').value = `reel-${Date.now()}`;
-    document.getElementById('reel_title').value = '';
-    document.getElementById('reel_instagram_url').value = '';
-    document.getElementById('reel_code').value = '';
-    document.getElementById('reel_thumbnail').value = '';
-    document.getElementById('reel_caption').value = '';
-    document.getElementById('reel_is_hit').checked = false;
-    document.getElementById('reel_views').value = 'Latest Drop';
-    document.getElementById('reel_likes').value = 'Trending Hit';
-
-    updateReelThumbPreview('');
-    populateReelProductSelect('');
-
-    document.getElementById('reelModal').style.display = 'flex';
-}
-
-function openEditReelModal(reelIdOrIndex) {
-    let reel = currentReelsList.find(r => String(r.id) === String(reelIdOrIndex));
-    if (!reel && typeof reelIdOrIndex === 'number') {
-        reel = currentReelsList[reelIdOrIndex];
-    }
-    if (!reel && !isNaN(Number(reelIdOrIndex))) {
-        reel = currentReelsList[Number(reelIdOrIndex)];
-    }
-    if (!reel) {
-        showAdminAlert('Reel configuration not found', 'Error', 'error');
-        return;
-    }
-
-    const titleEl = document.getElementById('reelModalTitle');
-    if (titleEl) titleEl.innerText = `Edit Reel: ${reel.title || 'Shoppable Video'}`;
-
-    const submitBtn = document.getElementById('reelSubmitBtn');
-    if (submitBtn) submitBtn.innerText = 'Update Reel';
-
-    const idInput = document.getElementById('reel_id');
-    if (idInput) idInput.value = reel.id || `reel-${Date.now()}`;
-
-    const titleInput = document.getElementById('reel_title');
-    if (titleInput) titleInput.value = reel.title || '';
-
-    const urlInput = document.getElementById('reel_instagram_url');
-    if (urlInput) urlInput.value = reel.instagram_url || reel.instagramUrl || '';
-
-    const codeInput = document.getElementById('reel_code');
-    if (codeInput) codeInput.value = reel.reel_code || reel.reelCode || '';
-
-    const thumbInput = document.getElementById('reel_thumbnail');
-    if (thumbInput) thumbInput.value = reel.thumbnail || '';
-
-    const captionInput = document.getElementById('reel_caption');
-    if (captionInput) captionInput.value = reel.caption || '';
-
-    const isHitInput = document.getElementById('reel_is_hit');
-    if (isHitInput) isHitInput.checked = !!(reel.is_hit_reel || reel.isHitReel);
-
-    const viewsInput = document.getElementById('reel_views');
-    if (viewsInput) viewsInput.value = reel.views || '';
-
-    const likesInput = document.getElementById('reel_likes');
-    if (likesInput) likesInput.value = reel.likes || '';
-
-    updateReelThumbPreview(reel.thumbnail || '');
-    populateReelProductSelect(reel.product_id || (reel.product ? reel.product.id : ''));
-
-    const modal = document.getElementById('reelModal');
-    if (modal) {
-        modal.style.display = 'flex';
-    }
-}
-
-async function handleSaveReel(event) {
-    event.preventDefault();
-
-    const reelId = document.getElementById('reel_id').value;
-    const title = document.getElementById('reel_title').value.trim();
-    const instaUrl = document.getElementById('reel_instagram_url').value.trim();
-    let reelCode = document.getElementById('reel_code').value.trim();
-    const prodId = document.getElementById('reel_product_id').value;
-    let thumbnail = document.getElementById('reel_thumbnail').value.trim();
-    const caption = document.getElementById('reel_caption').value.trim();
-    const isHit = document.getElementById('reel_is_hit').checked;
-    const views = document.getElementById('reel_views').value.trim() || (isHit ? 'Hit Reel' : 'Latest Drop');
-    const likes = document.getElementById('reel_likes').value.trim() || 'Trending Hit';
-
-    if (!reelCode && instaUrl) {
-        const match = instaUrl.match(/\/reel\/([A-Za-z0-9_-]+)/);
-        if (match && match[1]) reelCode = match[1];
-    }
-
-    // If thumbnail is still empty, attempt automatic fetch from Instagram before saving
-    if (!thumbnail && instaUrl && instaUrl.includes('/reel/')) {
-        try {
-            const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: instaUrl })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.thumbnail) {
-                    thumbnail = data.thumbnail;
-                    if (data.reelCode && !reelCode) reelCode = data.reelCode;
+                    // If thumbnail input is empty, auto-populate with product image
+                    const thumbInput = document.getElementById('reel_thumbnail');
+                    if (thumbInput && !thumbInput.value.trim()) {
+                        thumbInput.value = prod.imageUrl;
+                        updateReelThumbPreview(prod.imageUrl);
+                    }
+                } else if (previewBox) {
+                    previewBox.style.display = 'none';
                 }
             }
-        } catch (e) {
-            console.warn("Auto thumbnail fetch on save failed:", e);
-        }
-    }
 
-    if (!thumbnail && prodId) {
-        const prod = allStoreProducts.find(p => String(p.id) === String(prodId));
-        if (prod) thumbnail = prod.imageUrl;
-    }
-
-    const reelItem = {
-        id: reelId,
-        is_hit_reel: isHit,
-        instagram_url: instaUrl,
-        reel_code: reelCode,
-        title: title,
-        caption: caption,
-        author: `@${(document.getElementById('insta_handle').value || 'theethnictouch.co').replace('@', '')}`,
-        likes: likes,
-        views: views,
-        thumbnail: thumbnail,
-        product_id: prodId
-    };
-
-    const existingIdx = currentReelsList.findIndex(r => String(r.id) === String(reelId));
-    if (existingIdx >= 0) {
-        currentReelsList[existingIdx] = reelItem;
-    } else {
-        currentReelsList.push(reelItem);
-    }
-
-    const saved = await saveInstagramConfigToBackend();
-    if (saved) {
-        closeModals();
-        renderReelsList();
-        showAdminAlert(`Reel "${title}" saved and published to homepage!`, 'Reel Saved', 'success');
-    }
-}
-
-async function deleteReel(reelId) {
-    const reel = currentReelsList.find(r => String(r.id) === String(reelId));
-    const title = reel ? reel.title : 'this reel';
-
-    if (!confirm(`Are you sure you want to remove "${title}" from the homepage?`)) {
-        return;
-    }
-
-    currentReelsList = currentReelsList.filter(r => String(r.id) !== String(reelId));
-    const saved = await saveInstagramConfigToBackend();
-    if (saved) {
-        renderReelsList();
-        showAdminAlert('Reel removed from homepage.', 'Reel Deleted', 'success');
-    }
-}
-
-async function moveReel(index, direction) {
-    const targetIdx = index + direction;
-    if (targetIdx < 0 || targetIdx >= currentReelsList.length) return;
-
-    // Swap elements
-    const temp = currentReelsList[index];
-    currentReelsList[index] = currentReelsList[targetIdx];
-    currentReelsList[targetIdx] = temp;
-
-    const saved = await saveInstagramConfigToBackend();
-    if (saved) {
-        renderReelsList();
-    }
-}
-
-async function saveInstagramGlobalSettings() {
-    const handle = (document.getElementById('insta_handle').value || '').trim().replace('@', '');
-    const profileUrl = (document.getElementById('insta_profile_url').value || '').trim();
-
-    const saved = await saveInstagramConfigToBackend(handle, profileUrl);
-    if (saved) {
-        showAdminAlert('Instagram handle and profile URL updated!', 'Settings Saved', 'success');
-    }
-}
-
-async function saveInstagramConfigToBackend(customHandle, customProfileUrl) {
-    try {
-        const handle = customHandle || (document.getElementById('insta_handle') ? document.getElementById('insta_handle').value.trim().replace('@', '') : 'theethnictouch.co');
-        const profileUrl = customProfileUrl || (document.getElementById('insta_profile_url') ? document.getElementById('insta_profile_url').value.trim() : 'https://www.instagram.com/theethnictouch.co');
-
-        const instaPayload = {
-            handle: handle || 'theethnictouch.co',
-            profile_url: profileUrl || 'https://www.instagram.com/theethnictouch.co',
-            reels: currentReelsList
-        };
-
-        const res = await fetch(API_BASE_URL + '/api/admin/config/instagram', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeader()
-            },
-            body: JSON.stringify(instaPayload)
-        });
-
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || `HTTP ${res.status}`);
-        }
-
-        return true;
-    } catch (err) {
-        console.error("Failed to save Instagram config to backend:", err);
-        showAdminAlert('Failed to save to server: ' + err.message, 'Save Error', 'error');
-        return false;
-    }
-}
-
-async function fetchReelThumbnailFromInsta() {
-    const urlInput = document.getElementById('reel_instagram_url');
-    const url = (urlInput ? urlInput.value : '').trim();
-    if (!url) {
-        showAdminAlert('Please enter an Instagram Reel URL first.', 'URL Required', 'error');
-        if (urlInput) urlInput.focus();
-        return;
-    }
-
-    const btn = document.getElementById('btnFetchInstaThumb');
-    const originalText = btn ? btn.innerHTML : '';
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '⏳ Fetching...';
-    }
-
-    try {
-        const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url: url })
-        });
-
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || `HTTP ${res.status}`);
-        }
-
-        const data = await res.json();
-        if (data.thumbnail) {
-            const thumbInput = document.getElementById('reel_thumbnail');
-            if (thumbInput) {
-                thumbInput.value = data.thumbnail;
-                updateReelThumbPreview(data.thumbnail);
+            function useProductImageAsThumbnail() {
+                const prodId = document.getElementById('reel_product_id').value;
+                const prod = allStoreProducts.find(p => String(p.id) === String(prodId));
+                if (prod) {
+                    document.getElementById('reel_thumbnail').value = prod.imageUrl;
+                    updateReelThumbPreview(prod.imageUrl);
+                    showAdminAlert('Using product photo as reel thumbnail', 'Thumbnail Updated', 'success');
+                }
             }
-            if (data.reelCode && !document.getElementById('reel_code').value) {
-                document.getElementById('reel_code').value = data.reelCode;
+
+            function updateReelThumbPreview(url) {
+                const box = document.getElementById('reelThumbImgPreviewBox');
+                const img = document.getElementById('reelThumbImgPreview');
+                if (!box || !img) return;
+
+                if (url && url.trim()) {
+                    img.src = url.trim();
+                    box.style.display = 'block';
+                } else {
+                    box.style.display = 'none';
+                }
             }
-            showAdminAlert('Authentic Instagram Reel thumbnail successfully fetched and applied!', 'Thumbnail Loaded', 'success');
-        }
-    } catch (err) {
-        console.error("Failed to fetch reel thumbnail:", err);
-        showAdminAlert('Could not fetch thumbnail directly from Instagram: ' + err.message, 'Fetch Failed', 'error');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        }
-    }
-}
 
-async function syncAllInstaThumbnails() {
-    const btn = document.getElementById('btnSyncAllThumbs');
-    const originalText = btn ? btn.innerHTML : '';
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '⏳ Syncing All Thumbnails...';
-    }
+            let reelFetchDebounceTimer = null;
+            function handleReelUrlInput(url) {
+                const codeInput = document.getElementById('reel_code');
+                if (!url || !codeInput) return;
 
-    try {
-        let updatedCount = 0;
-        for (let i = 0; i < currentReelsList.length; i++) {
-            const r = currentReelsList[i];
-            const url = r.instagram_url || r.instagramUrl;
-            if (url) {
+                // Pattern matches /reel/CODE/ or /reel/CODE
+                const match = url.match(/\/reel\/([A-Za-z0-9_-]+)/);
+                if (match && match[1]) {
+                    codeInput.value = match[1];
+
+                    // Automatically trigger Instagram thumbnail fetch if thumbnail input is empty or using a fallback image
+                    const thumbInput = document.getElementById('reel_thumbnail');
+                    if (thumbInput && (!thumbInput.value.trim() || thumbInput.value.includes('/images/kurthi'))) {
+                        clearTimeout(reelFetchDebounceTimer);
+                        reelFetchDebounceTimer = setTimeout(() => {
+                            fetchReelThumbnailFromInsta();
+                        }, 500);
+                    }
+                }
+            }
+
+            function openAddReelModal() {
+                document.getElementById('reelModalTitle').innerText = 'Add New Shoppable Reel';
+                document.getElementById('reelSubmitBtn').innerText = 'Save & Publish Reel';
+
+                document.getElementById('reel_id').value = `reel-${Date.now()}`;
+                document.getElementById('reel_title').value = '';
+                document.getElementById('reel_instagram_url').value = '';
+                document.getElementById('reel_code').value = '';
+                document.getElementById('reel_thumbnail').value = '';
+                document.getElementById('reel_caption').value = '';
+                document.getElementById('reel_is_hit').checked = false;
+                document.getElementById('reel_views').value = 'Latest Drop';
+                document.getElementById('reel_likes').value = 'Trending Hit';
+
+                updateReelThumbPreview('');
+                populateReelProductSelect('');
+
+                document.getElementById('reelModal').style.display = 'flex';
+            }
+
+            function openEditReelModal(reelIdOrIndex) {
+                let reel = currentReelsList.find(r => String(r.id) === String(reelIdOrIndex));
+                if (!reel && typeof reelIdOrIndex === 'number') {
+                    reel = currentReelsList[reelIdOrIndex];
+                }
+                if (!reel && !isNaN(Number(reelIdOrIndex))) {
+                    reel = currentReelsList[Number(reelIdOrIndex)];
+                }
+                if (!reel) {
+                    showAdminAlert('Reel configuration not found', 'Error', 'error');
+                    return;
+                }
+
+                const titleEl = document.getElementById('reelModalTitle');
+                if (titleEl) titleEl.innerText = `Edit Reel: ${reel.title || 'Shoppable Video'}`;
+
+                const submitBtn = document.getElementById('reelSubmitBtn');
+                if (submitBtn) submitBtn.innerText = 'Update Reel';
+
+                const idInput = document.getElementById('reel_id');
+                if (idInput) idInput.value = reel.id || `reel-${Date.now()}`;
+
+                const titleInput = document.getElementById('reel_title');
+                if (titleInput) titleInput.value = reel.title || '';
+
+                const urlInput = document.getElementById('reel_instagram_url');
+                if (urlInput) urlInput.value = reel.instagram_url || reel.instagramUrl || '';
+
+                const codeInput = document.getElementById('reel_code');
+                if (codeInput) codeInput.value = reel.reel_code || reel.reelCode || '';
+
+                const thumbInput = document.getElementById('reel_thumbnail');
+                if (thumbInput) thumbInput.value = reel.thumbnail || '';
+
+                const captionInput = document.getElementById('reel_caption');
+                if (captionInput) captionInput.value = reel.caption || '';
+
+                const isHitInput = document.getElementById('reel_is_hit');
+                if (isHitInput) isHitInput.checked = !!(reel.is_hit_reel || reel.isHitReel);
+
+                const viewsInput = document.getElementById('reel_views');
+                if (viewsInput) viewsInput.value = reel.views || '';
+
+                const likesInput = document.getElementById('reel_likes');
+                if (likesInput) likesInput.value = reel.likes || '';
+
+                updateReelThumbPreview(reel.thumbnail || '');
+                populateReelProductSelect(reel.product_id || (reel.product ? reel.product.id : ''));
+
+                const modal = document.getElementById('reelModal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                }
+            }
+
+            async function handleSaveReel(event) {
+                event.preventDefault();
+
+                const reelId = document.getElementById('reel_id').value;
+                const title = document.getElementById('reel_title').value.trim();
+                const instaUrl = document.getElementById('reel_instagram_url').value.trim();
+                let reelCode = document.getElementById('reel_code').value.trim();
+                const prodId = document.getElementById('reel_product_id').value;
+                let thumbnail = document.getElementById('reel_thumbnail').value.trim();
+                const caption = document.getElementById('reel_caption').value.trim();
+                const isHit = document.getElementById('reel_is_hit').checked;
+                const views = document.getElementById('reel_views').value.trim() || (isHit ? 'Hit Reel' : 'Latest Drop');
+                const likes = document.getElementById('reel_likes').value.trim() || 'Trending Hit';
+
+                if (!reelCode && instaUrl) {
+                    const match = instaUrl.match(/\/reel\/([A-Za-z0-9_-]+)/);
+                    if (match && match[1]) reelCode = match[1];
+                }
+
+                // If thumbnail is still empty, attempt automatic fetch from Instagram before saving
+                if (!thumbnail && instaUrl && instaUrl.includes('/reel/')) {
+                    try {
+                        const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: instaUrl })
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.thumbnail) {
+                                thumbnail = data.thumbnail;
+                                if (data.reelCode && !reelCode) reelCode = data.reelCode;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Auto thumbnail fetch on save failed:", e);
+                    }
+                }
+
+                if (!thumbnail && prodId) {
+                    const prod = allStoreProducts.find(p => String(p.id) === String(prodId));
+                    if (prod) thumbnail = prod.imageUrl;
+                }
+
+                const reelItem = {
+                    id: reelId,
+                    is_hit_reel: isHit,
+                    instagram_url: instaUrl,
+                    reel_code: reelCode,
+                    title: title,
+                    caption: caption,
+                    author: `@${(document.getElementById('insta_handle').value || 'theethnictouch.co').replace('@', '')}`,
+                    likes: likes,
+                    views: views,
+                    thumbnail: thumbnail,
+                    product_id: prodId
+                };
+
+                const existingIdx = currentReelsList.findIndex(r => String(r.id) === String(reelId));
+                if (existingIdx >= 0) {
+                    currentReelsList[existingIdx] = reelItem;
+                } else {
+                    currentReelsList.push(reelItem);
+                }
+
+                const saved = await saveInstagramConfigToBackend();
+                if (saved) {
+                    closeModals();
+                    renderReelsList();
+                    showAdminAlert(`Reel "${title}" saved and published to homepage!`, 'Reel Saved', 'success');
+                }
+            }
+
+            async function deleteReel(reelId) {
+                const reel = currentReelsList.find(r => String(r.id) === String(reelId));
+                const title = reel ? reel.title : 'this reel';
+
+                if (!confirm(`Are you sure you want to remove "${title}" from the homepage?`)) {
+                    return;
+                }
+
+                currentReelsList = currentReelsList.filter(r => String(r.id) !== String(reelId));
+                const saved = await saveInstagramConfigToBackend();
+                if (saved) {
+                    renderReelsList();
+                    showAdminAlert('Reel removed from homepage.', 'Reel Deleted', 'success');
+                }
+            }
+
+            async function moveReel(index, direction) {
+                const targetIdx = index + direction;
+                if (targetIdx < 0 || targetIdx >= currentReelsList.length) return;
+
+                // Swap elements
+                const temp = currentReelsList[index];
+                currentReelsList[index] = currentReelsList[targetIdx];
+                currentReelsList[targetIdx] = temp;
+
+                const saved = await saveInstagramConfigToBackend();
+                if (saved) {
+                    renderReelsList();
+                }
+            }
+
+            async function saveInstagramGlobalSettings() {
+                const handle = (document.getElementById('insta_handle').value || '').trim().replace('@', '');
+                const profileUrl = (document.getElementById('insta_profile_url').value || '').trim();
+
+                const saved = await saveInstagramConfigToBackend(handle, profileUrl);
+                if (saved) {
+                    showAdminAlert('Instagram handle and profile URL updated!', 'Settings Saved', 'success');
+                }
+            }
+
+            async function saveInstagramConfigToBackend(customHandle, customProfileUrl) {
+                try {
+                    const handle = customHandle || (document.getElementById('insta_handle') ? document.getElementById('insta_handle').value.trim().replace('@', '') : 'theethnictouch.co');
+                    const profileUrl = customProfileUrl || (document.getElementById('insta_profile_url') ? document.getElementById('insta_profile_url').value.trim() : 'https://www.instagram.com/theethnictouch.co');
+
+                    const instaPayload = {
+                        handle: handle || 'theethnictouch.co',
+                        profile_url: profileUrl || 'https://www.instagram.com/theethnictouch.co',
+                        reels: currentReelsList
+                    };
+
+                    const res = await fetch(API_BASE_URL + '/api/admin/config/instagram', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify(instaPayload)
+                    });
+
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || `HTTP ${res.status}`);
+                    }
+
+                    return true;
+                } catch (err) {
+                    console.error("Failed to save Instagram config to backend:", err);
+                    showAdminAlert('Failed to save to server: ' + err.message, 'Save Error', 'error');
+                    return false;
+                }
+            }
+
+            async function fetchReelThumbnailFromInsta() {
+                const urlInput = document.getElementById('reel_instagram_url');
+                const url = (urlInput ? urlInput.value : '').trim();
+                if (!url) {
+                    showAdminAlert('Please enter an Instagram Reel URL first.', 'URL Required', 'error');
+                    if (urlInput) urlInput.focus();
+                    return;
+                }
+
+                const btn = document.getElementById('btnFetchInstaThumb');
+                const originalText = btn ? btn.innerHTML : '';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '⏳ Fetching...';
+                }
+
                 try {
                     const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify({ url: url })
+                    });
+
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || `HTTP ${res.status}`);
+                    }
+
+                    const data = await res.json();
+                    if (data.thumbnail) {
+                        const thumbInput = document.getElementById('reel_thumbnail');
+                        if (thumbInput) {
+                            thumbInput.value = data.thumbnail;
+                            updateReelThumbPreview(data.thumbnail);
+                        }
+                        if (data.reelCode && !document.getElementById('reel_code').value) {
+                            document.getElementById('reel_code').value = data.reelCode;
+                        }
+                        showAdminAlert('Authentic Instagram Reel thumbnail successfully fetched and applied!', 'Thumbnail Loaded', 'success');
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch reel thumbnail:", err);
+                    showAdminAlert('Could not fetch thumbnail directly from Instagram: ' + err.message, 'Fetch Failed', 'error');
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    }
+                }
+            }
+
+            async function syncAllInstaThumbnails() {
+                const btn = document.getElementById('btnSyncAllThumbs');
+                const originalText = btn ? btn.innerHTML : '';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '⏳ Syncing All Thumbnails...';
+                }
+
+                try {
+                    let updatedCount = 0;
+                    for (let i = 0; i < currentReelsList.length; i++) {
+                        const r = currentReelsList[i];
+                        const url = r.instagram_url || r.instagramUrl;
+                        if (url) {
+                            try {
+                                const res = await fetch(API_BASE_URL + '/api/reels/fetch-thumbnail', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ url: url })
+                                });
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    if (data.thumbnail) {
+                                        r.thumbnail = data.thumbnail;
+                                        if (data.reelCode && !r.reel_code) r.reel_code = data.reelCode;
+                                        updatedCount++;
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn("Error syncing reel thumbnail for", url, e);
+                            }
+                        }
+                    }
+
+                    if (updatedCount > 0) {
+                        await saveInstagramConfigToBackend();
+                        renderReelsList();
+                        showAdminAlert(`Successfully synced ${updatedCount} Instagram Reel thumbnails!`, 'Thumbnails Synced', 'success');
+                    } else {
+                        showAdminAlert('No thumbnails needed syncing.', 'Info', 'info');
+                    }
+                } catch (err) {
+                    showAdminAlert('Sync failed: ' + err.message, 'Error', 'error');
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    }
+                }
+            }
+
+            window.loadInstagramReels = loadInstagramReels;
+            window.renderReelsList = renderReelsList;
+            window.openAddReelModal = openAddReelModal;
+            window.openEditReelModal = openEditReelModal;
+            window.handleReelUrlInput = handleReelUrlInput;
+            window.handleReelProductSelect = handleReelProductSelect;
+            window.useProductImageAsThumbnail = useProductImageAsThumbnail;
+            window.updateReelThumbPreview = updateReelThumbPreview;
+            window.handleSaveReel = handleSaveReel;
+            window.deleteReel = deleteReel;
+            window.moveReel = moveReel;
+            window.saveInstagramGlobalSettings = saveInstagramGlobalSettings;
+            window.fetchReelThumbnailFromInsta = fetchReelThumbnailFromInsta;
+            window.syncAllInstaThumbnails = syncAllInstaThumbnails;
+
+            // ==========================================
+            // FLASH SPOTLIGHT DROP CONFIGURATION
+            // ==========================================
+            let currentFlashConfig = null;
+            let flashProductsList = [];
+            let flashCountdownInterval = null;
+            let currentCountdownSeconds = 0;
+
+            async function loadFlashDropConfig() {
+                const statusText = document.getElementById('fdStatusText');
+                if (statusText) statusText.innerText = "Loading Flash Drop Status...";
+
+                try {
+                    const [hpRes, prodRes] = await Promise.all([
+                        fetch(API_BASE_URL + '/api/config/homepage'),
+                        fetch(API_BASE_URL + '/api/products')
+                    ]);
+
+                    if (prodRes.ok) {
+                        flashProductsList = await prodRes.json();
+                        populateFlashProductDropdown(flashProductsList);
+                    }
+
+                    if (hpRes.ok) {
+                        const hpData = await hpRes.json();
+                        currentFlashConfig = hpData.flash_drop || {};
+                        applyFlashConfigToUI(currentFlashConfig);
+                    }
+                } catch (err) {
+                    console.error("Failed to load flash drop config:", err);
+                    if (statusText) statusText.innerText = "Error loading settings";
+                }
+            }
+
+            function populateFlashProductDropdown(products) {
+                const select = document.getElementById('fd_product_select');
+                if (!select) return;
+
+                const currentVal = select.value;
+                select.innerHTML = '<option value="">-- Select a Kurti from Live Catalog --</option>';
+
+                products.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = `${p.name} — ₹${p.price} (${p.stock} in stock)`;
+                    select.appendChild(opt);
+                });
+
+                if (currentVal) select.value = currentVal;
+            }
+
+            function getActiveFlashProduct() {
+                const isManual = document.getElementById('fd_mode_manual')?.checked;
+                const prodId = document.getElementById('fd_product_select')?.value;
+
+                if (isManual && prodId) {
+                    const manualProd = flashProductsList.find(p => String(p.id) === String(prodId));
+                    if (manualProd) return manualProd;
+                }
+
+                // Random mode: find the currently rotating product matching storefront Home.jsx deterministic cycle
+                const durHours = parseInt(document.getElementById('fd_random_hours')?.value) ?? 6;
+                const durMins = parseInt(document.getElementById('fd_random_mins')?.value) ?? 0;
+                const totalCycleMins = (durHours * 60) + durMins;
+                const cycleMs = (totalCycleMins > 0 ? totalCycleMins : 360) * 60 * 1000;
+                const cycleStart = currentFlashConfig?.cycle_started_at
+                    ? new Date(currentFlashConfig.cycle_started_at).getTime()
+                    : 0;
+                const elapsedMs = Math.max(0, Date.now() - cycleStart);
+                const cycleBlock = Math.floor(elapsedMs / cycleMs);
+
+                const inStockKurtis = flashProductsList.filter(p => {
+                    const cat = (p.category || '').toLowerCase();
+                    const name = (p.name || '').toLowerCase();
+                    const isKurti = cat.includes('kurti') || cat.includes('tunic') || cat.includes('straight') || cat.includes('line') || name.includes('kurti');
+                    return (p.stock || 0) > 0 && isKurti;
+                });
+                const pool = inStockKurtis.length > 0
+                    ? inStockKurtis
+                    : (flashProductsList.filter(p => (p.stock || 0) > 0).length > 0 ? flashProductsList.filter(p => (p.stock || 0) > 0) : flashProductsList);
+
+                if (pool.length === 0) {
+                    return {
+                        name: 'Pink Paisley Printed Straight Kurti',
+                        price: 549,
+                        imageUrl: './images/kurthi_peach.png',
+                        stock: 5,
+                        fabric: 'Cotton',
+                        description: 'Crafted in 100% soft Jaipur cotton with vibrant floral paisley motifs.'
+                    };
+                }
+
+                const index = Math.abs(cycleBlock) % pool.length;
+                return pool[index];
+            }
+
+            function startAdminFlashCountdown(hours, mins, secs) {
+                if (flashCountdownInterval) {
+                    clearInterval(flashCountdownInterval);
+                    flashCountdownInterval = null;
+                }
+
+                currentCountdownSeconds = (hours * 3600) + (mins * 60) + secs;
+
+                const renderTimer = () => {
+                    if (currentCountdownSeconds < 0) currentCountdownSeconds = 0;
+                    const h = Math.floor(currentCountdownSeconds / 3600);
+                    const m = Math.floor((currentCountdownSeconds % 3600) / 60);
+                    const s = currentCountdownSeconds % 60;
+
+                    const pvHours = document.getElementById('pv_hours');
+                    const pvMins = document.getElementById('pv_mins');
+                    const pvSecs = document.getElementById('pv_secs');
+
+                    if (pvHours) pvHours.innerText = String(h).padStart(2, '0');
+                    if (pvMins) pvMins.innerText = String(m).padStart(2, '0');
+                    if (pvSecs) pvSecs.innerText = String(s).padStart(2, '0');
+
+                    const statusText = document.getElementById('fdStatusText');
+                    if (statusText && currentFlashConfig) {
+                        const isManual = currentFlashConfig.mode === 'manual';
+                        if (isManual) {
+                            const prod = flashProductsList.find(p => String(p.id) === String(currentFlashConfig.product_id));
+                            const name = prod ? prod.name : 'Selected Kurti';
+                            statusText.innerHTML = `🎯 <strong>Spotlight Active:</strong> ${name} (${h}h ${m}m ${s}s left before auto-revert)`;
+                        } else {
+                            statusText.innerHTML = `🔀 <strong>Auto Rotation Active:</strong> Randomly rotating products from DB (${h}h ${m}m ${s}s left in cycle)`;
+                        }
+                    }
+
+                    if (currentCountdownSeconds <= 0) {
+                        clearInterval(flashCountdownInterval);
+                        flashCountdownInterval = null;
+                        setTimeout(() => {
+                            loadFlashDropConfig();
+                        }, 1000);
+                    }
+                };
+
+                renderTimer();
+
+                flashCountdownInterval = setInterval(() => {
+                    currentCountdownSeconds--;
+                    renderTimer();
+                }, 1000);
+            }
+
+            function applyFlashConfigToUI(cfg) {
+                const mode = cfg.mode === 'manual' ? 'manual' : 'random';
+                const isManual = mode === 'manual';
+
+                // Set radios
+                const radRandom = document.getElementById('fd_mode_random');
+                const radManual = document.getElementById('fd_mode_manual');
+                if (radRandom && radManual) {
+                    radRandom.checked = !isManual;
+                    radManual.checked = isManual;
+                }
+
+                // Manual controls card
+                const manualCard = document.getElementById('fd_manual_settings_card');
+                if (manualCard) {
+                    manualCard.style.display = isManual ? 'block' : 'none';
+                }
+
+                // Product Select
+                const select = document.getElementById('fd_product_select');
+                if (select && cfg.product_id) {
+                    select.value = cfg.product_id;
+                    onFlashProductSelect();
+                }
+
+                // Cycle duration for random mode
+                const randHours = document.getElementById('fd_random_hours');
+                if (randHours) randHours.value = cfg.duration_hours !== undefined ? cfg.duration_hours : 6;
+
+                const randMins = document.getElementById('fd_random_mins');
+                if (randMins) randMins.value = cfg.duration_mins !== undefined ? cfg.duration_mins : 0;
+
+                // Duration for manual spotlight
+                const durHours = document.getElementById('fd_duration_hours');
+                if (durHours) durHours.value = cfg.duration_hours !== undefined ? cfg.duration_hours : 6;
+
+                const durMins = document.getElementById('fd_duration_mins');
+                if (durMins) durMins.value = cfg.duration_mins !== undefined ? cfg.duration_mins : 0;
+
+                // Active product (rotating kurti or manual selection)
+                const activeProd = getActiveFlashProduct();
+
+                // Scarcity & Copy (Section 3) - prefilled from active product or saved custom overrides
+                const badgeInput = document.getElementById('fd_badge_text');
+                if (badgeInput) badgeInput.value = cfg.badge_text || 'SELLING FAST';
+
+                const remStockInput = document.getElementById('fd_remaining_stock');
+                if (remStockInput) {
+                    if (cfg.remaining_stock !== undefined && cfg.remaining_stock !== null && cfg.remaining_stock > 0) {
+                        remStockInput.value = cfg.remaining_stock;
+                    } else {
+                        remStockInput.value = Math.max(1, Math.min(activeProd?.stock || 5, 8));
+                    }
+                }
+
+                const totalStockInput = document.getElementById('fd_total_stock');
+                if (totalStockInput) totalStockInput.value = cfg.total_stock !== undefined ? cfg.total_stock : 25;
+
+                const titleInput = document.getElementById('fd_title');
+                if (titleInput) titleInput.value = cfg.title !== undefined ? cfg.title : 'Customer Favorite: ';
+
+                const highlightInput = document.getElementById('fd_highlight');
+                if (highlightInput) {
+                    if (cfg.highlight && cfg.highlight.trim() !== '') {
+                        highlightInput.value = cfg.highlight;
+                    } else {
+                        highlightInput.value = activeProd?.name || 'Pink Paisley Cotton Kurti';
+                    }
+                }
+
+                const descInput = document.getElementById('fd_desc');
+                if (descInput) {
+                    if (cfg.desc && cfg.desc.trim() !== '') {
+                        descInput.value = cfg.desc;
+                    } else {
+                        descInput.value = activeProd?.description || `Crafted in 100% soft breathable ${activeProd?.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
+                    }
+                }
+
+                const featureInput = document.getElementById('fd_feature_text');
+                if (featureInput) {
+                    if (cfg.feature_text && cfg.feature_text.trim() !== '') {
+                        featureInput.value = cfg.feature_text;
+                    } else {
+                        featureInput.value = activeProd?.fabric ? `100% Pure Breathable ${activeProd.fabric}` : '100% Pure Breathable Cotton';
+                    }
+                }
+
+                updateFlashStatusBadge(cfg);
+                highlightSelectedModeCard();
+                onRandomCycleInput();
+                updateCalculatedExpiry();
+                updatePreviewCard();
+
+                // Start live countdown timer synchronized with DB
+                startAdminFlashCountdown(
+                    cfg.hours_left !== undefined ? cfg.hours_left : 0,
+                    cfg.minutes_left !== undefined ? cfg.minutes_left : 0,
+                    cfg.seconds_left !== undefined ? cfg.seconds_left : 0
+                );
+            }
+
+            function updateFlashStatusBadge(cfg) {
+                const statusText = document.getElementById('fdStatusText');
+                const statusBadge = document.getElementById('fdStatusBadge');
+                if (!statusText || !statusBadge) return;
+
+                const h = cfg.hours_left !== undefined ? cfg.hours_left : 0;
+                const m = cfg.minutes_left !== undefined ? cfg.minutes_left : 0;
+
+                if (cfg.mode === 'manual' && cfg.product_id) {
+                    const prod = flashProductsList.find(p => String(p.id) === String(cfg.product_id));
+                    const name = prod ? prod.name : 'Selected Kurti';
+                    statusBadge.style.background = '#ECFDF5';
+                    statusBadge.style.color = '#065F46';
+                    statusBadge.style.borderColor = '#A7F3D0';
+                    statusText.innerHTML = `🎯 <strong>Spotlight Active:</strong> ${name} (${h}h ${m}m left before auto-revert)`;
+                } else {
+                    statusBadge.style.background = '#EFF6FF';
+                    statusBadge.style.color = '#1E40AF';
+                    statusBadge.style.borderColor = '#BFDBFE';
+                    statusText.innerHTML = `🔀 <strong>Auto Rotation Active:</strong> Randomly rotating products from DB (${h}h ${m}m left in cycle)`;
+                }
+            }
+
+            function onRandomCycleInput() {
+                const hours = parseInt(document.getElementById('fd_random_hours')?.value) || 0;
+                const mins = parseInt(document.getElementById('fd_random_mins')?.value) || 0;
+                const totalMins = (hours * 60) + mins;
+                const cycleDesc = document.getElementById('fd_random_cycle_desc');
+                if (cycleDesc) {
+                    if (totalMins <= 0) {
+                        cycleDesc.innerText = "Please specify a cycle interval greater than 0 mins.";
+                        cycleDesc.style.color = "#DC2626";
+                    } else {
+                        let desc = "";
+                        if (hours > 0 && mins > 0) desc = `${hours} hours and ${mins} mins`;
+                        else if (hours > 0) desc = `${hours} hours`;
+                        else desc = `${mins} minutes`;
+                        cycleDesc.innerText = `Each random kurti from the catalog will remain spotlighted for ${desc} before automatically cycling to the next.`;
+                        cycleDesc.style.color = "#666";
+                    }
+                }
+            }
+
+            function populateSection3FromActiveProduct(force = false) {
+                const activeProd = getActiveFlashProduct();
+                if (!activeProd) return;
+
+                const badgeInput = document.getElementById('fd_badge_text');
+                const remStockInput = document.getElementById('fd_remaining_stock');
+                const titleInput = document.getElementById('fd_title');
+                const highlightInput = document.getElementById('fd_highlight');
+                const descInput = document.getElementById('fd_desc');
+                const featureInput = document.getElementById('fd_feature_text');
+
+                if (badgeInput && (force || !badgeInput.value)) {
+                    badgeInput.value = 'SELLING FAST';
+                }
+                if (remStockInput && (force || !remStockInput.value)) {
+                    remStockInput.value = Math.max(1, Math.min(activeProd.stock || 5, 8));
+                }
+                if (titleInput && (force || !titleInput.value)) {
+                    titleInput.value = 'Customer Favorite: ';
+                }
+                if (highlightInput && (force || !highlightInput.value)) {
+                    highlightInput.value = activeProd.name;
+                }
+                if (descInput && (force || !descInput.value)) {
+                    descInput.value = activeProd.description || `Crafted in 100% soft breathable ${activeProd.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
+                }
+                if (featureInput && (force || !featureInput.value)) {
+                    featureInput.value = activeProd.fabric ? `100% Pure Breathable ${activeProd.fabric}` : '100% Pure Breathable Cotton';
+                }
+
+                updatePreviewCard();
+                if (force) {
+                    showAdminAlert(`Section 3 fields populated with active Kurti (${activeProd.name}) details!`, "Defaults Applied", "success");
+                }
+            }
+
+            function onFlashModeChange() {
+                const isManual = document.getElementById('fd_mode_manual').checked;
+                const manualCard = document.getElementById('fd_manual_settings_card');
+                if (manualCard) {
+                    manualCard.style.display = isManual ? 'block' : 'none';
+                }
+
+                highlightSelectedModeCard();
+                if (!isManual) {
+                    populateSection3FromActiveProduct(false);
+                } else {
+                    onFlashProductSelect();
+                }
+                updateCalculatedExpiry();
+                updatePreviewCard();
+            }
+
+            function highlightSelectedModeCard() {
+                const isManual = document.getElementById('fd_mode_manual')?.checked;
+                const cardRandom = document.getElementById('card_mode_random');
+                const cycleBox = document.getElementById('fd_random_cycle_box');
+                const lblManual = document.getElementById('lbl_mode_manual');
+
+                if (cardRandom) {
+                    cardRandom.style.borderColor = !isManual ? '#D4A373' : '#E5E7EB';
+                    cardRandom.style.background = !isManual ? '#FAF5EE' : '#FAF9F6';
+                }
+                if (cycleBox) {
+                    cycleBox.style.display = !isManual ? 'block' : 'none';
+                }
+                if (lblManual) {
+                    lblManual.style.borderColor = isManual ? '#D4A373' : '#E5E7EB';
+                    lblManual.style.background = isManual ? '#FAF5EE' : '#FAF9F6';
+                }
+
+                const pvBadge = document.getElementById('pv_mode_badge');
+                if (pvBadge) {
+                    pvBadge.innerText = isManual ? 'Specific Spotlight (Auto-Expiry)' : 'Random Rotation';
+                    pvBadge.style.background = isManual ? '#FEF3C7' : '#E0E7FF';
+                    pvBadge.style.color = isManual ? '#B45309' : '#3730A3';
+                }
+            }
+
+            function onFlashProductSelect() {
+                const select = document.getElementById('fd_product_select');
+                const summaryCard = document.getElementById('fd_product_summary');
+                if (!select || !summaryCard) return;
+
+                const prodId = select.value;
+                const prod = flashProductsList.find(p => String(p.id) === String(prodId));
+
+                if (prod) {
+                    summaryCard.style.display = 'flex';
+                    document.getElementById('fd_summary_img').src = prod.imageUrl;
+                    document.getElementById('fd_summary_name').innerText = prod.name;
+                    document.getElementById('fd_summary_price').innerText = Number(prod.price).toLocaleString('en-IN');
+                    document.getElementById('fd_summary_stock').innerText = prod.stock || 0;
+
+                    // Auto-fill Section 3 inputs with chosen product details
+                    const hl = document.getElementById('fd_highlight');
+                    if (hl) hl.value = prod.name;
+
+                    const desc = document.getElementById('fd_desc');
+                    if (desc) desc.value = prod.description || `Crafted in 100% soft breathable ${prod.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
+
+                    const remStock = document.getElementById('fd_remaining_stock');
+                    if (remStock) remStock.value = Math.max(1, Math.min(prod.stock || 5, 8));
+
+                    const feat = document.getElementById('fd_feature_text');
+                    if (feat) feat.value = prod.fabric ? `100% Pure Breathable ${prod.fabric}` : '100% Pure Breathable Cotton';
+                } else {
+                    summaryCard.style.display = 'none';
+                }
+
+                updatePreviewCard();
+            }
+
+            function updateCalculatedExpiry() {
+                const hours = parseInt(document.getElementById('fd_duration_hours')?.value) || 0;
+                const mins = parseInt(document.getElementById('fd_duration_mins')?.value) || 0;
+                const totalMinutes = (hours * 60) + mins;
+
+                const previewSpan = document.getElementById('fd_expiry_time_preview');
+                if (!previewSpan) return;
+
+                if (totalMinutes <= 0) {
+                    previewSpan.innerText = "Please specify a duration greater than 0 mins";
+                    return;
+                }
+
+                const future = new Date(Date.now() + totalMinutes * 60 * 1000);
+                const timeStr = future.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const isToday = future.toDateString() === new Date().toDateString();
+                const datePrefix = isToday ? "Today" : future.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+                let durDesc = "";
+                if (hours > 0 && mins > 0) durDesc = `${hours} hours and ${mins} mins`;
+                else if (hours > 0) durDesc = `${hours} hours`;
+                else durDesc = `${mins} minutes`;
+
+                previewSpan.innerText = `${datePrefix} at ${timeStr} (in ${durDesc})`;
+            }
+
+            function updatePreviewCard() {
+                const activeProduct = getActiveFlashProduct();
+                if (!activeProduct) return;
+
+                const pvImg = document.getElementById('pv_img');
+                if (pvImg && activeProduct.imageUrl) pvImg.src = activeProduct.imageUrl;
+
+                const badgeVal = document.getElementById('fd_badge_text')?.value || 'SELLING FAST';
+                const pvBadge = document.getElementById('pv_badge');
+                if (pvBadge) pvBadge.innerText = badgeVal;
+
+                const titleVal = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
+                const pvTitle = document.getElementById('pv_title_prefix');
+                if (pvTitle) pvTitle.innerText = titleVal;
+
+                const customHl = document.getElementById('fd_highlight')?.value;
+                const pvHl = document.getElementById('pv_highlight');
+                if (pvHl) {
+                    pvHl.innerText = (customHl && customHl.trim() !== '') ? customHl : activeProduct.name;
+                }
+
+                const descVal = document.getElementById('fd_desc')?.value;
+                const pvDesc = document.getElementById('pv_desc');
+                if (pvDesc) {
+                    pvDesc.innerText = (descVal && descVal.trim() !== '')
+                        ? descVal
+                        : (activeProduct.description || `Crafted in 100% soft breathable ${activeProduct.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`);
+                }
+
+                const rem = parseInt(document.getElementById('fd_remaining_stock')?.value) || Math.max(1, Math.min(activeProduct.stock || 5, 8));
+                const tot = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
+
+                const pvRem = document.getElementById('pv_remaining');
+                if (pvRem) pvRem.innerText = rem;
+
+                const pvBar = document.getElementById('pv_meter_bar');
+                if (pvBar) {
+                    const pct = Math.min(100, Math.max(10, Math.round(((tot - rem) / tot) * 100)));
+                    pvBar.style.width = `${pct}%`;
+                }
+
+                const pvPrice = document.getElementById('pv_price');
+                if (pvPrice) pvPrice.innerText = Number(activeProduct.price).toLocaleString('en-IN');
+
+                const featVal = document.getElementById('fd_feature_text')?.value;
+                const pvFeat = document.getElementById('pv_feature');
+                if (pvFeat) {
+                    pvFeat.innerText = (featVal && featVal.trim() !== '')
+                        ? featVal
+                        : (activeProduct.fabric ? `100% Pure Breathable ${activeProduct.fabric}` : '100% Pure Breathable Cotton');
+                }
+            }
+
+            async function saveFlashDropConfig() {
+                console.log("[FLASH DROP] saveFlashDropConfig clicked");
+                const saveBtn = document.getElementById('fdSaveBtn');
+                let originalText = saveBtn ? saveBtn.innerHTML : '<span>⚡ Save & Publish Flash Drop Settings</span>';
+
+                try {
+                    const isManual = document.getElementById('fd_mode_manual')?.checked ?? false;
+                    const mode = isManual ? 'manual' : 'random';
+                    const productId = document.getElementById('fd_product_select')?.value || '';
+
+                    let durationHours = 6;
+                    let durationMins = 0;
+
+                    if (isManual) {
+                        durationHours = parseInt(document.getElementById('fd_duration_hours')?.value) || 0;
+                        durationMins = parseInt(document.getElementById('fd_duration_mins')?.value) || 0;
+
+                        if (!productId) {
+                            showAdminAlert("Please choose a Kurti from the catalog to spotlight, or switch to 'Randomly Rotate Products from DB'.", "Select a Product", "warning");
+                            document.getElementById('fd_product_select')?.focus();
+                            return;
+                        }
+                        if (durationHours === 0 && durationMins === 0) {
+                            showAdminAlert("Please specify a duration greater than 0 minutes for the spotlight timer.", "Duration Required", "warning");
+                            document.getElementById('fd_duration_hours')?.focus();
+                            return;
+                        }
+                    } else {
+                        durationHours = parseInt(document.getElementById('fd_random_hours')?.value) || 0;
+                        durationMins = parseInt(document.getElementById('fd_random_mins')?.value) || 0;
+
+                        if (durationHours === 0 && durationMins === 0) {
+                            durationHours = 6;
+                            durationMins = 0;
+                        }
+                    }
+
+                    const badgeText = document.getElementById('fd_badge_text')?.value?.trim() || 'SELLING FAST';
+                    const remainingStock = parseInt(document.getElementById('fd_remaining_stock')?.value) || 4;
+                    const totalStock = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
+                    const title = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
+                    const highlight = document.getElementById('fd_highlight')?.value?.trim() || '';
+                    const desc = document.getElementById('fd_desc')?.value?.trim() || '';
+                    const featureText = document.getElementById('fd_feature_text')?.value?.trim() || '100% Pure Breathable Cotton';
+
+                    if (saveBtn) {
+                        saveBtn.disabled = true;
+                        saveBtn.innerHTML = `<span>Saving & Publishing...</span>`;
+                    }
+
+                    const activeProduct = getActiveFlashProduct();
+                    const activeProdId = isManual
+                        ? productId
+                        : (activeProduct?.id || (flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())?.id || ''));
+                    const matchedProduct = flashProductsList.find(p => String(p.id) === String(activeProdId))
+                        || flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())
+                        || activeProduct;
+                    const activeImageUrl = matchedProduct?.imageUrl || activeProduct?.imageUrl || '';
+                    const activePrice = Number(matchedProduct?.price) || Number(activeProduct?.price) || 0;
+                    const activeOrigPrice = Number(matchedProduct?.originalPrice) || Number(activeProduct?.originalPrice) || 0;
+
+                    const payload = {
+                        mode: mode,
+                        product_id: activeProdId,
+                        image_url: activeImageUrl,
+                        price: activePrice,
+                        original_price: activeOrigPrice,
+                        duration_hours: durationHours,
+                        duration_mins: durationMins,
+                        badge_text: badgeText,
+                        remaining_stock: remainingStock,
+                        total_stock: totalStock,
+                        title: title,
+                        highlight: highlight,
+                        desc: desc,
+                        feature_text: featureText
+                    };
+
+                    console.log("[FLASH DROP] Sending payload to API:", payload);
+
+                    const res = await fetch(API_BASE_URL + '/api/admin/config/flash-drop', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || errData.message || `HTTP ${res.status}`);
+                    }
+
+                    const resData = await res.json();
+                    console.log("[FLASH DROP] Save success, response:", resData);
+
+                    const successMsg = isManual
+                        ? `Flash Spotlight Drop activated for selected Kurti! It will run for ${durationHours}h ${durationMins}m and then automatically revert back to random rotation.`
+                        : `Flash Spotlight Drop configured with ${durationHours}h ${durationMins}m rotation cycle and published successfully!`;
+
+                    showAdminAlert(successMsg, "Flash Drop Published!", "success");
+                    await loadFlashDropConfig();
+                } catch (err) {
+                    console.error("[FLASH DROP] Save failed:", err);
+                    showAdminAlert("Failed to save Flash Drop configuration: " + err.message, "Save Error", "error");
+                } finally {
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = originalText;
+                    }
+                }
+            }
+
+            window.loadFlashDropConfig = loadFlashDropConfig;
+            window.onFlashModeChange = onFlashModeChange;
+            window.onFlashProductSelect = onFlashProductSelect;
+            window.onRandomCycleInput = onRandomCycleInput;
+            window.populateSection3FromActiveProduct = populateSection3FromActiveProduct;
+            window.updateCalculatedExpiry = updateCalculatedExpiry;
+            window.updatePreviewCard = updatePreviewCard;
+            window.saveFlashDropConfig = saveFlashDropConfig;
+
+
+
+
+
+            // ==========================================
+            // PREORDER STORE PICKUP & DELIVERY MANAGEMENT
+            // ==========================================
+
+            let currentPreorderFilter = '';
+            let allPreorderOrders = [];
+
+            function handlePreorderToggleChange(checked) {
+                const chk = document.getElementById('preorderPickup_enabled');
+                if (chk && chk.checked !== !!checked) {
+                    chk.checked = !!checked;
+                }
+
+                const wrapper = document.getElementById('preorderToggleWrapper');
+                const badge = document.getElementById('preorderConfigStatusBadge');
+                const stateBadge = document.getElementById('preorderToggleStateBadge');
+                const subtitle = document.getElementById('preorderToggleSubtitle');
+
+                if (checked) {
+                    if (wrapper) {
+                        wrapper.style.borderColor = '#86efac';
+                        wrapper.style.background = '#f0fdf4';
+                    }
+                    if (stateBadge) {
+                        stateBadge.innerText = 'ACTIVE';
+                        stateBadge.style.background = '#dcfce7';
+                        stateBadge.style.color = '#15803d';
+                    }
+                    if (badge) {
+                        badge.innerHTML = '<span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #15803d;"></span> Store Pickup: ACTIVE';
+                        badge.style.background = '#dcfce7';
+                        badge.style.color = '#15803d';
+                    }
+                    if (subtitle) {
+                        subtitle.innerText = 'Store pickup is ENABLED. Hyderabad customers can select free in-store pickup during preorder checkout.';
+                    }
+                } else {
+                    if (wrapper) {
+                        wrapper.style.borderColor = '#e2e8f0';
+                        wrapper.style.background = '#ffffff';
+                    }
+                    if (stateBadge) {
+                        stateBadge.innerText = 'DISABLED';
+                        stateBadge.style.background = '#fee2e2';
+                        stateBadge.style.color = '#b91c1c';
+                    }
+                    if (badge) {
+                        badge.innerHTML = '<span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #b91c1c;"></span> Store Pickup: DISABLED';
+                        badge.style.background = '#fee2e2';
+                        badge.style.color = '#b91c1c';
+                    }
+                    if (subtitle) {
+                        subtitle.innerText = 'Store pickup is DISABLED. Preorder customers will only have Home Delivery available.';
+                    }
+                }
+            }
+
+            function quickTogglePreorderPickup() {
+                const chk = document.getElementById('preorderPickup_enabled');
+                if (chk) {
+                    chk.checked = !chk.checked;
+                    handlePreorderToggleChange(chk.checked);
+                }
+            }
+
+            async function loadPreorderPickupConfig() {
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/config/preorder-pickup`);
+                    if (!res.ok) return;
+                    const cfg = await res.json();
+
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.value = val || '';
+                    };
+                    const setCheck = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.checked = !!val;
+                    };
+
+                    setCheck('preorderPickup_enabled', cfg.enabled);
+                    handlePreorderToggleChange(!!cfg.enabled);
+
+                    setVal('preorderPickup_locationName', cfg.locationName);
+                    setVal('preorderPickup_address', cfg.address);
+                    setVal('preorderPickup_city', cfg.city);
+                    setVal('preorderPickup_state', cfg.state);
+                    setVal('preorderPickup_zipCode', cfg.zipCode);
+                    setVal('preorderPickup_mapsLink', cfg.mapsLink);
+                    setVal('preorderPickup_instructions', cfg.instructions);
+                    setVal('preorderPickup_availability', cfg.availability);
+                    setVal('preorderPickup_contactInfo', cfg.contactInfo);
+                    setVal('preorderPickup_estimatedPickupDate', cfg.estimatedPickupDate);
+                    setVal('preorderPickup_collectionDeadline', cfg.collectionDeadline);
+                } catch (e) {
+                    console.error('Failed to load preorder pickup config:', e);
+                }
+            }
+
+            async function savePreorderPickupConfig(e) {
+                if (e) e.preventDefault();
+                const getVal = (id) => {
+                    const el = document.getElementById(id);
+                    return el ? el.value.trim() : '';
+                };
+                const getCheck = (id) => {
+                    const el = document.getElementById(id);
+                    return el ? el.checked : false;
+                };
+
+                const payload = {
+                    enabled: getCheck('preorderPickup_enabled'),
+                    locationName: getVal('preorderPickup_locationName'),
+                    address: getVal('preorderPickup_address'),
+                    city: getVal('preorderPickup_city'),
+                    state: getVal('preorderPickup_state'),
+                    zipCode: getVal('preorderPickup_zipCode'),
+                    mapsLink: getVal('preorderPickup_mapsLink'),
+                    instructions: getVal('preorderPickup_instructions'),
+                    availability: getVal('preorderPickup_availability'),
+                    contactInfo: getVal('preorderPickup_contactInfo'),
+                    estimatedPickupDate: getVal('preorderPickup_estimatedPickupDate'),
+                    collectionDeadline: getVal('preorderPickup_collectionDeadline')
+                };
+
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/config/preorder-pickup`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        const feedback = document.getElementById('preorderSaveFeedback');
+                        if (feedback) {
+                            feedback.innerText = '✓ Configuration saved & applied!';
+                            feedback.style.display = 'inline-block';
+                            setTimeout(() => { feedback.style.display = 'none'; }, 3500);
+                        }
+                        alert('Preorder Pickup configuration saved successfully!');
+                        loadPreorderPickupConfig();
+                    } else {
+                        const err = await res.text();
+                        alert('Failed to save configuration: ' + err);
+                    }
+                } catch (err) {
+                    alert('Error saving configuration: ' + err.message);
+                }
+            }
+
+            async function loadPreorderOrders(filter) {
+                currentPreorderFilter = filter;
+                document.querySelectorAll('.preorder-filter-btn').forEach(btn => {
+                    const isActive = btn.getAttribute('data-filter') === filter;
+                    btn.classList.toggle('active', isActive);
+                    btn.style.background = isActive ? '#1e293b' : 'white';
+                    btn.style.color = isActive ? 'white' : '#475569';
+                });
+
+                const tbody = document.getElementById('preorderOrdersTableBody');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 2rem;">Loading orders...</td></tr>';
+
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/preorder/orders?filter=${encodeURIComponent(filter)}`, {
+                        headers: getAuthHeader()
+                    });
+                    if (!res.ok) throw new Error('Failed to fetch orders');
+                    const data = await res.json();
+                    allPreorderOrders = data.orders || [];
+                    renderPreorderOrdersTable(allPreorderOrders);
+                } catch (err) {
+                    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #ef4444; padding: 2rem;">Error: ${err.message}</td></tr>`;
+                }
+            }
+
+            function renderPreorderOrdersTable(orders) {
+                const tbody = document.getElementById('preorderOrdersTableBody');
+                if (!tbody) return;
+
+                if (!orders || orders.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 2rem;">No preorder orders found for this filter.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = orders.map(o => {
+                    const id = o.id || o.ID || '';
+                    const email = o.customerEmail || o.CustomerEmail || '';
+                    const name = o.shippingName || o.ShippingName || '';
+                    const amount = o.totalAmount || o.TotalAmount || 0;
+                    const status = o.status || o.Status || '';
+                    const fType = o.fulfilmentType || o.FulfilmentType || '';
+                    const dateStr = (o.createdAt || o.CreatedAt || '').substring(0, 10);
+
+                    let fBadge = '<span style="color: #64748b;">Standard</span>';
+                    if (fType === 'PREORDER_STORE_PICKUP') {
+                        fBadge = '<span style="background: #f3e8ff; color: #7e22ce; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">🏪 Store Pickup</span>';
+                    } else if (fType === 'PREORDER_HOME_DELIVERY') {
+                        fBadge = '<span style="background: #dbeafe; color: #1d4ed8; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">🚚 Home Delivery</span>';
+                    }
+
+                    let sBadge = `<span style="background: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">${status}</span>`;
+                    if (status === 'READY_FOR_PICKUP') {
+                        sBadge = '<span style="background: #dcfce7; color: #15803d; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">✅ Ready for Pickup</span>';
+                    } else if (status === 'COLLECTED') {
+                        sBadge = '<span style="background: #f0fdf4; color: #166534; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">🎉 Collected</span>';
+                    } else if (status === 'AWAITING_PICKUP') {
+                        sBadge = '<span style="background: #fef3c7; color: #b45309; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">⏳ Awaiting Pickup</span>';
+                    } else if (status === 'paid') {
+                        sBadge = '<span style="background: #e0e7ff; color: #4338ca; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">Paid (In Production)</span>';
+                    }
+
+                    let actionBtns = `<button type="button" onclick="viewPreorderAudit('${id}')" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-left: 4px;">Audit</button>`;
+
+                    if (fType === 'PREORDER_STORE_PICKUP') {
+                        if (status !== 'READY_FOR_PICKUP' && status !== 'COLLECTED' && status !== 'cancelled' && status !== 'payment_failed') {
+                            actionBtns = `<button type="button" onclick="markPreorderReady('${id}')" style="background: #10b981; border: none; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">Mark Ready</button>` + actionBtns;
+                        } else if (status === 'READY_FOR_PICKUP') {
+                            actionBtns = `<button type="button" onclick="confirmPreorderPickup('${id}')" style="background: #7c3aed; border: none; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">Confirm Collected</button>` + actionBtns;
+                        }
+                    }
+
+                    return `
+            <tr>
+                <td><strong style="font-size: 0.85rem; font-family: monospace;">${id}</strong></td>
+                <td>
+                    <div style="font-weight: 600; font-size: 0.88rem; color: #1e293b;">${name || 'Customer'}</div>
+                    <div style="font-size: 0.78rem; color: #64748b;">${email}</div>
+                </td>
+                <td>${fBadge}</td>
+                <td>${sBadge}</td>
+                <td><strong>₹${amount.toLocaleString('en-IN')}</strong></td>
+                <td style="font-size: 0.85rem; color: #64748b;">${dateStr}</td>
+                <td style="text-align: right;">${actionBtns}</td>
+            </tr>
+        `;
+                }).join('');
+            }
+
+            async function markPreorderReady(orderId) {
+                if (!confirm(`Mark preorder ${orderId} as READY FOR PICKUP? This will trigger the ready-for-pickup customer notification.`)) return;
+
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/preorder/mark-ready`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify({ orderId })
+                    });
+                    if (res.ok) {
+                        alert('Order marked as READY FOR PICKUP! Customer notification sent.');
+                        loadPreorderOrders(currentPreorderFilter);
+                    } else {
+                        const err = await res.text();
+                        alert('Failed: ' + err);
+                    }
+                } catch (e) {
+                    alert('Error: ' + e.message);
+                }
+            }
+
+            async function markAllPreordersReady() {
+                const eligible = (allPreorderOrders || []).filter(o => {
+                    const fType = o.fulfilmentType || o.FulfilmentType || '';
+                    const status = o.status || o.Status || '';
+                    return fType === 'PREORDER_STORE_PICKUP' && status !== 'READY_FOR_PICKUP' && status !== 'COLLECTED' && status !== 'cancelled' && status !== 'payment_failed';
+                });
+
+                const count = eligible.length;
+                const confirmMsg = count > 0
+                    ? `Mark ${count} eligible store pickup order(s) as READY FOR PICKUP? This will update their status and trigger customer ready notifications.`
+                    : `Mark all eligible store pickup preorder orders as READY FOR PICKUP?`;
+
+                if (!confirm(confirmMsg)) return;
+
+                const btn = document.getElementById('markAllReadyBtn');
+                const oldHtml = btn ? btn.innerHTML : '';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerText = 'Marking Ready...';
+                }
+
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/preorder/mark-all-ready`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        }
                     });
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.thumbnail) {
-                            r.thumbnail = data.thumbnail;
-                            if (data.reelCode && !r.reel_code) r.reel_code = data.reelCode;
-                            updatedCount++;
-                        }
+                        alert(data.message || `Successfully marked ${data.count || count} orders as READY FOR PICKUP!`);
+                        loadPreorderOrders(currentPreorderFilter);
+                    } else {
+                        const err = await res.text();
+                        alert('Failed to mark all as ready: ' + err);
                     }
                 } catch (e) {
-                    console.warn("Error syncing reel thumbnail for", url, e);
+                    alert('Network error: ' + e.message);
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = oldHtml;
+                    }
                 }
             }
-        }
 
-        if (updatedCount > 0) {
-            await saveInstagramConfigToBackend();
-            renderReelsList();
-            showAdminAlert(`Successfully synced ${updatedCount} Instagram Reel thumbnails!`, 'Thumbnails Synced', 'success');
-        } else {
-            showAdminAlert('No thumbnails needed syncing.', 'Info', 'info');
-        }
-    } catch (err) {
-        showAdminAlert('Sync failed: ' + err.message, 'Error', 'error');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        }
-    }
-}
+            async function confirmPreorderPickup(orderId) {
+                const notes = prompt(`Confirm in-store collection for order ${orderId}.
 
-window.loadInstagramReels = loadInstagramReels;
-window.renderReelsList = renderReelsList;
-window.openAddReelModal = openAddReelModal;
-window.openEditReelModal = openEditReelModal;
-window.handleReelUrlInput = handleReelUrlInput;
-window.handleReelProductSelect = handleReelProductSelect;
-window.useProductImageAsThumbnail = useProductImageAsThumbnail;
-window.updateReelThumbPreview = updateReelThumbPreview;
-window.handleSaveReel = handleSaveReel;
-window.deleteReel = deleteReel;
-window.moveReel = moveReel;
-window.saveInstagramGlobalSettings = saveInstagramGlobalSettings;
-window.fetchReelThumbnailFromInsta = fetchReelThumbnailFromInsta;
-window.syncAllInstaThumbnails = syncAllInstaThumbnails;
+Enter operator notes (optional):`);
+                if (notes === null) return;
 
-// ==========================================
-// FLASH SPOTLIGHT DROP CONFIGURATION
-// ==========================================
-let currentFlashConfig = null;
-let flashProductsList = [];
-let flashCountdownInterval = null;
-let currentCountdownSeconds = 0;
-
-async function loadFlashDropConfig() {
-    const statusText = document.getElementById('fdStatusText');
-    if (statusText) statusText.innerText = "Loading Flash Drop Status...";
-
-    try {
-        const [hpRes, prodRes] = await Promise.all([
-            fetch(API_BASE_URL + '/api/config/homepage'),
-            fetch(API_BASE_URL + '/api/products')
-        ]);
-
-        if (prodRes.ok) {
-            flashProductsList = await prodRes.json();
-            populateFlashProductDropdown(flashProductsList);
-        }
-
-        if (hpRes.ok) {
-            const hpData = await hpRes.json();
-            currentFlashConfig = hpData.flash_drop || {};
-            applyFlashConfigToUI(currentFlashConfig);
-        }
-    } catch (err) {
-        console.error("Failed to load flash drop config:", err);
-        if (statusText) statusText.innerText = "Error loading settings";
-    }
-}
-
-function populateFlashProductDropdown(products) {
-    const select = document.getElementById('fd_product_select');
-    if (!select) return;
-
-    const currentVal = select.value;
-    select.innerHTML = '<option value="">-- Select a Kurti from Live Catalog --</option>';
-
-    products.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = `${p.name} — ₹${p.price} (${p.stock} in stock)`;
-        select.appendChild(opt);
-    });
-
-    if (currentVal) select.value = currentVal;
-}
-
-function getActiveFlashProduct() {
-    const isManual = document.getElementById('fd_mode_manual')?.checked;
-    const prodId = document.getElementById('fd_product_select')?.value;
-    
-    if (isManual && prodId) {
-        const manualProd = flashProductsList.find(p => String(p.id) === String(prodId));
-        if (manualProd) return manualProd;
-    }
-    
-    // Random mode: find the currently rotating product matching storefront Home.jsx deterministic cycle
-    const durHours = parseInt(document.getElementById('fd_random_hours')?.value) ?? 6;
-    const durMins = parseInt(document.getElementById('fd_random_mins')?.value) ?? 0;
-    const totalCycleMins = (durHours * 60) + durMins;
-    const cycleMs = (totalCycleMins > 0 ? totalCycleMins : 360) * 60 * 1000;
-    const cycleStart = currentFlashConfig?.cycle_started_at 
-        ? new Date(currentFlashConfig.cycle_started_at).getTime() 
-        : 0;
-    const elapsedMs = Math.max(0, Date.now() - cycleStart);
-    const cycleBlock = Math.floor(elapsedMs / cycleMs);
-
-    const inStockKurtis = flashProductsList.filter(p => {
-        const cat = (p.category || '').toLowerCase();
-        const name = (p.name || '').toLowerCase();
-        const isKurti = cat.includes('kurti') || cat.includes('tunic') || cat.includes('straight') || cat.includes('line') || name.includes('kurti');
-        return (p.stock || 0) > 0 && isKurti;
-    });
-    const pool = inStockKurtis.length > 0 
-        ? inStockKurtis 
-        : (flashProductsList.filter(p => (p.stock || 0) > 0).length > 0 ? flashProductsList.filter(p => (p.stock || 0) > 0) : flashProductsList);
-
-    if (pool.length === 0) {
-        return {
-            name: 'Pink Paisley Printed Straight Kurti',
-            price: 549,
-            imageUrl: './images/kurthi_peach.png',
-            stock: 5,
-            fabric: 'Cotton',
-            description: 'Crafted in 100% soft Jaipur cotton with vibrant floral paisley motifs.'
-        };
-    }
-
-    const index = Math.abs(cycleBlock) % pool.length;
-    return pool[index];
-}
-
-function startAdminFlashCountdown(hours, mins, secs) {
-    if (flashCountdownInterval) {
-        clearInterval(flashCountdownInterval);
-        flashCountdownInterval = null;
-    }
-
-    currentCountdownSeconds = (hours * 3600) + (mins * 60) + secs;
-
-    const renderTimer = () => {
-        if (currentCountdownSeconds < 0) currentCountdownSeconds = 0;
-        const h = Math.floor(currentCountdownSeconds / 3600);
-        const m = Math.floor((currentCountdownSeconds % 3600) / 60);
-        const s = currentCountdownSeconds % 60;
-
-        const pvHours = document.getElementById('pv_hours');
-        const pvMins = document.getElementById('pv_mins');
-        const pvSecs = document.getElementById('pv_secs');
-
-        if (pvHours) pvHours.innerText = String(h).padStart(2, '0');
-        if (pvMins) pvMins.innerText = String(m).padStart(2, '0');
-        if (pvSecs) pvSecs.innerText = String(s).padStart(2, '0');
-
-        const statusText = document.getElementById('fdStatusText');
-        if (statusText && currentFlashConfig) {
-            const isManual = currentFlashConfig.mode === 'manual';
-            if (isManual) {
-                const prod = flashProductsList.find(p => String(p.id) === String(currentFlashConfig.product_id));
-                const name = prod ? prod.name : 'Selected Kurti';
-                statusText.innerHTML = `🎯 <strong>Spotlight Active:</strong> ${name} (${h}h ${m}m ${s}s left before auto-revert)`;
-            } else {
-                statusText.innerHTML = `🔀 <strong>Auto Rotation Active:</strong> Randomly rotating products from DB (${h}h ${m}m ${s}s left in cycle)`;
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/preorder/confirm-pickup`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify({ orderId, notes: notes || '' })
+                    });
+                    if (res.ok) {
+                        alert('Order successfully marked as COLLECTED!');
+                        loadPreorderOrders(currentPreorderFilter);
+                    } else {
+                        const err = await res.text();
+                        alert('Failed: ' + err);
+                    }
+                } catch (e) {
+                    alert('Error: ' + e.message);
+                }
             }
-        }
 
-        if (currentCountdownSeconds <= 0) {
-            clearInterval(flashCountdownInterval);
-            flashCountdownInterval = null;
-            setTimeout(() => {
-                loadFlashDropConfig();
-            }, 1000);
-        }
-    };
-
-    renderTimer();
-
-    flashCountdownInterval = setInterval(() => {
-        currentCountdownSeconds--;
-        renderTimer();
-    }, 1000);
-}
-
-function applyFlashConfigToUI(cfg) {
-    const mode = cfg.mode === 'manual' ? 'manual' : 'random';
-    const isManual = mode === 'manual';
-
-    // Set radios
-    const radRandom = document.getElementById('fd_mode_random');
-    const radManual = document.getElementById('fd_mode_manual');
-    if (radRandom && radManual) {
-        radRandom.checked = !isManual;
-        radManual.checked = isManual;
-    }
-
-    // Manual controls card
-    const manualCard = document.getElementById('fd_manual_settings_card');
-    if (manualCard) {
-        manualCard.style.display = isManual ? 'block' : 'none';
-    }
-
-    // Product Select
-    const select = document.getElementById('fd_product_select');
-    if (select && cfg.product_id) {
-        select.value = cfg.product_id;
-        onFlashProductSelect();
-    }
-
-    // Cycle duration for random mode
-    const randHours = document.getElementById('fd_random_hours');
-    if (randHours) randHours.value = cfg.duration_hours !== undefined ? cfg.duration_hours : 6;
-
-    const randMins = document.getElementById('fd_random_mins');
-    if (randMins) randMins.value = cfg.duration_mins !== undefined ? cfg.duration_mins : 0;
-
-    // Duration for manual spotlight
-    const durHours = document.getElementById('fd_duration_hours');
-    if (durHours) durHours.value = cfg.duration_hours !== undefined ? cfg.duration_hours : 6;
-
-    const durMins = document.getElementById('fd_duration_mins');
-    if (durMins) durMins.value = cfg.duration_mins !== undefined ? cfg.duration_mins : 0;
-
-    // Active product (rotating kurti or manual selection)
-    const activeProd = getActiveFlashProduct();
-
-    // Scarcity & Copy (Section 3) - prefilled from active product or saved custom overrides
-    const badgeInput = document.getElementById('fd_badge_text');
-    if (badgeInput) badgeInput.value = cfg.badge_text || 'SELLING FAST';
-
-    const remStockInput = document.getElementById('fd_remaining_stock');
-    if (remStockInput) {
-        if (cfg.remaining_stock !== undefined && cfg.remaining_stock !== null && cfg.remaining_stock > 0) {
-            remStockInput.value = cfg.remaining_stock;
-        } else {
-            remStockInput.value = Math.max(1, Math.min(activeProd?.stock || 5, 8));
-        }
-    }
-
-    const totalStockInput = document.getElementById('fd_total_stock');
-    if (totalStockInput) totalStockInput.value = cfg.total_stock !== undefined ? cfg.total_stock : 25;
-
-    const titleInput = document.getElementById('fd_title');
-    if (titleInput) titleInput.value = cfg.title !== undefined ? cfg.title : 'Customer Favorite: ';
-
-    const highlightInput = document.getElementById('fd_highlight');
-    if (highlightInput) {
-        if (cfg.highlight && cfg.highlight.trim() !== '') {
-            highlightInput.value = cfg.highlight;
-        } else {
-            highlightInput.value = activeProd?.name || 'Pink Paisley Cotton Kurti';
-        }
-    }
-
-    const descInput = document.getElementById('fd_desc');
-    if (descInput) {
-        if (cfg.desc && cfg.desc.trim() !== '') {
-            descInput.value = cfg.desc;
-        } else {
-            descInput.value = activeProd?.description || `Crafted in 100% soft breathable ${activeProd?.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
-        }
-    }
-
-    const featureInput = document.getElementById('fd_feature_text');
-    if (featureInput) {
-        if (cfg.feature_text && cfg.feature_text.trim() !== '') {
-            featureInput.value = cfg.feature_text;
-        } else {
-            featureInput.value = activeProd?.fabric ? `100% Pure Breathable ${activeProd.fabric}` : '100% Pure Breathable Cotton';
-        }
-    }
-
-    updateFlashStatusBadge(cfg);
-    highlightSelectedModeCard();
-    onRandomCycleInput();
-    updateCalculatedExpiry();
-    updatePreviewCard();
-
-    // Start live countdown timer synchronized with DB
-    startAdminFlashCountdown(
-        cfg.hours_left !== undefined ? cfg.hours_left : 0,
-        cfg.minutes_left !== undefined ? cfg.minutes_left : 0,
-        cfg.seconds_left !== undefined ? cfg.seconds_left : 0
-    );
-}
-
-function updateFlashStatusBadge(cfg) {
-    const statusText = document.getElementById('fdStatusText');
-    const statusBadge = document.getElementById('fdStatusBadge');
-    if (!statusText || !statusBadge) return;
-
-    const h = cfg.hours_left !== undefined ? cfg.hours_left : 0;
-    const m = cfg.minutes_left !== undefined ? cfg.minutes_left : 0;
-
-    if (cfg.mode === 'manual' && cfg.product_id) {
-        const prod = flashProductsList.find(p => String(p.id) === String(cfg.product_id));
-        const name = prod ? prod.name : 'Selected Kurti';
-        statusBadge.style.background = '#ECFDF5';
-        statusBadge.style.color = '#065F46';
-        statusBadge.style.borderColor = '#A7F3D0';
-        statusText.innerHTML = `🎯 <strong>Spotlight Active:</strong> ${name} (${h}h ${m}m left before auto-revert)`;
-    } else {
-        statusBadge.style.background = '#EFF6FF';
-        statusBadge.style.color = '#1E40AF';
-        statusBadge.style.borderColor = '#BFDBFE';
-        statusText.innerHTML = `🔀 <strong>Auto Rotation Active:</strong> Randomly rotating products from DB (${h}h ${m}m left in cycle)`;
-    }
-}
-
-function onRandomCycleInput() {
-    const hours = parseInt(document.getElementById('fd_random_hours')?.value) || 0;
-    const mins = parseInt(document.getElementById('fd_random_mins')?.value) || 0;
-    const totalMins = (hours * 60) + mins;
-    const cycleDesc = document.getElementById('fd_random_cycle_desc');
-    if (cycleDesc) {
-        if (totalMins <= 0) {
-            cycleDesc.innerText = "Please specify a cycle interval greater than 0 mins.";
-            cycleDesc.style.color = "#DC2626";
-        } else {
-            let desc = "";
-            if (hours > 0 && mins > 0) desc = `${hours} hours and ${mins} mins`;
-            else if (hours > 0) desc = `${hours} hours`;
-            else desc = `${mins} minutes`;
-            cycleDesc.innerText = `Each random kurti from the catalog will remain spotlighted for ${desc} before automatically cycling to the next.`;
-            cycleDesc.style.color = "#666";
-        }
-    }
-}
-
-function populateSection3FromActiveProduct(force = false) {
-    const activeProd = getActiveFlashProduct();
-    if (!activeProd) return;
-
-    const badgeInput = document.getElementById('fd_badge_text');
-    const remStockInput = document.getElementById('fd_remaining_stock');
-    const titleInput = document.getElementById('fd_title');
-    const highlightInput = document.getElementById('fd_highlight');
-    const descInput = document.getElementById('fd_desc');
-    const featureInput = document.getElementById('fd_feature_text');
-
-    if (badgeInput && (force || !badgeInput.value)) {
-        badgeInput.value = 'SELLING FAST';
-    }
-    if (remStockInput && (force || !remStockInput.value)) {
-        remStockInput.value = Math.max(1, Math.min(activeProd.stock || 5, 8));
-    }
-    if (titleInput && (force || !titleInput.value)) {
-        titleInput.value = 'Customer Favorite: ';
-    }
-    if (highlightInput && (force || !highlightInput.value)) {
-        highlightInput.value = activeProd.name;
-    }
-    if (descInput && (force || !descInput.value)) {
-        descInput.value = activeProd.description || `Crafted in 100% soft breathable ${activeProd.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
-    }
-    if (featureInput && (force || !featureInput.value)) {
-        featureInput.value = activeProd.fabric ? `100% Pure Breathable ${activeProd.fabric}` : '100% Pure Breathable Cotton';
-    }
-
-    updatePreviewCard();
-    if (force) {
-        showAdminAlert(`Section 3 fields populated with active Kurti (${activeProd.name}) details!`, "Defaults Applied", "success");
-    }
-}
-
-function onFlashModeChange() {
-    const isManual = document.getElementById('fd_mode_manual').checked;
-    const manualCard = document.getElementById('fd_manual_settings_card');
-    if (manualCard) {
-        manualCard.style.display = isManual ? 'block' : 'none';
-    }
-
-    highlightSelectedModeCard();
-    if (!isManual) {
-        populateSection3FromActiveProduct(false);
-    } else {
-        onFlashProductSelect();
-    }
-    updateCalculatedExpiry();
-    updatePreviewCard();
-}
-
-function highlightSelectedModeCard() {
-    const isManual = document.getElementById('fd_mode_manual')?.checked;
-    const cardRandom = document.getElementById('card_mode_random');
-    const cycleBox = document.getElementById('fd_random_cycle_box');
-    const lblManual = document.getElementById('lbl_mode_manual');
-
-    if (cardRandom) {
-        cardRandom.style.borderColor = !isManual ? '#D4A373' : '#E5E7EB';
-        cardRandom.style.background = !isManual ? '#FAF5EE' : '#FAF9F6';
-    }
-    if (cycleBox) {
-        cycleBox.style.display = !isManual ? 'block' : 'none';
-    }
-    if (lblManual) {
-        lblManual.style.borderColor = isManual ? '#D4A373' : '#E5E7EB';
-        lblManual.style.background = isManual ? '#FAF5EE' : '#FAF9F6';
-    }
-
-    const pvBadge = document.getElementById('pv_mode_badge');
-    if (pvBadge) {
-        pvBadge.innerText = isManual ? 'Specific Spotlight (Auto-Expiry)' : 'Random Rotation';
-        pvBadge.style.background = isManual ? '#FEF3C7' : '#E0E7FF';
-        pvBadge.style.color = isManual ? '#B45309' : '#3730A3';
-    }
-}
-
-function onFlashProductSelect() {
-    const select = document.getElementById('fd_product_select');
-    const summaryCard = document.getElementById('fd_product_summary');
-    if (!select || !summaryCard) return;
-
-    const prodId = select.value;
-    const prod = flashProductsList.find(p => String(p.id) === String(prodId));
-
-    if (prod) {
-        summaryCard.style.display = 'flex';
-        document.getElementById('fd_summary_img').src = prod.imageUrl;
-        document.getElementById('fd_summary_name').innerText = prod.name;
-        document.getElementById('fd_summary_price').innerText = Number(prod.price).toLocaleString('en-IN');
-        document.getElementById('fd_summary_stock').innerText = prod.stock || 0;
-
-        // Auto-fill Section 3 inputs with chosen product details
-        const hl = document.getElementById('fd_highlight');
-        if (hl) hl.value = prod.name;
-
-        const desc = document.getElementById('fd_desc');
-        if (desc) desc.value = prod.description || `Crafted in 100% soft breathable ${prod.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`;
-
-        const remStock = document.getElementById('fd_remaining_stock');
-        if (remStock) remStock.value = Math.max(1, Math.min(prod.stock || 5, 8));
-
-        const feat = document.getElementById('fd_feature_text');
-        if (feat) feat.value = prod.fabric ? `100% Pure Breathable ${prod.fabric}` : '100% Pure Breathable Cotton';
-    } else {
-        summaryCard.style.display = 'none';
-    }
-
-    updatePreviewCard();
-}
-
-function updateCalculatedExpiry() {
-    const hours = parseInt(document.getElementById('fd_duration_hours')?.value) || 0;
-    const mins = parseInt(document.getElementById('fd_duration_mins')?.value) || 0;
-    const totalMinutes = (hours * 60) + mins;
-
-    const previewSpan = document.getElementById('fd_expiry_time_preview');
-    if (!previewSpan) return;
-
-    if (totalMinutes <= 0) {
-        previewSpan.innerText = "Please specify a duration greater than 0 mins";
-        return;
-    }
-
-    const future = new Date(Date.now() + totalMinutes * 60 * 1000);
-    const timeStr = future.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const isToday = future.toDateString() === new Date().toDateString();
-    const datePrefix = isToday ? "Today" : future.toLocaleDateString([], { month: 'short', day: 'numeric' });
-
-    let durDesc = "";
-    if (hours > 0 && mins > 0) durDesc = `${hours} hours and ${mins} mins`;
-    else if (hours > 0) durDesc = `${hours} hours`;
-    else durDesc = `${mins} minutes`;
-
-    previewSpan.innerText = `${datePrefix} at ${timeStr} (in ${durDesc})`;
-}
-
-function updatePreviewCard() {
-    const activeProduct = getActiveFlashProduct();
-    if (!activeProduct) return;
-
-    const pvImg = document.getElementById('pv_img');
-    if (pvImg && activeProduct.imageUrl) pvImg.src = activeProduct.imageUrl;
-
-    const badgeVal = document.getElementById('fd_badge_text')?.value || 'SELLING FAST';
-    const pvBadge = document.getElementById('pv_badge');
-    if (pvBadge) pvBadge.innerText = badgeVal;
-
-    const titleVal = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
-    const pvTitle = document.getElementById('pv_title_prefix');
-    if (pvTitle) pvTitle.innerText = titleVal;
-
-    const customHl = document.getElementById('fd_highlight')?.value;
-    const pvHl = document.getElementById('pv_highlight');
-    if (pvHl) {
-        pvHl.innerText = (customHl && customHl.trim() !== '') ? customHl : activeProduct.name;
-    }
-
-    const descVal = document.getElementById('fd_desc')?.value;
-    const pvDesc = document.getElementById('pv_desc');
-    if (pvDesc) {
-        pvDesc.innerText = (descVal && descVal.trim() !== '')
-            ? descVal
-            : (activeProduct.description || `Crafted in 100% soft breathable ${activeProduct.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`);
-    }
-
-    const rem = parseInt(document.getElementById('fd_remaining_stock')?.value) || Math.max(1, Math.min(activeProduct.stock || 5, 8));
-    const tot = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
-
-    const pvRem = document.getElementById('pv_remaining');
-    if (pvRem) pvRem.innerText = rem;
-
-    const pvBar = document.getElementById('pv_meter_bar');
-    if (pvBar) {
-        const pct = Math.min(100, Math.max(10, Math.round(((tot - rem) / tot) * 100)));
-        pvBar.style.width = `${pct}%`;
-    }
-
-    const pvPrice = document.getElementById('pv_price');
-    if (pvPrice) pvPrice.innerText = Number(activeProduct.price).toLocaleString('en-IN');
-
-    const featVal = document.getElementById('fd_feature_text')?.value;
-    const pvFeat = document.getElementById('pv_feature');
-    if (pvFeat) {
-        pvFeat.innerText = (featVal && featVal.trim() !== '')
-            ? featVal
-            : (activeProduct.fabric ? `100% Pure Breathable ${activeProduct.fabric}` : '100% Pure Breathable Cotton');
-    }
-}
-
-async function saveFlashDropConfig() {
-    console.log("[FLASH DROP] saveFlashDropConfig clicked");
-    const saveBtn = document.getElementById('fdSaveBtn');
-    let originalText = saveBtn ? saveBtn.innerHTML : '<span>⚡ Save & Publish Flash Drop Settings</span>';
-
-    try {
-        const isManual = document.getElementById('fd_mode_manual')?.checked ?? false;
-        const mode = isManual ? 'manual' : 'random';
-        const productId = document.getElementById('fd_product_select')?.value || '';
-
-        let durationHours = 6;
-        let durationMins = 0;
-
-        if (isManual) {
-            durationHours = parseInt(document.getElementById('fd_duration_hours')?.value) || 0;
-            durationMins = parseInt(document.getElementById('fd_duration_mins')?.value) || 0;
-
-            if (!productId) {
-                showAdminAlert("Please choose a Kurti from the catalog to spotlight, or switch to 'Randomly Rotate Products from DB'.", "Select a Product", "warning");
-                document.getElementById('fd_product_select')?.focus();
-                return;
+            async function viewPreorderAudit(orderId) {
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/preorder/orders/${orderId}/audit`, {
+                        headers: getAuthHeader()
+                    });
+                    if (!res.ok) throw new Error('Could not fetch audit');
+                    const data = await res.json();
+                    const list = data.audit || [];
+                    if (list.length === 0) {
+                        alert(`No audit entries recorded yet for order ${orderId}.`);
+                        return;
+                    }
+
+                    const formatted = list.map(function (e) {
+                        var dt = e.changedAt || e.ChangedAt || '';
+                        var act = e.action || e.Action || '';
+                        var by = e.adminEmail || e.AdminEmail || 'System';
+                        var n = (e.notes || e.Notes) ? ('\n  Notes: ' + (e.notes || e.Notes)) : '';
+                        return '• ' + dt + '\n  Action: ' + act + '\n  By: ' + by + n;
+                    }).join('\n\n');
+
+                    alert(`Audit Trail for Order ${orderId}:\n\n${formatted}`);
+                } catch (e) {
+                    alert('Failed to load audit trail: ' + e.message);
+                }
             }
-            if (durationHours === 0 && durationMins === 0) {
-                showAdminAlert("Please specify a duration greater than 0 minutes for the spotlight timer.", "Duration Required", "warning");
-                document.getElementById('fd_duration_hours')?.focus();
-                return;
+
+            function searchPreorderOrders() {
+                const inp = document.getElementById('preorderSearchInput');
+                const q = inp ? inp.value.trim().toLowerCase() : '';
+                if (!q) {
+                    renderPreorderOrdersTable(allPreorderOrders);
+                    return;
+                }
+
+                const filtered = allPreorderOrders.filter(o => {
+                    const id = (o.id || o.ID || '').toLowerCase();
+                    const email = (o.customerEmail || o.CustomerEmail || '').toLowerCase();
+                    const name = (o.shippingName || o.ShippingName || '').toLowerCase();
+                    return id.includes(q) || email.includes(q) || name.includes(q);
+                });
+                renderPreorderOrdersTable(filtered);
             }
-        } else {
-            durationHours = parseInt(document.getElementById('fd_random_hours')?.value) || 0;
-            durationMins = parseInt(document.getElementById('fd_random_mins')?.value) || 0;
 
-            if (durationHours === 0 && durationMins === 0) {
-                durationHours = 6;
-                durationMins = 0;
+
+            async function toggleProductPreorder(productId, enablePreorder) {
+                try {
+                    const p = loadedProductsMap[productId];
+                    if (!p) {
+                        alert('Product not found in cache.');
+                        return;
+                    }
+
+                    const updated = {
+                        ...p,
+                        isPreorder: enablePreorder
+                    };
+
+                    const res = await fetch(API_BASE_URL + '/api/products', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeader()
+                        },
+                        body: JSON.stringify(updated)
+                    });
+
+                    if (res.ok) {
+                        loadProducts();
+                    } else {
+                        const err = await res.text();
+                        alert('Failed to update preorder status: ' + err);
+                    }
+                } catch (err) {
+                    alert('Error updating product preorder status: ' + err.message);
+                }
             }
-        }
-
-        const badgeText = document.getElementById('fd_badge_text')?.value?.trim() || 'SELLING FAST';
-        const remainingStock = parseInt(document.getElementById('fd_remaining_stock')?.value) || 4;
-        const totalStock = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
-        const title = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
-        const highlight = document.getElementById('fd_highlight')?.value?.trim() || '';
-        const desc = document.getElementById('fd_desc')?.value?.trim() || '';
-        const featureText = document.getElementById('fd_feature_text')?.value?.trim() || '100% Pure Breathable Cotton';
-
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.innerHTML = `<span>Saving & Publishing...</span>`;
-        }
-
-        const activeProduct = getActiveFlashProduct();
-        const activeProdId = isManual 
-            ? productId 
-            : (activeProduct?.id || (flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())?.id || ''));
-        const matchedProduct = flashProductsList.find(p => String(p.id) === String(activeProdId)) 
-            || flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())
-            || activeProduct;
-        const activeImageUrl = matchedProduct?.imageUrl || activeProduct?.imageUrl || '';
-        const activePrice = Number(matchedProduct?.price) || Number(activeProduct?.price) || 0;
-        const activeOrigPrice = Number(matchedProduct?.originalPrice) || Number(activeProduct?.originalPrice) || 0;
-
-        const payload = {
-            mode: mode,
-            product_id: activeProdId,
-            image_url: activeImageUrl,
-            price: activePrice,
-            original_price: activeOrigPrice,
-            duration_hours: durationHours,
-            duration_mins: durationMins,
-            badge_text: badgeText,
-            remaining_stock: remainingStock,
-            total_stock: totalStock,
-            title: title,
-            highlight: highlight,
-            desc: desc,
-            feature_text: featureText
-        };
-
-        console.log("[FLASH DROP] Sending payload to API:", payload);
-
-        const res = await fetch(API_BASE_URL + '/api/admin/config/flash-drop', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeader()
-            },
-            body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || errData.message || `HTTP ${res.status}`);
-        }
-
-        const resData = await res.json();
-        console.log("[FLASH DROP] Save success, response:", resData);
-
-        const successMsg = isManual 
-            ? `Flash Spotlight Drop activated for selected Kurti! It will run for ${durationHours}h ${durationMins}m and then automatically revert back to random rotation.`
-            : `Flash Spotlight Drop configured with ${durationHours}h ${durationMins}m rotation cycle and published successfully!`;
-
-        showAdminAlert(successMsg, "Flash Drop Published!", "success");
-        await loadFlashDropConfig();
-    } catch (err) {
-        console.error("[FLASH DROP] Save failed:", err);
-        showAdminAlert("Failed to save Flash Drop configuration: " + err.message, "Save Error", "error");
-    } finally {
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = originalText;
-        }
-    }
-}
-
-window.loadFlashDropConfig = loadFlashDropConfig;
-window.onFlashModeChange = onFlashModeChange;
-window.onFlashProductSelect = onFlashProductSelect;
-window.onRandomCycleInput = onRandomCycleInput;
-window.populateSection3FromActiveProduct = populateSection3FromActiveProduct;
-window.updateCalculatedExpiry = updateCalculatedExpiry;
-window.updatePreviewCard = updatePreviewCard;
-window.saveFlashDropConfig = saveFlashDropConfig;
-
-
-

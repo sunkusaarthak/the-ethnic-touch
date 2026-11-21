@@ -30,7 +30,8 @@ const enrichCartItem = (item) => {
         name: item.name || item.title || (found ? found.name : 'Handcrafted Kurti'),
         imageUrl: getOptimizedImageUrl(item.imageUrl || item.image_url || (found ? found.imageUrl : '/images/kurthi_peach.png')),
         description: item.description || (found ? found.description : ''),
-        price: safePrice
+        price: safePrice,
+        isPreorder: Boolean(item.isPreorder || item.is_preorder || (found && (found.isPreorder || found.is_preorder)))
     };
 };
 

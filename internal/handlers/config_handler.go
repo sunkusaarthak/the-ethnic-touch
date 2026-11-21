@@ -696,3 +696,40 @@ func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
 }
 
 
+
+func (h *ConfigHandler) HandleGetPreorderPickupConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	config, err := h.configSvc.GetPreorderPickupConfig()
+	if err != nil {
+		http.Error(w, "Failed to load preorder pickup config", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+func (h *ConfigHandler) HandleUpdatePreorderPickupConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var config models.PreorderPickupConfig
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "Invalid input data", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.configSvc.UpdatePreorderPickupConfig(&config); err != nil {
+		http.Error(w, "Failed to update preorder pickup config", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Preorder pickup config updated successfully"})
+}

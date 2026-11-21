@@ -62,6 +62,30 @@ func (m *mockOrderRepoForCheckoutFlows) CancelPendingOrder(orderID string) error
 	return nil
 }
 
+func (m *mockOrderRepoForCheckoutFlows) ConfirmPreorderPickup(orderID, adminEmail, notes string) error {
+	return nil
+}
+
+func (m *mockOrderRepoForCheckoutFlows) MarkPreorderPickupReady(orderID string) error {
+	return nil
+}
+
+func (m *mockOrderRepoForCheckoutFlows) MarkAllPreorderPickupReady() (int, error) {
+	return 0, nil
+}
+
+func (m *mockOrderRepoForCheckoutFlows) GetPreorderPickupOrders(filter string) ([]models.Order, error) {
+	return nil, nil
+}
+
+func (m *mockOrderRepoForCheckoutFlows) GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error) {
+	return nil, nil
+}
+
+func (m *mockOrderRepoForCheckoutFlows) MarkPickupNotificationSent(orderID string) error {
+	return nil
+}
+
 type mockProductRepoForCheckoutFlows struct{}
 
 func (m *mockProductRepoForCheckoutFlows) GetProducts(filters map[string]string) ([]models.Product, map[string]interface{}, error) {
@@ -106,6 +130,20 @@ func (m *mockConfigServiceForCheckout) GetAuthConfig() (*models.AuthConfig, erro
 func (m *mockConfigServiceForCheckout) UpdateAuthConfig(config *models.AuthConfig) error { return nil }
 func (m *mockConfigServiceForCheckout) GetHomepageConfig() (*models.HomepageConfig, error) { return nil, nil }
 func (m *mockConfigServiceForCheckout) UpdateHomepageConfig(config *models.HomepageConfig) error { return nil }
+func (m *mockConfigServiceForCheckout) GetPreorderPickupConfig() (*models.PreorderPickupConfig, error) {
+	return &models.PreorderPickupConfig{
+		Enabled:             true,
+		LocationName:        "The Ethnic Touch Store",
+		Address:             "ESCI Road, Khajaguda",
+		City:                "Hyderabad",
+		State:               "Telangana",
+		ZipCode:             "500032",
+		EstimatedPickupDate: "Within 2-3 weeks",
+	}, nil
+}
+func (m *mockConfigServiceForCheckout) UpdatePreorderPickupConfig(config *models.PreorderPickupConfig) error {
+	return nil
+}
 
 func TestCheckoutFlows_OfflinePickupAndInstantDelivery(t *testing.T) {
 	orderRepo := &mockOrderRepoForCheckoutFlows{orders: make(map[string]*models.Order)}

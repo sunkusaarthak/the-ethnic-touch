@@ -66,6 +66,30 @@ func (m *mockOrderRepoForService) UpdateOrderStatusWithGiftTransaction(orderID, 
 	return nil
 }
 
+func (m *mockOrderRepoForService) ConfirmPreorderPickup(orderID, adminEmail, notes string) error {
+	return nil
+}
+
+func (m *mockOrderRepoForService) MarkPreorderPickupReady(orderID string) error {
+	return nil
+}
+
+func (m *mockOrderRepoForService) MarkAllPreorderPickupReady() (int, error) {
+	return 0, nil
+}
+
+func (m *mockOrderRepoForService) GetPreorderPickupOrders(filter string) ([]models.Order, error) {
+	return nil, nil
+}
+
+func (m *mockOrderRepoForService) GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error) {
+	return nil, nil
+}
+
+func (m *mockOrderRepoForService) MarkPickupNotificationSent(orderID string) error {
+	return nil
+}
+
 type mockCouponServiceForOrder struct{}
 func (m *mockCouponServiceForOrder) ValidateCoupon(code string, subtotal float64, items []models.CartItemInfo, userID string) (*models.Coupon, float64, error) { return nil, 0, nil }
 func (m *mockCouponServiceForOrder) GetAllCoupons() ([]models.Coupon, error) { return nil, nil }
@@ -119,7 +143,7 @@ func TestOrderService_VerifyPayment_HMACValidation(t *testing.T) {
 	})
 
 	t.Run("Tampered / Invalid Signature Rejection", func(t *testing.T) {
-		repo.orders["ORD_1001"].Status = "pending" // Reset status for next test
+		repo.orders["ORD_1001"].Status = "pending"
 
 		req := &models.OrderVerifyRequest{
 			OrderID:           orderID,

@@ -21,8 +21,8 @@ import (
 )
 
 type App struct {
-	DB         *sql.DB
-	Router     *http.ServeMux
+	DB           *sql.DB
+	Router       *http.ServeMux
 	Config       *config.Config
 	Logger       *slog.Logger
 	HTTPServer   *http.Server
@@ -36,7 +36,7 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 	}
 
 	app := &App{
-		DB:     db,
+		DB:           db,
 		Router:       http.NewServeMux(),
 		Config:       cfg,
 		Logger:       logger,
@@ -58,7 +58,7 @@ func (a *App) setupRoutes() {
 	contactRepo := repository.NewContactRepository(a.DB)
 
 	delhiverySvc := service.NewDelhiveryService("dummy_secret")
-	
+
 	cron.StartDelhiveryCron(orderRepo, delhiverySvc)
 
 	// Services
@@ -132,7 +132,7 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/checkout/shipping-estimate", orderHandler.HandleShippingEstimate)
 	a.Router.HandleFunc("/api/checkout/shipping-timeline", orderHandler.HandleShippingTimeline)
 	a.Router.HandleFunc("/api/webhooks/delhivery", orderHandler.HandleDelhiveryWebhook)
-	
+
 	a.Router.HandleFunc("/api/orders", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			orderHandler.HandleGetOrder(w, r)
@@ -155,22 +155,22 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/gift-tiers", couponHandler.HandleGetGiftTiers)
 	a.Router.HandleFunc("/api/admin/gift-tiers", adminOnly(http.HandlerFunc(couponHandler.HandleUpdateGiftTiers)).ServeHTTP)
 	a.Router.HandleFunc("/api/coupons/validate", rateLimiter.Limit(http.HandlerFunc(couponHandler.HandleValidateCoupon)).ServeHTTP)
-	
+
 	// Spin the Wheel
 	a.Router.HandleFunc("/api/spin-wheel", rateLimiter.Limit(http.HandlerFunc(spinHandler.HandleSpin)).ServeHTTP)
-	
+
 	// Admin API Endpoints
 	a.Router.HandleFunc("/api/admin/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/orders/confirm-pickup", adminOrEmployee(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/delhivery/batch-pickup", adminOnly(http.HandlerFunc(orderHandler.HandleTriggerDelhiveryBatch)).ServeHTTP)
-	
+
 	a.Router.HandleFunc("/api/admin/profiles", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/edit", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/details", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDetails)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/delete", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDelete)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/upload", adminOnly(http.HandlerFunc(productHandler.HandleAdminUpload)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/coupons", adminOnly(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
-	
+
 	// Staff Management
 	a.Router.HandleFunc("/api/admin/staff", adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -181,7 +181,7 @@ func (a *App) setupRoutes() {
 			staffHandler.HandleDeleteStaff(w, r)
 		}
 	})).ServeHTTP)
-	
+
 	// Contact Us Endpoints
 	a.Router.HandleFunc("/api/contact", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -198,7 +198,7 @@ func (a *App) setupRoutes() {
 			contactHandler.HandleAdminMarkRead(w, r)
 		}
 	})).ServeHTTP)
-	
+
 	// Staff Identity
 	a.Router.HandleFunc("/api/admin/me", adminOrEmployee(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role := r.Context().Value(middleware.RoleKey).(string)
@@ -206,7 +206,7 @@ func (a *App) setupRoutes() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"email": email, "role": role})
 	})).ServeHTTP)
-	
+
 	// Config API Endpoints
 	a.Router.HandleFunc("/api/config/spin-wheel", configHandler.HandleGetSpinConfig)
 	a.Router.HandleFunc("/api/admin/config/spin-wheel", adminOnly(http.HandlerFunc(configHandler.HandleUpdateSpinConfig)).ServeHTTP)
@@ -226,6 +226,17 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/admin/reels/fetch-thumbnail", configHandler.HandleFetchInstagramThumbnail)
 	a.Router.HandleFunc("/api/admin/reels/sync-thumbnails", adminOnly(http.HandlerFunc(configHandler.HandleSyncAllInstagramThumbnails)).ServeHTTP)
 	a.Router.HandleFunc("/api/reels/video-url", configHandler.HandleGetInstagramReelVideo)
+
+	// Preorder Pickup Config
+	a.Router.HandleFunc("/api/config/preorder-pickup", configHandler.HandleGetPreorderPickupConfig)
+	a.Router.HandleFunc("/api/admin/config/preorder-pickup", adminOnly(http.HandlerFunc(configHandler.HandleUpdatePreorderPickupConfig)).ServeHTTP)
+
+	// Preorder Pickup Management
+	a.Router.HandleFunc("/api/admin/preorder/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetPreorderOrders)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/orders/{id}/audit", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetPreorderPickupAudit)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/mark-ready", adminOnly(http.HandlerFunc(orderHandler.HandleMarkPreorderPickupReady)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/mark-all-ready", adminOnly(http.HandlerFunc(orderHandler.HandleMarkAllPreorderPickupReady)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/confirm-pickup", adminOnly(http.HandlerFunc(orderHandler.HandleConfirmPreorderPickup)).ServeHTTP)
 
 	// User Profiles & Addresses
 	a.Router.HandleFunc("/api/profile", profileHandler.HandleProfile)
@@ -267,8 +278,14 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Direct match for /admin, /admin/, or /admin/index.html
-		if path == "/admin" || path == "/admin/" || path == "/admin/index.html" {
+		// Canonical redirect /admin -> /admin/
+		if path == "/admin" {
+			http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
+			return
+		}
+
+		// Direct match for /admin/ or /admin/index.html
+		if path == "/admin/" || path == "/admin/index.html" {
 			adminFile := frontendPublic + "/admin/index.html"
 			if _, err := os.Stat(frontendDist + "/admin/index.html"); err == nil {
 				adminFile = frontendDist + "/admin/index.html"
@@ -288,7 +305,25 @@ func (a *App) setupRoutes() {
 			} else if strings.HasPrefix(filePath, "/images/") || strings.HasSuffix(filePath, ".png") || strings.HasSuffix(filePath, ".jpg") || strings.HasSuffix(filePath, ".jpeg") || strings.HasSuffix(filePath, ".webp") || strings.HasSuffix(filePath, ".svg") || strings.HasSuffix(filePath, ".ico") {
 				// Static images and icons
 				w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+			} else {
+				// HTML, unhashed admin files (admin.js, admin.css), and configs must NEVER be cached by browser
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				w.Header().Set("Pragma", "no-cache")
+				w.Header().Set("Expires", "0")
 			}
+		}
+
+		// Direct match for root or /index.html (always no-cache so clients receive updated index immediately)
+		if path == "/" || path == "/index.html" {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+			htmlPath := frontendDist + "/index.html"
+			if _, err := os.Stat(htmlPath); err != nil {
+				htmlPath = frontendPublic + "/index.html"
+			}
+			http.ServeFile(w, r, htmlPath)
+			return
 		}
 
 		// Check if file exists in frontend/dist
@@ -335,7 +370,7 @@ func (a *App) setupRoutes() {
 						htmlContent := string(htmlBytes)
 						// Create dynamic meta tags
 						imageURL := "https://www.theethnictouch.com/api/og-image/" + product.ID + ".jpg"
-						
+
 						// Check availability for Schema
 						availability := "https://schema.org/OutOfStock"
 						for _, stock := range product.SizesStock {
@@ -388,9 +423,9 @@ func (a *App) setupRoutes() {
 							<meta name="twitter:label1" content="Price">
 							<meta name="twitter:data1" content="%s">
 							%s
-						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://www.theethnictouch.com"+path, product.Price, availability, product.Name, product.Description, imageURL, twitterPrice, jsonLD)						
+						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://www.theethnictouch.com"+path, product.Price, availability, product.Name, product.Description, imageURL, twitterPrice, jsonLD)
 						htmlContent = strings.Replace(htmlContent, "<!-- DYNAMIC_META_TAGS -->", dynamicTags, 1)
-						
+
 						w.Header().Set("Content-Type", "text/html; charset=utf-8")
 						w.Write([]byte(htmlContent))
 						return

@@ -9,6 +9,7 @@ import Auth from './pages/Auth';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import CheckoutSuccess from './pages/CheckoutSuccess';
+import MockPayment from './pages/MockPayment';
 import Home from './pages/Home';
 import ProductDetails from './pages/ProductDetails';
 import ProfilePage from './pages/ProfilePage';
@@ -154,6 +155,7 @@ const AppRoutesContent = () => {
                     path="/checkout" 
                     element={<Checkout cart={cart} discount={discount} clearCart={clearCart} authUser={authUser} authLoading={authLoading} setProfileIncomplete={setProfileIncomplete} />} 
                 />
+                <Route path="/mock-payment" element={<MockPayment onPaymentSuccess={clearCart} />} />
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
                 <Route path="/spin-and-win" element={<SpinWheel />} />
                 <Route path="/profile" element={<ProfilePage authUser={authUser} setProfileIncomplete={setProfileIncomplete} />} />

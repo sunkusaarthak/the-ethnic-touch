@@ -71,6 +71,9 @@ const RenderProductCard = ({ product, wishlist, toggleWishlist, index = 99 }) =>
                         <p className="product-desc" style={{ marginTop: '0.2rem' }}>{product.description}</p>
                         
                         <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                            {product.isPreorder && (
+                                <span style={{ fontSize: '0.65rem', background: '#f3e8ff', color: '#7e22ce', padding: '2px 8px', borderRadius: '4px', fontWeight: '700', letterSpacing: '0.5px' }}>PREORDER</span>
+                            )}
                             {product.isNewArrival && (
                                 <span style={{ fontSize: '0.65rem', background: '#faeedd', color: '#9c6c40', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>New</span>
                             )}

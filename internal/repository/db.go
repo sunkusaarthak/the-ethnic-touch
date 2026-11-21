@@ -217,6 +217,7 @@ func runMigrations(db *sql.DB) error {
 		`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_new_arrival BOOLEAN DEFAULT FALSE;`,
 		`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_best_seller BOOLEAN DEFAULT FALSE;`,
 		`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_preorder BOOLEAN DEFAULT FALSE;`,
 		`ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TEXT DEFAULT '';`,
 		`CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);`,
 		`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);`,
@@ -227,6 +228,7 @@ func runMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_products_is_new_arrival ON products(is_new_arrival);`,
 		`CREATE INDEX IF NOT EXISTS idx_products_is_best_seller ON products(is_best_seller);`,
 		`CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured);`,
+		`CREATE INDEX IF NOT EXISTS idx_products_is_preorder ON products(is_preorder);`,
 		`CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist(user_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_product_reviews_pid_rating ON product_reviews(product_id, rating);`,
 		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS spin_count INT DEFAULT 0;`,
@@ -250,6 +252,21 @@ func runMigrations(db *sql.DB) error {
 		 WHERE key = 'homepage_config'
 		   AND value::jsonb->'reviews' IS NOT NULL
 		   AND jsonb_array_length(value::jsonb->'reviews') >= 3;`,
+		// Preorder fulfilment columns
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilment_type TEXT DEFAULT NULL;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_location_snapshot TEXT DEFAULT NULL;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_collected_at TEXT DEFAULT NULL;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_collected_by TEXT DEFAULT NULL;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_notification_sent BOOLEAN DEFAULT FALSE;`,
+		`CREATE TABLE IF NOT EXISTS preorder_pickup_audit (
+			id SERIAL PRIMARY KEY,
+			order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+			action TEXT NOT NULL,
+			performed_by TEXT NOT NULL,
+			performed_at TEXT NOT NULL,
+			notes TEXT DEFAULT ''
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_preorder_pickup_audit_order_id ON preorder_pickup_audit(order_id);`,
 	}
 	for _, q := range alterQueries {
 		if _, err := db.Exec(q); err != nil {

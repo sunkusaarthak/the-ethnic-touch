@@ -51,6 +51,8 @@ func (h *ProductHandler) HandleProducts(w http.ResponseWriter, r *http.Request) 
 			"newArrival":  r.URL.Query().Get("newArrival"),
 			"bestSeller":  r.URL.Query().Get("bestSeller"),
 			"featured":    r.URL.Query().Get("featured"),
+			"preorder":    r.URL.Query().Get("preorder"),
+			"isPreorder":  r.URL.Query().Get("isPreorder"),
 			"sortBy":      r.URL.Query().Get("sortBy"),
 			"paginated":   r.URL.Query().Get("paginated"),
 			"page":        r.URL.Query().Get("page"),

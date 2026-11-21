@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"ethnictouch/internal/middleware"
@@ -428,3 +429,159 @@ func (h *OrderHandler) HandleTriggerDelhiveryBatch(w http.ResponseWriter, r *htt
 	})
 }
 
+
+func (h *OrderHandler) HandleGetPreorderOrders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	filter := r.URL.Query().Get("filter")
+	searchQ := strings.ToLower(r.URL.Query().Get("q"))
+	orderID := r.URL.Query().Get("orderId")
+
+	orders, err := h.svc.GetPreorderPickupOrders(filter)
+	if err != nil {
+		http.Error(w, "Failed to fetch preorder orders", http.StatusInternalServerError)
+		return
+	}
+
+	if orderID != "" {
+		filtered := orders[:0]
+		for _, o := range orders {
+			if strings.EqualFold(o.ID, orderID) {
+				filtered = append(filtered, o)
+			}
+		}
+		orders = filtered
+	} else if searchQ != "" {
+		filtered := orders[:0]
+		for _, o := range orders {
+			if strings.Contains(strings.ToLower(o.ID), searchQ) ||
+				strings.Contains(strings.ToLower(o.CustomerEmail), searchQ) ||
+				strings.Contains(strings.ToLower(o.ShippingName), searchQ) {
+				filtered = append(filtered, o)
+			}
+		}
+		orders = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"orders": orders,
+		"count":  len(orders),
+	})
+}
+
+func (h *OrderHandler) HandleMarkPreorderPickupReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OrderID string `json:"orderId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.OrderID == "" {
+		http.Error(w, "Missing orderId", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.svc.MarkPreorderPickupReady(req.OrderID); err != nil {
+		http.Error(w, "Failed to mark order as ready for pickup: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send ready-for-pickup notification
+	order, err := h.svc.GetOrder(req.OrderID)
+	if err == nil {
+		pickupCfg, _ := h.configSvc.GetPreorderPickupConfig()
+		if pickupCfg == nil {
+			pickupCfg = &models.PreorderPickupConfig{}
+		}
+		_ = h.svc.SendPickupReadyNotification(order, pickupCfg)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Order marked as ready for pickup and customer notified"})
+}
+
+func (h *OrderHandler) HandleMarkAllPreorderPickupReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	count, err := h.svc.MarkAllPreorderPickupReady()
+	if err != nil {
+		http.Error(w, "Failed to mark all orders as ready: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"count":   count,
+		"message": fmt.Sprintf("Successfully marked %d order(s) as ready for pickup and notified customers", count),
+	})
+}
+
+func (h *OrderHandler) HandleConfirmPreorderPickup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OrderID string `json:"orderId"`
+		Notes   string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.OrderID == "" {
+		http.Error(w, "Missing orderId", http.StatusBadRequest)
+		return
+	}
+
+	adminEmail, _ := r.Context().Value(middleware.EmailKey).(string)
+
+	if err := h.svc.ConfirmPreorderPickup(req.OrderID, adminEmail, req.Notes); err != nil {
+		http.Error(w, "Failed to confirm pickup: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Pickup confirmed and order marked as collected"})
+}
+
+func (h *OrderHandler) HandleGetPreorderPickupAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	orderID := r.PathValue("id")
+	if orderID == "" {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		for i, part := range parts {
+			if part == "orders" && i+1 < len(parts) {
+				orderID = parts[i+1]
+				break
+			}
+		}
+	}
+	if orderID == "" {
+		http.Error(w, "Missing order ID", http.StatusBadRequest)
+		return
+	}
+
+	entries, err := h.svc.GetPreorderPickupAudit(orderID)
+	if err != nil {
+		http.Error(w, "Failed to fetch audit trail", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"orderID": orderID,
+		"audit":   entries,
+	})
+}

@@ -148,7 +148,14 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                     <div key={idx} className="cart-item-row" style={{display:'flex', alignItems:'center', gap:'0.85rem', marginBottom: idx === cart.length - 1 ? 0 : '0.85rem', borderBottom: idx === cart.length - 1 ? 'none' : '1px solid #eee', paddingBottom: idx === cart.length - 1 ? 0 : '0.85rem', flexWrap:'wrap'}}>
                                         <img src={item.imageUrl} alt={item.name} style={{width:'56px', height:'56px', borderRadius:'8px', objectFit:'cover'}} />
                                         <div style={{flex: 1, minWidth: '140px'}}>
-                                            <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500', fontSize:'0.88rem', margin: 0}}>{item.name}</h3>
+                                            <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500', fontSize:'0.88rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap'}}>
+                                                {item.name}
+                                                {item.isPreorder && (
+                                                    <span style={{ fontSize: '0.65rem', background: '#f3e8ff', color: '#7e22ce', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', letterSpacing: '0.5px' }}>
+                                                        PREORDER
+                                                    </span>
+                                                )}
+                                            </h3>
                                             {item.size && (
                                                 <span style={{display: 'inline-block', backgroundColor: '#fff0e9', color: '#b97a66', padding: '0.1rem 0.45rem', borderRadius: '4px', fontSize: '0.72rem', marginTop: '0.15rem', fontWeight: '500'}}>
                                                     Size: {item.size}
@@ -484,7 +491,7 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                     transition: 'all 0.3s ease'
                                 }}
                             >
-                                Proceed to Checkout &rarr;
+                                {cart && cart.some(i => !!i.isPreorder) ? 'Proceed to Preorder Checkout \u2192' : 'Proceed to Checkout \u2192'}
                             </button>
                         </div>
                     </div>

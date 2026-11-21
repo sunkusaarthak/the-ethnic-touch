@@ -1,25 +1,19 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
-
-import { API_BASE_URL } from '../data/config';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchWithAuth } from '../utils/apiClient';
 
 const MockPayment = ({ onPaymentSuccess }) => {
-    const [searchParams] = useState(() => {
-        const hash = window.location.hash;
-        const qIndex = hash.indexOf('?');
-        const qStr = qIndex !== -1 ? hash.slice(qIndex) : '';
-        return new URLSearchParams(qStr);
-    });
-    const orderId = searchParams.get('orderId');
+    const [searchParams] = useSearchParams();
+    const orderId = searchParams.get('orderId') || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('orderId') : '');
     const [paying, setPaying] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
         if (!orderId) {
-            navigate('/');
+            navigate('/checkout');
         }
-    }, [orderId]);
+    }, [orderId, navigate]);
 
     const handlePay = async () => {
         setPaying(true);
@@ -33,7 +27,7 @@ const MockPayment = ({ onPaymentSuccess }) => {
             });
             if (res.ok) {
                 const data = await res.json();
-                onPaymentSuccess(data);
+                if (onPaymentSuccess) onPaymentSuccess(data);
                 navigate('/checkout-success', { 
                     state: { 
                         orderId: orderId, 
@@ -41,21 +35,35 @@ const MockPayment = ({ onPaymentSuccess }) => {
                         unlockedGift: data.unlockedGift,
                         giftType: data.giftType,
                         giftExpiryDate: data.giftExpiryDate,
-                        tracking: data.trackingNumber 
+                        tracking: data.trackingNumber,
+                        checkoutType: data.checkoutType,
+                        fulfilmentType: data.fulfilmentType,
+                        isPreorder: data.isPreorder,
+                        pickupLocationSnapshot: data.pickupLocationSnapshot,
+                        amount: data.amount,
+                        paymentMethod: 'online'
                     } 
                 });
             } else {
-                const errData = await res.json();
-                showAlert("Simulated transaction failed: " + (errData.error || 'Server error'), "Transaction Error", "error");
+                const errData = await res.json().catch(() => ({}));
+                alert("Simulated transaction failed: " + (errData.error || 'Server error'));
                 setPaying(false);
             }
         } catch (err) {
-            showAlert("Server connection failed. Please check your network.", "Connection Error", "error");
+            alert("Server connection failed. Please check your network.");
             setPaying(false);
         }
     };
 
-    const handleCancel = () => {
+    const handleCancel = async () => {
+        setCancelling(true);
+        if (orderId) {
+            try {
+                await fetchWithAuth(`/api/orders/${orderId}/cancel`, { method: 'POST' });
+            } catch (e) {
+                console.warn("Failed to cancel pending order:", e);
+            }
+        }
         navigate('/checkout');
     };
 
@@ -164,7 +172,7 @@ const MockPayment = ({ onPaymentSuccess }) => {
 
                     <button 
                         onClick={handlePay} 
-                        disabled={paying}
+                        disabled={paying || cancelling}
                         style={{
                             width: '100%', 
                             height: '44px',
