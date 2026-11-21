@@ -1,6 +1,7 @@
 package cron
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -8,7 +9,7 @@ import (
 	"ethnictouch/internal/service"
 )
 
-func StartDelhiveryCron(orderRepo repository.OrderRepository, delhiverySvc service.DelhiveryService) {
+func StartDelhiveryCron(ctx context.Context, orderRepo repository.OrderRepository, delhiverySvc service.DelhiveryService) {
 	go func() {
 		istLocation := time.FixedZone("IST", 5*3600+30*60)
 		for {
@@ -21,7 +22,15 @@ func StartDelhiveryCron(orderRepo repository.OrderRepository, delhiverySvc servi
 
 			sleepDuration := nextRun.Sub(now)
 			log.Printf("[Cron] Next Delhivery batch pickup scheduled in %v (at %v IST)", sleepDuration, nextRun.Format("2006-01-02 15:04:05"))
-			time.Sleep(sleepDuration)
+
+			timer := time.NewTimer(sleepDuration)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				log.Println("[Cron] Delhivery batch pickup cron stopped gracefully.")
+				return
+			case <-timer.C:
+			}
 
 			// Run task
 			log.Println("[Cron] Starting Delhivery batch pickup...")
@@ -52,7 +61,13 @@ func StartDelhiveryCron(orderRepo repository.OrderRepository, delhiverySvc servi
 				}
 				
 				log.Printf("[Cron] Batch pickup failed (attempt %d/%d): %v", i+1, maxRetries, err)
-				time.Sleep(time.Duration(2<<i) * time.Minute) // 2m, 4m, 8m backoff
+				backoffTimer := time.NewTimer(time.Duration(2<<i) * time.Minute)
+				select {
+				case <-ctx.Done():
+					backoffTimer.Stop()
+					return
+				case <-backoffTimer.C:
+				}
 			}
 
 			if err != nil {

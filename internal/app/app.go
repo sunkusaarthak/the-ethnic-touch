@@ -27,6 +27,8 @@ type App struct {
 	Logger       *slog.Logger
 	HTTPServer   *http.Server
 	OrderService service.OrderService
+	jobsCtx      context.Context
+	cancelJobs   context.CancelFunc
 }
 
 func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
@@ -35,12 +37,16 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	app := &App{
 		DB:           db,
 		Router:       http.NewServeMux(),
 		Config:       cfg,
 		Logger:       logger,
 		OrderService: nil, // set in setupRoutes
+		jobsCtx:      ctx,
+		cancelJobs:   cancel,
 	}
 
 	app.setupRoutes()
@@ -59,7 +65,7 @@ func (a *App) setupRoutes() {
 
 	delhiverySvc := service.NewDelhiveryService("dummy_secret")
 
-	cron.StartDelhiveryCron(orderRepo, delhiverySvc)
+	cron.StartDelhiveryCron(a.jobsCtx, orderRepo, delhiverySvc)
 
 	// Services
 	configSvc := service.NewConfigService(configRepo)
@@ -223,7 +229,7 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/admin/config/flash-drop", adminOnly(http.HandlerFunc(configHandler.HandleFlashDropConfig)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/config/instagram", adminOnly(http.HandlerFunc(configHandler.HandleUpdateInstagramConfig)).ServeHTTP)
 	a.Router.HandleFunc("/api/reels/fetch-thumbnail", configHandler.HandleFetchInstagramThumbnail)
-	a.Router.HandleFunc("/api/admin/reels/fetch-thumbnail", configHandler.HandleFetchInstagramThumbnail)
+	a.Router.HandleFunc("/api/admin/reels/fetch-thumbnail", adminOnly(http.HandlerFunc(configHandler.HandleFetchInstagramThumbnail)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/reels/sync-thumbnails", adminOnly(http.HandlerFunc(configHandler.HandleSyncAllInstagramThumbnails)).ServeHTTP)
 	a.Router.HandleFunc("/api/reels/video-url", configHandler.HandleGetInstagramReelVideo)
 
@@ -465,13 +471,18 @@ func (a *App) StartBackgroundJobs() {
 
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			if a.OrderService != nil {
-				cleaned, err := a.OrderService.CleanupAbandonedOrders(15 * time.Minute)
-				if err != nil {
-					a.Logger.Error("Failed to cleanup abandoned orders", "error", err)
-				} else if cleaned > 0 {
-					a.Logger.Info("Cleaned abandoned orders", "count", cleaned)
+		for {
+			select {
+			case <-a.jobsCtx.Done():
+				return
+			case <-ticker.C:
+				if a.OrderService != nil {
+					cleaned, err := a.OrderService.CleanupAbandonedOrders(15 * time.Minute)
+					if err != nil {
+						a.Logger.Error("Failed to cleanup abandoned orders", "error", err)
+					} else if cleaned > 0 {
+						a.Logger.Info("Cleaned abandoned orders", "count", cleaned)
+					}
 				}
 			}
 		}
@@ -479,6 +490,9 @@ func (a *App) StartBackgroundJobs() {
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
+	if a.cancelJobs != nil {
+		a.cancelJobs()
+	}
 	if a.HTTPServer != nil {
 		return a.HTTPServer.Shutdown(ctx)
 	}

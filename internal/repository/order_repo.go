@@ -243,12 +243,17 @@ func (r *postgresOrderRepo) CreateOrderWithTransaction(order *models.Order, stoc
 	}
 	defer tx.Rollback()
 
-	// 1. Lock and update product stocks (SKIP for pending store pickups and preorder store pickup)
+	// 1. Lock and update product stocks (SKIP for pending store pickups and all preorder orders)
 	isPendingPickup := (order.CheckoutType == "pickup" && order.PaymentMethod == "offline_qr" && order.Status == "pending_payment") ||
-		order.FulfilmentType == models.FulfilmentTypePreorderStorePickup
+		order.FulfilmentType == models.FulfilmentTypePreorderStorePickup ||
+		order.FulfilmentType == models.FulfilmentTypePreorderHomeDelivery ||
+		order.IsPreorder
 
 	if !isPendingPickup {
 		for _, item := range order.Items {
+			if item.IsPreorder {
+				continue
+			}
 			var prodName string
 			var totalStock int
 			var sizesStockStr string
@@ -418,9 +423,9 @@ func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 	}
 	defer tx.Rollback()
 
-	var status, couponCode, checkoutType, paymentMethod string
-	err = tx.QueryRow(`SELECT status, COALESCE(coupon_code, ''), COALESCE(checkout_type, ''), COALESCE(payment_method, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID).
-		Scan(&status, &couponCode, &checkoutType, &paymentMethod)
+	var status, couponCode, checkoutType, paymentMethod, fulfilmentType string
+	err = tx.QueryRow(`SELECT status, COALESCE(coupon_code, ''), COALESCE(checkout_type, ''), COALESCE(payment_method, ''), COALESCE(fulfilment_type, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID).
+		Scan(&status, &couponCode, &checkoutType, &paymentMethod, &fulfilmentType)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
@@ -453,13 +458,15 @@ func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 	rows.Close()
 
 	isPendingPickup := checkoutType == "pickup" && paymentMethod == "offline_qr"
-	if !isPendingPickup {
+	isPreorder := fulfilmentType == models.FulfilmentTypePreorderStorePickup || fulfilmentType == models.FulfilmentTypePreorderHomeDelivery
+	if !isPendingPickup && !isPreorder {
 		for _, item := range items {
 			var totalStock int
 			var sizesStockStr string
-			err := tx.QueryRow("SELECT stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
-				Scan(&totalStock, &sizesStockStr)
-			if err == nil {
+			var isProdPreorder bool
+			err := tx.QueryRow("SELECT stock, COALESCE(sizes_stock, '{}'), COALESCE(is_preorder, FALSE) FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
+				Scan(&totalStock, &sizesStockStr, &isProdPreorder)
+			if err == nil && !isProdPreorder {
 				var sizesStock map[string]int
 				json.Unmarshal([]byte(sizesStockStr), &sizesStock)
 				if sizesStock == nil {
@@ -626,7 +633,7 @@ func (r *postgresOrderRepo) MarkAllPreorderPickupReady() (int, error) {
 	rows, err := tx.Query(`
 		SELECT id FROM orders 
 		WHERE fulfilment_type = 'PREORDER_STORE_PICKUP' 
-		  AND status NOT IN ('READY_FOR_PICKUP', 'COLLECTED', 'cancelled', 'payment_failed')
+		  AND status IN ('paid', 'AWAITING_PICKUP')
 		FOR UPDATE
 	`)
 	if err != nil {

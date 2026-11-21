@@ -312,9 +312,19 @@ func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) (*models.Or
 		}, nil
 	}
 
-	if !req.Mock {
+	if req.Mock {
+		// Mock payments are ONLY allowed if the order was created under a mock provider or system payment provider is mock
+		paymentProv := os.Getenv("PAYMENT_PROVIDER")
+		isOrderMock := strings.HasPrefix(o.RazorpayOrderID, "MOCK_")
+		if !isOrderMock && paymentProv != "mock" {
+			return nil, errors.New("mock payment verification is disabled for live orders")
+		}
+	} else {
 		secret := os.Getenv("RAZORPAY_KEY_SECRET")
 		if secret != "" {
+			if req.RazorpaySignature == "" || req.RazorpayPaymentID == "" || req.RazorpayOrderID == "" {
+				return nil, errors.New("missing Razorpay verification parameters")
+			}
 			data := req.RazorpayOrderID + "|" + req.RazorpayPaymentID
 			h := hmac.New(sha256.New, []byte(secret))
 			h.Write([]byte(data))
@@ -323,6 +333,8 @@ func (s *orderService) VerifyPayment(req *models.OrderVerifyRequest) (*models.Or
 			if generatedSig != req.RazorpaySignature {
 				return nil, errors.New("invalid Razorpay payment signature")
 			}
+		} else if !strings.HasPrefix(o.RazorpayOrderID, "MOCK_") {
+			return nil, errors.New("payment gateway configuration missing")
 		}
 	}
 

@@ -175,6 +175,15 @@ const AppRoutesContent = () => {
                 <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                 <Route path="/refund-policy" element={<RefundPolicy />} />
                 <Route path="/contact" element={<ContactUs />} />
+                <Route path="*" element={
+                    <div style={{ padding: '6rem 2rem', textAlign: 'center', minHeight: '60vh' }}>
+                        <h1 style={{ fontSize: '3rem', fontFamily: 'var(--font-serif, serif)', color: '#8F5E36', marginBottom: '1rem' }}>404</h1>
+                        <p style={{ fontSize: '1.2rem', color: '#686461', marginBottom: '2rem' }}>The page you are looking for does not exist or has been moved.</p>
+                        <Link to="/" style={{ display: 'inline-block', padding: '0.85rem 2rem', background: '#8F5E36', color: '#fff', borderRadius: '50px', textDecoration: 'none', fontWeight: 600 }}>
+                            Return to Store
+                        </Link>
+                    </div>
+                } />
             </Routes>
             <AppFooterWrapper />
 

@@ -2046,7 +2046,7 @@ function displayPickupOrderDetails(order) {
     // Fill fields
     document.getElementById('poCardOrderId').innerHTML = `Order #${order.id} <button type="button" onclick="copyTextToClipboard('${order.id}', this)" style="margin-left:8px; padding:2px 8px; font-size:0.75rem; border-radius:4px; border:1px solid #ddd; background:#fff; cursor:pointer">Copy ID</button>`;
     document.getElementById('poCardCustomer').innerText = order.customerEmail;
-    document.getElementById('poCardCheckoutType').innerText = order.checkoutType === 'pickup' ? '🏪 Boutique Pickup' : order.checkoutType;
+    
     let coTypeLabel = order.checkoutType;
     if (order.fulfilmentType === 'PREORDER_STORE_PICKUP') {
         coTypeLabel = '🏪 Preorder Store Pickup';
@@ -2066,112 +2066,104 @@ function displayPickupOrderDetails(order) {
 
     let badgeBg = '#ffe0b2';
     let badgeColor = '#e65100';
-    if (order.status === 'picked_up') {
-        if (order.status === 'picked_up' || order.status === 'COLLECTED') {
-            badgeBg = '#e8f5e9';
-            badgeColor = '#2e7d32';
-        } else if (order.status === 'ready_for_pickup') {
-            badgeBg = '#fff8e1';
-            badgeColor = '#f57f17';
-        } else if (order.status === 'ready_for_pickup' || order.status === 'READY_FOR_PICKUP') {
-            badgeBg = '#dcfce7';
-            badgeColor = '#15803d';
-        } else if (order.status === 'pending_payment') {
-            badgeBg = '#ffebee';
-            badgeColor = '#c62828';
-        } else if (order.status === 'paid') {
-            badgeBg = '#e3f2fd';
-            badgeColor = '#0d47a1';
-        }
-        badge.style.backgroundColor = badgeBg;
-        badge.style.color = badgeColor;
+    if (order.status === 'picked_up' || order.status === 'COLLECTED') {
+        badgeBg = '#e8f5e9';
+        badgeColor = '#2e7d32';
+    } else if (order.status === 'ready_for_pickup' || order.status === 'READY_FOR_PICKUP') {
+        badgeBg = '#dcfce7';
+        badgeColor = '#15803d';
+    } else if (order.status === 'pending_payment') {
+        badgeBg = '#ffebee';
+        badgeColor = '#c62828';
+    } else if (order.status === 'paid') {
+        badgeBg = '#e3f2fd';
+        badgeColor = '#0d47a1';
+    }
+    badge.style.backgroundColor = badgeBg;
+    badge.style.color = badgeColor;
 
-        // Items list
-        const itemsList = document.getElementById('poCardItemsList');
-        itemsList.innerHTML = '';
-        if (order.items && order.items.length > 0) {
-            order.items.forEach(it => {
-                const qty = it.quantity || 1;
-                const unitPrice = it.priceAtQty || 0;
-                const lineTotal = unitPrice * qty;
-                const li = document.createElement('li');
-                li.innerHTML = `<strong>${it.productName || it.productId}</strong> ${it.size ? `<span style="font-size:0.8rem; background:#fff0e9; color:#b97a66; padding:1px 5px; border-radius:3px; margin-left:4px">Size: ${it.size}</span>` : ''} &times; <strong>${qty}</strong> — <strong>₹${lineTotal.toLocaleString('en-IN')}</strong> ${qty > 1 ? `<small style="color:#888">(₹${unitPrice.toLocaleString('en-IN')} each)</small>` : ''}`;
-                itemsList.appendChild(li);
-            });
+    // Items list
+    const itemsList = document.getElementById('poCardItemsList');
+    itemsList.innerHTML = '';
+    if (order.items && order.items.length > 0) {
+        order.items.forEach(it => {
+            const qty = it.quantity || 1;
+            const unitPrice = it.priceAtQty || 0;
+            const lineTotal = unitPrice * qty;
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${it.productName || it.productId}</strong> ${it.size ? `<span style="font-size:0.8rem; background:#fff0e9; color:#b97a66; padding:1px 5px; border-radius:3px; margin-left:4px">Size: ${it.size}</span>` : ''} &times; <strong>${qty}</strong> — <strong>₹${lineTotal.toLocaleString('en-IN')}</strong> ${qty > 1 ? `<small style="color:#888">(₹${unitPrice.toLocaleString('en-IN')} each)</small>` : ''}`;
+            itemsList.appendChild(li);
+        });
+    } else {
+        itemsList.innerHTML = '<li style="color:#999; font-style:italic">No items logged for this order.</li>';
+    }
+
+    // Actions Container
+    const actions = document.getElementById('poCardActionsContainer');
+    actions.innerHTML = '';
+
+    if (order.status === 'picked_up' || order.status === 'COLLECTED') {
+        const infoMsg = document.createElement('div');
+        infoMsg.style.cssText = 'padding: 0.8rem; background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; border-radius: 8px; font-weight: 500; font-size: 0.9rem; flex: 1; text-align: center;';
+        infoMsg.innerText = '✓ Order is already Picked Up & Fulfilled.';
+        actions.appendChild(infoMsg);
+    } else if (order.checkoutType !== 'pickup' && order.fulfilmentType !== 'PREORDER_STORE_PICKUP') {
+        const warnMsg = document.createElement('div');
+        warnMsg.style.cssText = 'padding: 0.8rem; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 8px; font-size: 0.9rem; flex: 1;';
+        warnMsg.innerHTML = `⚠️ <strong>Warning:</strong> This order fulfillment method is <strong>${order.checkoutType}</strong>. Verify dispatch details instead.`;
+        actions.appendChild(warnMsg);
+    } else {
+        // Render verification details & Action button!
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary';
+        btn.style.cssText = 'padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600; flex: 1;';
+
+        if (order.fulfilmentType === 'PREORDER_STORE_PICKUP') {
+            btn.innerText = 'Confirm Preorder Collection & Release Items';
+            btn.style.backgroundColor = '#7c3aed';
+            btn.onclick = () => confirmPreorderPickup(order.id);
+        } else if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
+            btn.innerText = 'Verify Offline UPI Payment & Complete Pickup';
+            btn.style.backgroundColor = '#d0883b';
+            btn.onclick = () => confirmStorePickup(order.id);
         } else {
-            itemsList.innerHTML = '<li style="color:#999; font-style:italic">No items logged for this order.</li>';
+            btn.innerText = 'Confirm Store Pickup & Release Items';
+            btn.onclick = () => confirmStorePickup(order.id);
         }
 
-        // Actions Container
-        const actions = document.getElementById('poCardActionsContainer');
-        actions.innerHTML = '';
+        actions.appendChild(btn);
+    }
 
-        if (order.status === 'picked_up') {
-            if (order.status === 'picked_up' || order.status === 'COLLECTED') {
-                const infoMsg = document.createElement('div');
-                infoMsg.style.cssText = 'padding: 0.8rem; background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; border-radius: 8px; font-weight: 500; font-size: 0.9rem; flex: 1; text-align: center;';
-                infoMsg.innerText = '✓ Order is already Picked Up & Fulfilled.';
-                actions.appendChild(infoMsg);
-            } else if (order.checkoutType !== 'pickup') {
-            } else if (order.checkoutType !== 'pickup' && order.fulfilmentType !== 'PREORDER_STORE_PICKUP') {
-                const warnMsg = document.createElement('div');
-                warnMsg.style.cssText = 'padding: 0.8rem; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 8px; font-size: 0.9rem; flex: 1;';
-                warnMsg.innerHTML = `⚠️ <strong>Warning:</strong> This order fulfillment method is <strong>${order.checkoutType}</strong>. Verify dispatch details instead.`;
-                actions.appendChild(warnMsg);
-            } else {
-                // Render verification details & Action button!
-                const btn = document.createElement('button');
-                btn.className = 'btn-primary';
-                btn.style.cssText = 'padding: 0.85rem 2rem; border-radius: 8px; font-weight: 600; flex: 1;';
+    cardEl.style.display = 'block';
+}
 
-                if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
-                    if (order.fulfilmentType === 'PREORDER_STORE_PICKUP') {
-                        btn.innerText = 'Confirm Preorder Collection & Release Items';
-                        btn.style.backgroundColor = '#7c3aed';
-                        btn.onclick = () => confirmPreorderPickup(order.id);
-                    } else if (order.paymentMethod === 'offline_qr' && order.status === 'pending_payment') {
-                        btn.innerText = 'Verify Offline UPI Payment & Complete Pickup';
-                        btn.style.backgroundColor = '#d0883b';
-                        btn.onclick = () => confirmStorePickup(order.id);
-                    } else {
-                        btn.innerText = 'Confirm Store Pickup & Release Items';
-                        btn.onclick = () => confirmStorePickup(order.id);
-                    }
+async function confirmStorePickup(orderId) {
+    if (!confirm(`Are you sure you want to confirm pickup for Order #${orderId}?`)) return;
 
-                    btn.onclick = () => confirmStorePickup(order.id);
-                    actions.appendChild(btn);
-                }
+    try {
+        const res = await fetch(API_BASE_URL + '/api/admin/orders/confirm-pickup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify({ orderId: orderId })
+        });
 
-                cardEl.style.display = 'block';
-            }
-
-            async function confirmStorePickup(orderId) {
-                if (!confirm(`Are you sure you want to confirm pickup for Order #${orderId}?`)) return;
-
-                try {
-                    const res = await fetch(API_BASE_URL + '/api/admin/orders/confirm-pickup', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...getAuthHeader()
-                        },
-                        body: JSON.stringify({ orderId: orderId })
-                    });
-
-                    if (res.ok) {
-                        showScannerMessage(`Order #${orderId} has been successfully verified, payment confirmed/checked, and marked as picked_up!`, "green", "#f4fbf7");
-                        // Reload order details
-                        searchPickupOrder(orderId);
-                        // Refresh order list if general table is open
-                        loadOrders();
-                    } else {
-                        const errData = await res.json().catch(() => ({}));
-                        showScannerMessage(`Failed to confirm pickup: ${errData.error || 'Server error'}`, "red", "#fff5f5");
-                    }
-                } catch (err) {
-                    showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
-                }
-            }
+        if (res.ok) {
+            showScannerMessage(`Order #${orderId} has been successfully verified, payment confirmed/checked, and marked as picked_up!`, "green", "#f4fbf7");
+            // Reload order details
+            searchPickupOrder(orderId);
+            // Refresh order list if general table is open
+            loadOrders();
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            showScannerMessage(`Failed to confirm pickup: ${errData.error || 'Server error'}`, "red", "#fff5f5");
+        }
+    } catch (err) {
+        showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
+    }
+}
 
             function handleUrlHashChange() {
                 const hash = window.location.hash || '';

@@ -67,10 +67,10 @@ func (h *CartHandler) HandleCart(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "Cart updated"})
 	} else if r.Method == http.MethodDelete {
-		if r.URL.Query().Get("clearAll") == "true" {
+		productID := r.URL.Query().Get("productId")
+		if r.URL.Query().Get("clearAll") == "true" || productID == "" {
 			h.svc.ClearCart(userID)
 		} else {
-			productID := r.URL.Query().Get("productId")
 			size := r.URL.Query().Get("size")
 			h.svc.RemoveFromCart(userID, productID, size)
 		}

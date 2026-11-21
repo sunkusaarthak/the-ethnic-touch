@@ -47,7 +47,7 @@ func (s *liveDelhiveryService) CheckServiceability(pincode string, weightGrams i
 	}
 	req.Header.Set("Authorization", "Token "+s.apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return false, 0, err
@@ -196,7 +196,7 @@ func (s *liveDelhiveryService) BatchPickup(orders []models.Order) error {
 	req.Header.Set("Authorization", "Token "+s.apiKey)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

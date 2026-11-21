@@ -89,16 +89,10 @@ func (h *OrderHandler) HandleVerifyPayment(w http.ResponseWriter, r *http.Reques
 	}
 
 	if order, err := h.svc.GetOrder(req.OrderID); err == nil {
-		profiles, _ := h.profileSvc.GetAllProfiles()
-		var userID string
-		for _, p := range profiles {
-			if p.Email == order.CustomerEmail {
-				userID = p.UserID
-				break
+		if h.profileSvc != nil {
+			if p, err := h.profileSvc.GetProfileByEmail(order.CustomerEmail); err == nil && p != nil && p.UserID != "" {
+				h.profileSvc.AddSpinTicket(p.UserID, 1)
 			}
-		}
-		if userID != "" {
-			h.profileSvc.AddSpinTicket(userID, 1)
 		}
 		h.configSvc.IncrementOrderKurthiCounter()
 	}
@@ -118,12 +112,15 @@ func (h *OrderHandler) HandleCancelOrder(w http.ResponseWriter, r *http.Request)
 		orderID = r.URL.Query().Get("orderId")
 	}
 
+	reqEmail := ""
 	if orderID == "" {
 		var req struct {
 			OrderID string `json:"orderId"`
+			Email   string `json:"email"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		orderID = req.OrderID
+		reqEmail = req.Email
 	}
 
 	if orderID == "" {
@@ -133,7 +130,52 @@ func (h *OrderHandler) HandleCancelOrder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err := h.svc.CancelOrder(orderID)
+	order, err := h.svc.GetOrder(orderID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"Order not found"}`))
+		return
+	}
+
+	// Verify authorization: only admin/staff or the order customer may cancel
+	role, _ := r.Context().Value(middleware.RoleKey).(string)
+	isAdmin := role == "admin" || role == "employee"
+
+	if !isAdmin {
+		callerUserID := r.Header.Get("X-User-Id")
+		callerEmail := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
+		if callerEmail == "" {
+			callerEmail = strings.ToLower(strings.TrimSpace(reqEmail))
+		}
+
+		isOwner := false
+		if callerEmail != "" && strings.EqualFold(callerEmail, order.CustomerEmail) {
+			isOwner = true
+		} else if callerUserID != "" && h.profileSvc != nil {
+			if p, err := h.profileSvc.GetProfile(callerUserID); err == nil && p != nil {
+				if strings.EqualFold(p.Email, order.CustomerEmail) {
+					isOwner = true
+				}
+			}
+		}
+
+		if !isOwner {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"Forbidden: you do not have permission to cancel this order"}`))
+			return
+		}
+
+		if order.Status != "pending" && order.Status != "pending_payment" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"Only pending orders can be cancelled"}`))
+			return
+		}
+	}
+
+	err = h.svc.CancelOrder(orderID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -195,6 +237,37 @@ func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Mask PII if caller is not the owner or admin/staff
+	role, _ := r.Context().Value(middleware.RoleKey).(string)
+	isAdmin := role == "admin" || role == "employee"
+
+	if !isAdmin {
+		callerUserID := r.Header.Get("X-User-Id")
+		callerEmail := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
+		isOwner := false
+
+		if callerEmail != "" && strings.EqualFold(callerEmail, order.CustomerEmail) {
+			isOwner = true
+		} else if callerUserID != "" && h.profileSvc != nil {
+			if p, err := h.profileSvc.GetProfile(callerUserID); err == nil && p != nil {
+				if strings.EqualFold(p.Email, order.CustomerEmail) {
+					isOwner = true
+				}
+			}
+		}
+
+		if !isOwner {
+			safeOrder := *order
+			safeOrder.ShippingPhone = utils.MaskPhone(order.ShippingPhone)
+			safeOrder.ShippingAddress = utils.MaskAddress(order.ShippingAddress)
+			safeOrder.ShippingName = utils.MaskName(order.ShippingName)
+			safeOrder.CustomerEmail = utils.MaskEmail(order.CustomerEmail)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(safeOrder)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(order)
 }
@@ -231,16 +304,10 @@ func (h *OrderHandler) HandleConfirmPickup(w http.ResponseWriter, r *http.Reques
 	}
 
 	if order.PaymentMethod == "offline_qr" {
-		profiles, _ := h.profileSvc.GetAllProfiles()
-		var userID string
-		for _, p := range profiles {
-			if p.Email == order.CustomerEmail {
-				userID = p.UserID
-				break
+		if h.profileSvc != nil {
+			if p, err := h.profileSvc.GetProfileByEmail(order.CustomerEmail); err == nil && p != nil && p.UserID != "" {
+				h.profileSvc.AddSpinTicket(p.UserID, 1)
 			}
-		}
-		if userID != "" {
-			h.profileSvc.AddSpinTicket(userID, 1)
 		}
 		h.configSvc.IncrementOrderKurthiCounter()
 	}

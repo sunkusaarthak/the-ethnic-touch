@@ -51,7 +51,7 @@ const CheckoutSuccess = () => {
                     }
                 }
             })
-            .catch(() => { });
+            .catch(err => console.error("[CheckoutSuccess] Failed to refresh order details:", err));
 
         if (!pickupConfig) {
             fetch('/api/config/preorder-pickup')
@@ -59,7 +59,7 @@ const CheckoutSuccess = () => {
                 .then(cfg => {
                     if (cfg) setPickupConfig(prev => prev || cfg);
                 })
-                .catch(() => { });
+                .catch(err => console.error("[CheckoutSuccess] Failed to refresh order details:", err));
         }
 
         try {
@@ -114,7 +114,7 @@ const CheckoutSuccess = () => {
         tracking === 'STORE-PICKUP' ||
         paymentMethod === 'offline_qr';
 
-    const isPreorderStorePickup = isPreorder && (fulfilmentType === 'PREORDER_STORE_PICKUP' || fulfilmentType === 'STORE_PICKUP' || checkoutType === 'pickup');
+    const isPreorderStorePickup = isPreorder && isStorePickup;
     const isOffline = paymentMethod === 'offline_qr';
 
     // QR Code data: point to admin confirm pickup view
@@ -229,11 +229,11 @@ const CheckoutSuccess = () => {
                 <p style={{ fontSize: '0.92rem', color: '#5C5854', lineHeight: '1.6', margin: '0 0 1.5rem', padding: '0 0.25rem' }}>
                     {isOffline
                         ? `Please present the verification pass QR code below at the reception counter to finalize payments of ₹${(amount || 0).toLocaleString('en-IN')} and collect your bespoke kurthi garments.`
-                            : isStorePickup
-                                ? "Your store collection order is placed and confirmed. Keep the verification pass QR code below handy for scanning when collecting your order at our store."
-                                : tracking && (tracking.startsWith('RAPIDO-INSTANT-') || tracking.startsWith('UBER-INSTANT-'))
-                                    ? "Registered for direct instant courier shipping. Your designer styles are prepared, steamed, and dispatched from Khajaguda via direct courier."
-                                    : "Your designer packaging is ready and handed over to express delivery trackers for prompt dispatch to your wardrobe."
+                        : isStorePickup
+                            ? "Your store collection order is placed and confirmed. Keep the verification pass QR code below handy for scanning when collecting your order at our store."
+                            : tracking && (tracking.startsWith('RAPIDO-INSTANT-') || tracking.startsWith('UBER-INSTANT-'))
+                                ? "Registered for direct instant courier shipping. Your designer styles are prepared, steamed, and dispatched from Khajaguda via direct courier."
+                                : "Your designer packaging is ready and handed over to express delivery trackers for prompt dispatch to your wardrobe."
                     }
                 </p>
 
@@ -249,16 +249,16 @@ const CheckoutSuccess = () => {
                         textAlign: 'left'
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.8rem' }}>
-                                <span style={{
-                                    background: isPreorderStorePickup ? '#f3e8ff' : '#dbeafe',
-                                    color: isPreorderStorePickup ? '#7e22ce' : '#1d4ed8',
-                                    padding: '3px 10px',
-                                    borderRadius: '12px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 700
-                                }}>
-                                    {isPreorderStorePickup ? '🏪 STORE PICKUP PREORDER' : '🚚 HOME DELIVERY PREORDER'}
-                                </span>
+                            <span style={{
+                                background: isPreorderStorePickup ? '#f3e8ff' : '#dbeafe',
+                                color: isPreorderStorePickup ? '#7e22ce' : '#1d4ed8',
+                                padding: '3px 10px',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700
+                            }}>
+                                {isPreorderStorePickup ? '🏪 STORE PICKUP PREORDER' : '🚚 HOME DELIVERY PREORDER'}
+                            </span>
                         </div>
 
                         <div style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '1rem' }}>
@@ -277,102 +277,102 @@ const CheckoutSuccess = () => {
                             </div>
                         </div>
 
-                            { isPreorderStorePickup && (
-                                <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid #e2e8f0', fontSize: '0.82rem', color: '#334155' }}>
-                                    <strong>📍 Collection Store:</strong> {pickupConfig?.locationName || 'The Ethnic Touch Store'}, {pickupConfig?.address || 'ESCI road, Kajaguda lake.'}, {pickupConfig?.city || 'Hyderabad'}
-                                    {pickupConfig?.availability && <div><strong>🕐 Timings:</strong> {pickupConfig.availability}</div>}
-                                    {pickupConfig?.contactInfo && <div><strong>📞 Store Contact:</strong> {pickupConfig.contactInfo}</div>}
-                                    {pickupConfig?.estimatedPickupDate && <div><strong>⏳ Ready Window:</strong> {pickupConfig.estimatedPickupDate}</div>}
-                                </div>
-                            )}
+                        {isPreorderStorePickup && (
+                            <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid #e2e8f0', fontSize: '0.82rem', color: '#334155' }}>
+                                <strong>📍 Collection Store:</strong> {pickupConfig?.locationName || 'The Ethnic Touch Store'}, {pickupConfig?.address || 'ESCI road, Kajaguda lake.'}, {pickupConfig?.city || 'Hyderabad'}
+                                {pickupConfig?.availability && <div><strong>🕐 Timings:</strong> {pickupConfig.availability}</div>}
+                                {pickupConfig?.contactInfo && <div><strong>📞 Store Contact:</strong> {pickupConfig.contactInfo}</div>}
+                                {pickupConfig?.estimatedPickupDate && <div><strong>⏳ Ready Window:</strong> {pickupConfig.estimatedPickupDate}</div>}
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {/* Show QR Code for In-Store Pickup */}
-                    { isStorePickup && (
-                        <div style={{
-                            marginTop: '1.25rem',
-                            padding: '1.4rem 1rem',
-                            background: '#FAF9F6',
-                            border: '2px solid #D4A373',
-                            borderRadius: '16px',
-                            display: 'inline-block',
-                            maxWidth: '100%',
-                            boxSizing: 'border-box',
-                            boxShadow: '0 8px 20px rgba(212,163,115,0.08)'
-                        }}>
-                            <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: '#8F5E36', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                                Store Verification Scanner Pass
-                            </p>
-                            <div style={{
-                                padding: '8px',
-                                background: '#fff',
-                                borderRadius: '12px',
-                                display: 'inline-block',
-                                border: '1px solid #E6E4E0',
-                                maxWidth: '100%',
-                                boxSizing: 'border-box'
-                            }}>
-                                <img
-                                    src={qrImgUrl}
-                                    alt="Order Pickup Pass"
-                                    style={{ width: '180px', height: '180px', maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto' }}
-                                />
-                            </div>
-                            <div>
-                                <div style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem',
-                                    marginTop: '1rem',
-                                    backgroundColor: '#FFF',
-                                    border: '1px dashed #D4A373',
-                                    borderRadius: '24px',
-                                    padding: '0.45rem 1rem',
-                                    maxWidth: '100%',
-                                    boxSizing: 'border-box',
-                                    flexWrap: 'wrap'
-                                }}>
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                                        <strong style={{
-                                            fontSize: 'clamp(0.85rem, 3.8vw, 1.05rem)',
-                                            fontFamily: 'monospace',
-                                            color: '#2D2A26',
-                                            letterSpacing: '0.04em',
-                                            wordBreak: 'break-all'
-                                        }}>
-                                            #{orderId}
-                                        </strong>
-                                        <CopyButton text={orderId} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', flexShrink: 0 }} />
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                {/* Standard Shipping Tracking code */}
-                {!isPickup && tracking && (
+                {isStorePickup && (
                     <div style={{
                         marginTop: '1.25rem',
-                        padding: '0.65rem 1rem',
+                        padding: '1.4rem 1rem',
                         background: '#FAF9F6',
-                        border: '1.5px dashed #D4A373',
-                        borderRadius: '24px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.4rem 0.6rem',
-                        flexWrap: 'wrap',
+                        border: '2px solid #D4A373',
+                        borderRadius: '16px',
+                        display: 'inline-block',
                         maxWidth: '100%',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        boxShadow: '0 8px 20px rgba(212,163,115,0.08)'
                     }}>
-                        <span style={{ fontSize: '0.8rem', color: '#6C6863', fontWeight: '500', whiteSpace: 'nowrap' }}>Carrier Waybill ID:</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <strong style={{ fontSize: 'clamp(0.85rem, 3.8vw, 1.05rem)', color: '#8F5E36', fontFamily: 'monospace', letterSpacing: '0.04em', wordBreak: 'break-all' }}>{tracking}</strong>
-                            <CopyButton text={tracking} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF', flexShrink: 0 }} />
-                        </span>
+                        <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: '#8F5E36', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            Store Verification Scanner Pass
+                        </p>
+                        <div style={{
+                            padding: '8px',
+                            background: '#fff',
+                            borderRadius: '12px',
+                            display: 'inline-block',
+                            border: '1px solid #E6E4E0',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box'
+                        }}>
+                            <img
+                                src={qrImgUrl}
+                                alt="Order Pickup Pass"
+                                style={{ width: '180px', height: '180px', maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto' }}
+                            />
+                        </div>
+                        <div>
+                            <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                marginTop: '1rem',
+                                backgroundColor: '#FFF',
+                                border: '1px dashed #D4A373',
+                                borderRadius: '24px',
+                                padding: '0.45rem 1rem',
+                                maxWidth: '100%',
+                                boxSizing: 'border-box',
+                                flexWrap: 'wrap'
+                            }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    <strong style={{
+                                        fontSize: 'clamp(0.85rem, 3.8vw, 1.05rem)',
+                                        fontFamily: 'monospace',
+                                        color: '#2D2A26',
+                                        letterSpacing: '0.04em',
+                                        wordBreak: 'break-all'
+                                    }}>
+                                        #{orderId}
+                                    </strong>
+                                    <CopyButton text={orderId} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', flexShrink: 0 }} />
+                                </span>
+                            </div>
+                        </div>
                     </div>
+                )}
+
+                {/* Standard Shipping Tracking code */}
+                    {!isStorePickup && tracking && (
+                <div style={{
+                    marginTop: '1.25rem',
+                    padding: '0.65rem 1rem',
+                    background: '#FAF9F6',
+                    border: '1.5px dashed #D4A373',
+                    borderRadius: '24px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem 0.6rem',
+                    flexWrap: 'wrap',
+                    maxWidth: '100%',
+                    boxSizing: 'border-box'
+                }}>
+                    <span style={{ fontSize: '0.8rem', color: '#6C6863', fontWeight: '500', whiteSpace: 'nowrap' }}>Carrier Waybill ID:</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <strong style={{ fontSize: 'clamp(0.85rem, 3.8vw, 1.05rem)', color: '#8F5E36', fontFamily: 'monospace', letterSpacing: '0.04em', wordBreak: 'break-all' }}>{tracking}</strong>
+                        <CopyButton text={tracking} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF', flexShrink: 0 }} />
+                    </span>
+                </div>
                 )}
 
                 {displayGift && (

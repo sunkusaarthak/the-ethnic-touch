@@ -27,6 +27,20 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const logout = async () => {
+        try {
+            // Purge cached local storage for user privacy and security
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith('tet_') || key.startsWith('firebase:authUser:'))) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            sessionStorage.clear();
+        } catch (e) {
+            console.error("[AuthContext] Storage cleanup error:", e);
+        }
         if (auth) {
             await signOut(auth);
         }

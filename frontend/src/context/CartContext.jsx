@@ -85,6 +85,9 @@ export const CartProvider = ({ children }) => {
             if (cart && cart.length > 0) {
                 localStorage.setItem('tet_cart_active', JSON.stringify(cart));
                 localStorage.setItem('tet_guest_cart', JSON.stringify(cart));
+            } else if (Array.isArray(cart) && cart.length === 0) {
+                localStorage.removeItem('tet_cart_active');
+                localStorage.removeItem('tet_guest_cart');
             }
         } catch (e) {
             console.error("[CartContext] Local storage write error:", e);
@@ -96,6 +99,9 @@ export const CartProvider = ({ children }) => {
             if (wishlist && wishlist.length > 0) {
                 localStorage.setItem('tet_wishlist_active', JSON.stringify(wishlist));
                 localStorage.setItem('tet_guest_wishlist', JSON.stringify(wishlist));
+            } else if (Array.isArray(wishlist) && wishlist.length === 0) {
+                localStorage.removeItem('tet_wishlist_active');
+                localStorage.removeItem('tet_guest_wishlist');
             }
         } catch (e) {
             console.error("[CartContext] Wishlist storage write error:", e);
@@ -366,7 +372,7 @@ export const CartProvider = ({ children }) => {
         localStorage.removeItem('tet_cart_active');
         localStorage.removeItem('tet_guest_cart');
         if (authUser) {
-            apiClient.delete('/api/cart').catch(e => console.error("[CartContext] Clear cart error:", e));
+            apiClient.delete('/api/cart?clearAll=true').catch(e => console.error("[CartContext] Clear cart error:", e));
         }
     }, [authUser]);
 

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"ethnictouch/internal/repository"
 	"ethnictouch/internal/utils"
@@ -32,9 +34,16 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 			}
 
 			// Verify Firebase token using Google Identity Toolkit
-			apiKey := "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8"
+			apiKey := os.Getenv("FIREBASE_WEB_API_KEY")
+			if apiKey == "" {
+				apiKey = "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8"
+			}
 			reqBody := `{"idToken":"` + token + `"}`
-			resp, err := http.Post("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="+apiKey, "application/json", strings.NewReader(reqBody))
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp, err := client.Post("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="+apiKey, "application/json", strings.NewReader(reqBody))
+			if resp != nil {
+				defer resp.Body.Close()
+			}
 			
 			if err != nil || resp.StatusCode != http.StatusOK {
 				w.Header().Set("Content-Type", "application/json")
@@ -42,7 +51,6 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 				json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Unauthorized: invalid Firebase token")})
 				return
 			}
-			defer resp.Body.Close()
 
 			var tokenInfo struct {
 				Users []struct {

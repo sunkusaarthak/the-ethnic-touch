@@ -126,7 +126,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
         }
     }, [cart, authUser, authLoading, navigate]);
 
-    const subtotal = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
+    const subtotal = (cart || []).reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
     let finalTotal = subtotal - (discount?.amt || 0);
 
     const activeAddr = authUser && addresses.length > 0 ? addresses.find(a => a.id === selectedAddressID) : null;
