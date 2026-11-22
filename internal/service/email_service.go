@@ -4,9 +4,12 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"log"
 	"net"
+	"net/mail"
 	"net/smtp"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,11 +102,49 @@ func (s *emailService) VerifyConnection() error {
 	return client.Quit()
 }
 
+// sanitizeHeaderField strips carriage returns and newlines to prevent SMTP header injection
+func sanitizeHeaderField(val string) string {
+	val = strings.ReplaceAll(val, "\r", " ")
+	val = strings.ReplaceAll(val, "\n", " ")
+	return strings.TrimSpace(val)
+}
+
+// sanitizeEmailText strips carriage return characters to prevent MIME boundary confusion
+func sanitizeEmailText(val string) string {
+	return strings.ReplaceAll(val, "\r", "")
+}
+
+// writeSMTPBody writes the message payload to an active SMTP client session
+func writeSMTPBody(client *smtp.Client, msg []byte) error {
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("SMTP DATA failed: %w", err)
+	}
+	if _, err := w.Write(msg); err != nil {
+		_ = w.Close()
+		return fmt.Errorf("failed writing SMTP body: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("failed closing SMTP stream: %w", err)
+	}
+	return nil
+}
+
 // SendEmail delivers an HTML and plain-text multipart email via SMTP
 func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 	to = strings.TrimSpace(to)
 	if to == "" {
 		return fmt.Errorf("recipient email address is empty")
+	}
+
+	// 1. Strict RFC 5322 recipient address validation to prevent SMTP header injection
+	parsedTo, err := mail.ParseAddress(to)
+	if err != nil {
+		return fmt.Errorf("invalid recipient email address %q: %w", to, err)
+	}
+	cleanTo := parsedTo.Address
+	if strings.ContainsAny(cleanTo, "\r\n\x00") {
+		return fmt.Errorf("recipient address contains invalid control characters")
 	}
 
 	fromName := "The Ethnic Touch"
@@ -122,13 +163,18 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 		}
 	}
 
+	// 2. Strict CRLF stripping on all header fields
+	cleanSubject := sanitizeHeaderField(subject)
+	cleanFromName := sanitizeHeaderField(fromName)
+	cleanReplyTo := sanitizeHeaderField(replyTo)
+
 	// Mock / Preview Mode when credentials are not configured
 	if !s.IsConfigured() {
 		log.Println("--------------------------------------------------")
 		log.Println("[MOCK EMAIL SIMULATION]")
-		log.Printf("From:    \"%s\" <%s>\n", fromName, fromAddress)
-		log.Printf("To:      %s\n", to)
-		log.Printf("Subject: %s\n", subject)
+		log.Printf("From:    \"%s\" <%s>\n", cleanFromName, fromAddress)
+		log.Printf("To:      %s\n", cleanTo)
+		log.Printf("Subject: %s\n", cleanSubject)
 		log.Println("Status:  Delivered (Mock Mode - configure GMAIL_USER & GMAIL_APP_PASSWORD for live delivery)")
 		log.Println("--------------------------------------------------")
 		return nil
@@ -148,13 +194,13 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 	boundary := fmt.Sprintf("=_Boundary_%d_%s", time.Now().UnixNano(), "ET")
 
 	// Encode subject with RFC 2047 UTF-8 Base64
-	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
+	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(cleanSubject)))
 
 	// Compose MIME headers
 	var headers strings.Builder
-	headers.WriteString(fmt.Sprintf("From: \"%s\" <%s>\r\n", fromName, smtpUser))
-	headers.WriteString(fmt.Sprintf("To: %s\r\n", to))
-	headers.WriteString(fmt.Sprintf("Reply-To: %s\r\n", replyTo))
+	headers.WriteString(fmt.Sprintf("From: \"%s\" <%s>\r\n", cleanFromName, smtpUser))
+	headers.WriteString(fmt.Sprintf("To: %s\r\n", cleanTo))
+	headers.WriteString(fmt.Sprintf("Reply-To: %s\r\n", cleanReplyTo))
 	headers.WriteString(fmt.Sprintf("Subject: %s\r\n", encodedSubject))
 	headers.WriteString("MIME-Version: 1.0\r\n")
 	headers.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=\"%s\"\r\n", boundary))
@@ -208,18 +254,11 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 		if err := client.Mail(smtpUser); err != nil {
 			return fmt.Errorf("SMTP MAIL failed: %w", err)
 		}
-		if err := client.Rcpt(to); err != nil {
+		if err := client.Rcpt(cleanTo); err != nil {
 			return fmt.Errorf("SMTP RCPT failed: %w", err)
 		}
-		w, err := client.Data()
-		if err != nil {
-			return fmt.Errorf("SMTP DATA failed: %w", err)
-		}
-		if _, err := w.Write(rawMessage); err != nil {
-			return fmt.Errorf("failed writing SMTP body: %w", err)
-		}
-		if err := w.Close(); err != nil {
-			return fmt.Errorf("failed closing SMTP stream: %w", err)
+		if err := writeSMTPBody(client, rawMessage); err != nil {
+			return err
 		}
 		_ = client.Quit()
 	} else {
@@ -240,23 +279,16 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 		if err := client.Mail(smtpUser); err != nil {
 			return fmt.Errorf("SMTP MAIL failed: %w", err)
 		}
-		if err := client.Rcpt(to); err != nil {
+		if err := client.Rcpt(cleanTo); err != nil {
 			return fmt.Errorf("SMTP RCPT failed: %w", err)
 		}
-		w, err := client.Data()
-		if err != nil {
-			return fmt.Errorf("SMTP DATA failed: %w", err)
-		}
-		if _, err := w.Write(rawMessage); err != nil {
-			return fmt.Errorf("failed writing SMTP body: %w", err)
-		}
-		if err := w.Close(); err != nil {
-			return fmt.Errorf("failed closing SMTP stream: %w", err)
+		if err := writeSMTPBody(client, rawMessage); err != nil {
+			return err
 		}
 		_ = client.Quit()
 	}
 
-	log.Printf("[Email Sent] Successfully delivered email to %s | Subject: %s", to, subject)
+	log.Printf("[Email Sent] Successfully delivered email to %s | Subject: %s", cleanTo, cleanSubject)
 	return nil
 }
 
@@ -310,7 +342,7 @@ func isOrderPaid(order *models.Order) bool {
 	return false
 }
 
-const defaultProductImage = "https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/email-assets/product_placeholder.png"
+const defaultProductImage = "https://www.theethnictouch.com/email-assets/product_placeholder.png"
 
 // Helper: resolve product image URL to absolute URL
 func resolveProductImageURL(rawURL string) string {
@@ -584,19 +616,21 @@ func renderOrderItemsTable(items []models.OrderItem) string {
 		if name == "" || strings.EqualFold(name, "test") {
 			name = "Jaipur Pure Cotton Kurti"
 		}
+		safeName := html.EscapeString(name)
 		itemTotal := it.PriceAtQty * float64(it.Quantity)
 		sizeLabel := ""
 		if it.Size != "" {
-			sizeLabel = fmt.Sprintf(`<span style="display:inline-block; font-size:10px; font-weight:700; color:#78451D; background:#FAF3EA; border:1px solid #D4A373; border-radius:3px; padding:2px 6px; margin-right:4px;">Size: %s</span>`, it.Size)
+			safeSize := html.EscapeString(it.Size)
+			sizeLabel = fmt.Sprintf(`<span style="display:inline-block; font-size:10px; font-weight:700; color:#78451D; background:#FAF3EA; border:1px solid #D4A373; border-radius:3px; padding:2px 6px; margin-right:4px;">Size: %s</span>`, safeSize)
 		}
 
 		prodLink := "https://www.theethnictouch.com/shop"
 		if it.ProductID != "" && !strings.EqualFold(it.ProductID, "test") {
-			prodLink = fmt.Sprintf("https://www.theethnictouch.com/product/%s", it.ProductID)
+			prodLink = fmt.Sprintf("https://www.theethnictouch.com/product/%s", url.PathEscape(it.ProductID))
 		}
 
-		resolvedImg := resolveProductImageURL(it.ImageURL)
-		imgTag := fmt.Sprintf(`<a href="%s" target="_blank" style="text-decoration:none; display:block;"><img src="%s" alt="%s" width="56" height="70" style="display:block; width:56px; height:70px; object-fit:cover; border-radius:6px; border:1px solid #D4A373; background:#FAF6F0; box-shadow:0 2px 6px rgba(140,88,53,0.1);" /></a>`, prodLink, resolvedImg, name)
+		resolvedImg := html.EscapeString(resolveProductImageURL(it.ImageURL))
+		imgTag := fmt.Sprintf(`<a href="%s" target="_blank" style="text-decoration:none; display:block;"><img src="%s" alt="%s" width="56" height="70" style="display:block; width:56px; height:70px; object-fit:cover; border-radius:6px; border:1px solid #D4A373; background:#FAF6F0; box-shadow:0 2px 6px rgba(140,88,53,0.1);" /></a>`, prodLink, resolvedImg, safeName)
 
 		sb.WriteString(fmt.Sprintf(`
 		<tr>
@@ -616,14 +650,18 @@ func renderOrderItemsTable(items []models.OrderItem) string {
 			<td style="padding: 12px 0; border-bottom: 1px solid #F0EAE1; vertical-align: top; text-align: right; width: 75px; white-space: nowrap; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #1E1A17;">
 				%s
 			</td>
-		</tr>`, imgTag, prodLink, name, sizeLabel, it.Quantity, formatCurrency(it.PriceAtQty), formatCurrency(itemTotal)))
+		</tr>`, imgTag, prodLink, safeName, sizeLabel, it.Quantity, formatCurrency(it.PriceAtQty), formatCurrency(itemTotal)))
 	}
 	sb.WriteString(`</table>`)
 	return sb.String()
 }
 
 func renderOrderConfirmationHTML(order *models.Order) string {
-	name := getCustomerDisplayName(order)
+	rawName := getCustomerDisplayName(order)
+	safeName := html.EscapeString(rawName)
+	safeOrderID := html.EscapeString(order.ID)
+	urlSafeOrderID := url.QueryEscape(order.ID)
+	safePaymentMethod := html.EscapeString(strings.ToUpper(order.PaymentMethod))
 	isPickup := isStorePickup(order)
 	isPaid := isOrderPaid(order)
 
@@ -640,14 +678,14 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 		if isPaid {
 			// CONTEXT 1: PREPAID STORE PICKUP
 			badgeHTML = `<span style="background: linear-gradient(135deg, #EFF8F2 0%, #E0F0E5 100%); color: #1B5832; border: 1.5px solid #75B58C; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">PREPAID STORE PICKUP &bull; FULLY PAID</span>`
-			heroIconHTML = `<img src="https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/email-assets/check_circle_green.png" alt="Order Confirmed" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />`
+			heroIconHTML = `<img src="https://www.theethnictouch.com/email-assets/check_circle_green.png" alt="Order Confirmed" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />`
 			headlineText = "Your In-Store Collection is Confirmed"
-			contextIntroText = fmt.Sprintf("Dear %s, thank you for choosing luxury Jaipuri craftsmanship. Your store collection checkout is complete and fully paid. Our store team is preparing and carefully packing your ensembles so they are ready for collection.", name)
+			contextIntroText = fmt.Sprintf("Dear %s, thank you for choosing luxury Jaipuri craftsmanship. Your store collection checkout is complete and fully paid. Our store team is preparing and carefully packing your ensembles so they are ready for collection.", safeName)
 
 			if order.IsPreorder {
 				badgeHTML = `<span style="background: linear-gradient(135deg, #EFF8F2 0%, #E0F0E5 100%); color: #1B5832; border: 1.5px solid #75B58C; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">PREORDER CONFIRMED &bull; STORE COLLECTION</span>`
 				headlineText = "Your Preorder is Confirmed for Store Collection"
-				contextIntroText = fmt.Sprintf("Dear %s, thank you for pre-ordering your handcrafted Jaipuri ensembles. Your preorder is confirmed and fully paid. Once our artisans complete crafting and inspection, you will receive an alert to collect your garments at our Khajaguda store.", name)
+				contextIntroText = fmt.Sprintf("Dear %s, thank you for pre-ordering your handcrafted Jaipuri ensembles. Your preorder is confirmed and fully paid. Once our artisans complete crafting and inspection, you will receive an alert to collect your garments at our Khajaguda store.", safeName)
 			}
 
 			scannerPassHTML = fmt.Sprintf(`
@@ -664,13 +702,13 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 				<div style="font-size: 12px; color: #5C5854; line-height: 1.5; max-width: 440px; margin: 0 auto;">
 					<strong>Order Fully Paid.</strong> Keep this pass or your Order Reference handy for instant scanning at the retail checkout counter.
 				</div>
-			</div>`, order.ID, order.ID)
+			</div>`, safeOrderID, urlSafeOrderID)
 		} else {
 			// CONTEXT 2: UNPAID STORE PICKUP (OFFLINE QR / PAY AT COUNTER)
 			badgeHTML = `<span style="background: linear-gradient(135deg, #FAF3ED 0%, #F5ECE0 100%); color: #78451D; border: 1.5px solid #D4A373; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">STORE PICKUP RESERVED &bull; PAY AT STORE</span>`
-			heroIconHTML = `<img src="https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/email-assets/pending_clock_amber.png" alt="Order Reserved" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />`
+			heroIconHTML = `<img src="https://www.theethnictouch.com/email-assets/pending_clock_amber.png" alt="Order Reserved" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />`
 			headlineText = "Your Ensembles are Reserved at Our Hyderabad Store"
-			contextIntroText = fmt.Sprintf("Dear %s, your handcrafted Jaipuri ensembles have been reserved and set aside for you at our Khajaguda store. Please present your Order Reference or QR Pass at our store counter when collecting your garments to complete your payment.", name)
+			contextIntroText = fmt.Sprintf("Dear %s, your handcrafted Jaipuri ensembles have been reserved and set aside for you at our Khajaguda store. Please present your Order Reference or QR Pass at our store counter when collecting your garments to complete your payment.", safeName)
 
 			scannerPassHTML = fmt.Sprintf(`
 			<!-- Store Verification & Payment Pass (Unpaid) -->
@@ -686,7 +724,7 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 				<div style="font-size: 12px; color: #5C5854; line-height: 1.5; max-width: 440px; margin: 0 auto;">
 					Please present this pass at the counter to finalize payment of <strong>%s</strong> (UPI, Card, or Cash accepted) and collect your bespoke kurti garments.
 				</div>
-			</div>`, order.ID, formatCurrency(order.TotalAmount), order.ID, formatCurrency(order.TotalAmount))
+			</div>`, safeOrderID, formatCurrency(order.TotalAmount), urlSafeOrderID, formatCurrency(order.TotalAmount))
 		}
 
 		// Store Pickup Suite Details (No delivery address or 000000 phone)
@@ -718,20 +756,25 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 	} else {
 		// CONTEXT 3: DELIVERY ORDER
 		badgeHTML = `<span style="background: linear-gradient(135deg, #FCF8F2 0%, #F5EADB 100%); color: #73431A; border: 1.5px solid #C99E5F; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">ORDER CONFIRMED &bull; PREPARING FOR DISPATCH</span>`
-		heroIconHTML = `<img src="https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/email-assets/check_circle_green.png" alt="Order Confirmed" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />`
+		heroIconHTML = `<img src="https://www.theethnictouch.com/email-assets/check_circle_green.png" alt="Order Confirmed" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />`
 		headlineText = "Your Handcrafted Ensembles are Confirmed"
-		contextIntroText = fmt.Sprintf("Dear %s, thank you for choosing The Ethnic Touch. Your order has been confirmed. Our team is carefully inspecting, steaming, and packaging your Jaipuri ensembles for swift dispatch to your doorstep.", name)
+		contextIntroText = fmt.Sprintf("Dear %s, thank you for choosing The Ethnic Touch. Your order has been confirmed. Our team is carefully inspecting, steaming, and packaging your Jaipuri ensembles for swift dispatch to your doorstep.", safeName)
 
 		if order.IsPreorder {
 			badgeHTML = `<span style="background: linear-gradient(135deg, #FCF8F2 0%, #F5EADB 100%); color: #73431A; border: 1.5px solid #C99E5F; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">PREORDER CONFIRMED &bull; CRAFTING IN PROGRESS</span>`
 			headlineText = "Your Handcrafted Preorder is Confirmed"
-			contextIntroText = fmt.Sprintf("Dear %s, thank you for pre-ordering. Your bespoke ensembles are now queued with our master artisans in Jaipur. We will notify you with Delhivery live tracking as soon as your order ships.", name)
+			contextIntroText = fmt.Sprintf("Dear %s, thank you for pre-ordering. Your bespoke ensembles are now queued with our master artisans in Jaipur. We will notify you with Delhivery live tracking as soon as your order ships.", safeName)
 		}
 
-		shippingAddress := fmt.Sprintf("%s, %s, %s - %s", order.ShippingAddress, order.ShippingCity, order.ShippingState, order.ShippingZIPCode)
+		safeShippingName := html.EscapeString(order.ShippingName)
+		safeShippingAddress := html.EscapeString(order.ShippingAddress)
+		safeShippingCity := html.EscapeString(order.ShippingCity)
+		safeShippingState := html.EscapeString(order.ShippingState)
+		safeShippingZIP := html.EscapeString(order.ShippingZIPCode)
+		shippingAddress := fmt.Sprintf("%s, %s, %s - %s", safeShippingAddress, safeShippingCity, safeShippingState, safeShippingZIP)
 		phoneDisplay := ""
 		if order.ShippingPhone != "" && order.ShippingPhone != "0000000000" {
-			phoneDisplay = fmt.Sprintf("<br/>%s <strong>Phone:</strong> %s", iconPhoneSVG, order.ShippingPhone)
+			phoneDisplay = fmt.Sprintf("<br/>%s <strong>Phone:</strong> %s", iconPhoneSVG, html.EscapeString(order.ShippingPhone))
 		}
 
 		fulfillmentCardHTML = fmt.Sprintf(`
@@ -747,7 +790,7 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 			<div style="margin-top: 12px; padding: 10px 12px; background: #F0F7F2; border-left: 3px solid #3B8A5A; border-radius: 4px; font-size: 12px; color: #1B5832; line-height: 1.5;">
 				<strong>Express Dispatch Promise:</strong> Orders placed before 1:30 PM IST dispatch today via Delhivery Express with live tracking updates.
 			</div>
-		</div>`, iconPinSVG, order.ShippingName, shippingAddress, phoneDisplay)
+		</div>`, iconPinSVG, safeShippingName, shippingAddress, phoneDisplay)
 
 		receiptRowsHTML = fmt.Sprintf(`
 		<tr>
@@ -761,7 +804,7 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 	if order.DiscountAmt > 0 {
 		codeText := ""
 		if order.CouponCode != "" {
-			codeText = fmt.Sprintf(` (%s)`, order.CouponCode)
+			codeText = fmt.Sprintf(` (%s)`, html.EscapeString(order.CouponCode))
 		}
 		discountRow = fmt.Sprintf(`
 		<tr>
@@ -777,8 +820,10 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 		<tr>
 			<td style="padding: 7px 0; font-size: 13px; color: #78451D; font-weight: 600;">Complimentary Gift Unlocked:</td>
 			<td style="padding: 7px 0; font-size: 13px; font-weight: 700; color: #78451D; text-align: right;">%s (FREE)</td>
-		</tr>`, order.UnlockedGift)
+		</tr>`, html.EscapeString(order.UnlockedGift))
 	}
+
+
 
 	itemsHTML := renderOrderItemsTable(order.Items)
 	subtotalAmt := order.TotalAmount + order.DiscountAmt
@@ -951,8 +996,8 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 		headlineText,
 		contextIntroText,
 		scannerPassHTML,
-		iconBoxSVG, order.ID,
-		iconShieldSVG, strings.ToUpper(order.PaymentMethod),
+		iconBoxSVG, safeOrderID,
+		iconShieldSVG, safePaymentMethod,
 		iconTruckSVG, func() string {
 			if isPickup {
 				return "Hyderabad Store Collection"
@@ -977,7 +1022,8 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 }
 
 func renderOrderConfirmationText(order *models.Order) string {
-	name := getCustomerDisplayName(order)
+	name := sanitizeEmailText(getCustomerDisplayName(order))
+	safeOrderID := sanitizeEmailText(order.ID)
 	isPickup := isStorePickup(order)
 	isPaid := isOrderPaid(order)
 
@@ -989,10 +1035,10 @@ func renderOrderConfirmationText(order *models.Order) string {
 
 	if isPickup {
 		if isPaid {
-			sb.WriteString(fmt.Sprintf("Your Store Pickup Order #%s has been confirmed and is fully paid.\n\n", order.ID))
+			sb.WriteString(fmt.Sprintf("Your Store Pickup Order #%s has been confirmed and is fully paid.\n\n", safeOrderID))
 			sb.WriteString("STATUS: PREPAID STORE PICKUP (FULLY PAID)\n\n")
 		} else {
-			sb.WriteString(fmt.Sprintf("Your Store Pickup Order #%s has been reserved.\n\n", order.ID))
+			sb.WriteString(fmt.Sprintf("Your Store Pickup Order #%s has been reserved.\n\n", safeOrderID))
 			sb.WriteString("STATUS: STORE PICKUP RESERVED (PAY AT STORE COUNTER)\n")
 			sb.WriteString(fmt.Sprintf("PAYMENT DUE AT COLLECTION: %s\n\n", formatCurrency(order.TotalAmount)))
 		}
@@ -1003,40 +1049,58 @@ func renderOrderConfirmationText(order *models.Order) string {
 		sb.WriteString("Phone: +91 7674855289\n")
 		sb.WriteString("Google Maps: https://share.google/eSxLvWitpLTqdQkn3\n\n")
 	} else {
-		sb.WriteString(fmt.Sprintf("Your Order #%s has been confirmed and is being prepared for dispatch.\n\n", order.ID))
+		sb.WriteString(fmt.Sprintf("Your Order #%s has been confirmed and is being prepared for dispatch.\n\n", safeOrderID))
 		sb.WriteString("DELIVERY DESTINATION:\n")
 		sb.WriteString(fmt.Sprintf("%s\n%s, %s, %s - %s\n",
-			order.ShippingName, order.ShippingAddress, order.ShippingCity, order.ShippingState, order.ShippingZIPCode))
+			sanitizeEmailText(order.ShippingName),
+			sanitizeEmailText(order.ShippingAddress),
+			sanitizeEmailText(order.ShippingCity),
+			sanitizeEmailText(order.ShippingState),
+			sanitizeEmailText(order.ShippingZIPCode)))
 		if order.ShippingPhone != "" && order.ShippingPhone != "0000000000" {
-			sb.WriteString(fmt.Sprintf("Phone: %s\n", order.ShippingPhone))
+			sb.WriteString(fmt.Sprintf("Phone: %s\n", sanitizeEmailText(order.ShippingPhone)))
 		}
 		sb.WriteString("\n")
 	}
 
 	sb.WriteString("ITEMS IN YOUR ENSEMBLE:\n")
 	for _, it := range order.Items {
-		sb.WriteString(fmt.Sprintf("- %s (Size: %s) x %d = %s\n", it.ProductName, it.Size, it.Quantity, formatCurrency(it.PriceAtQty*float64(it.Quantity))))
+		sb.WriteString(fmt.Sprintf("- %s (Size: %s) x %d = %s\n",
+			sanitizeEmailText(it.ProductName),
+			sanitizeEmailText(it.Size),
+			it.Quantity,
+			formatCurrency(it.PriceAtQty*float64(it.Quantity))))
 	}
 	sb.WriteString(fmt.Sprintf("\nTOTAL AMOUNT: %s\n", formatCurrency(order.TotalAmount)))
-	sb.WriteString(fmt.Sprintf("PAYMENT METHOD: %s\n\n", strings.ToUpper(order.PaymentMethod)))
+	sb.WriteString(fmt.Sprintf("PAYMENT METHOD: %s\n\n", sanitizeEmailText(strings.ToUpper(order.PaymentMethod))))
 	sb.WriteString("Concierge: theethnictouchsupport@gmail.com | +91 7674855289\n")
 	sb.WriteString("Visit us online: https://www.theethnictouch.com\n")
 	return sb.String()
 }
 
 func renderOrderShippedHTML(order *models.Order, trackingNumber string) string {
-	name := getCustomerDisplayName(order)
+	rawName := getCustomerDisplayName(order)
+	safeName := html.EscapeString(rawName)
+	safeOrderID := html.EscapeString(order.ID)
+	safeTrackingNumber := html.EscapeString(trackingNumber)
+	urlSafeTrackingNumber := url.PathEscape(trackingNumber)
 	itemsHTML := renderOrderItemsTable(order.Items)
-	shippingAddress := fmt.Sprintf("%s, %s, %s - %s", order.ShippingAddress, order.ShippingCity, order.ShippingState, order.ShippingZIPCode)
+
+	safeShippingName := html.EscapeString(order.ShippingName)
+	safeShippingAddress := html.EscapeString(order.ShippingAddress)
+	safeShippingCity := html.EscapeString(order.ShippingCity)
+	safeShippingState := html.EscapeString(order.ShippingState)
+	safeShippingZIP := html.EscapeString(order.ShippingZIPCode)
+	shippingAddress := fmt.Sprintf("%s, %s, %s - %s", safeShippingAddress, safeShippingCity, safeShippingState, safeShippingZIP)
 
 	phoneDisplay := ""
 	if order.ShippingPhone != "" && order.ShippingPhone != "0000000000" {
-		phoneDisplay = fmt.Sprintf("<br/>%s <strong>Phone:</strong> %s", iconPhoneSVG, order.ShippingPhone)
+		phoneDisplay = fmt.Sprintf("<br/>%s <strong>Phone:</strong> %s", iconPhoneSVG, html.EscapeString(order.ShippingPhone))
 	}
 
 	trackBtn := ""
 	if trackingNumber != "" && trackingNumber != "DELHIVERY_DISPATCHED" && trackingNumber != "DUMMY_TRACKING" {
-		trackURL := fmt.Sprintf("https://www.delhivery.com/track/package/%s", trackingNumber)
+		trackURL := fmt.Sprintf("https://www.delhivery.com/track/package/%s", urlSafeTrackingNumber)
 		trackBtn = fmt.Sprintf(`
 		<div style="text-align: center; margin-top: 18px;">
 			<a href="%s" style="background: linear-gradient(135deg, #8C5835 0%%, #6E3F21 100%%); color: #FFFFFF; text-decoration: none; font-size: 13px; font-weight: 700; padding: 12px 28px; border-radius: 25px; display: inline-block; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(140, 88, 53, 0.25);">
@@ -1168,13 +1232,13 @@ func renderOrderShippedHTML(order *models.Order, trackingNumber string) string {
 	</table>
 </body>
 </html>`,
-		name,
+		safeName,
 		iconTruckSVG,
-		iconBoxSVG, trackingNumber,
-		iconShieldSVG, order.ID,
+		iconBoxSVG, safeTrackingNumber,
+		iconShieldSVG, safeOrderID,
 		iconClockSVG,
 		trackBtn,
-		iconPinSVG, order.ShippingName, shippingAddress, phoneDisplay,
+		iconPinSVG, safeShippingName, shippingAddress, phoneDisplay,
 		iconBoxSVG,
 		itemsHTML,
 		iconMailSVG,
@@ -1184,24 +1248,33 @@ func renderOrderShippedHTML(order *models.Order, trackingNumber string) string {
 }
 
 func renderOrderShippedText(order *models.Order, trackingNumber string) string {
-	name := getCustomerDisplayName(order)
+	name := sanitizeEmailText(getCustomerDisplayName(order))
+	safeOrderID := sanitizeEmailText(order.ID)
+	cleanTracking := sanitizeEmailText(trackingNumber)
 	var sb strings.Builder
 	sb.WriteString("THE ETHNIC TOUCH\n")
 	sb.WriteString("Your Order Has Shipped!\n")
 	sb.WriteString("==================================================\n\n")
 	sb.WriteString(fmt.Sprintf("Dear %s,\n\n", name))
-	sb.WriteString(fmt.Sprintf("Your order #%s has been dispatched via Delhivery Express.\n\n", order.ID))
-	sb.WriteString(fmt.Sprintf("TRACKING NUMBER: %s\n", trackingNumber))
-	sb.WriteString(fmt.Sprintf("TRACK ONLINE: https://www.delhivery.com/track/package/%s\n\n", trackingNumber))
+	sb.WriteString(fmt.Sprintf("Your order #%s has been dispatched via Delhivery Express.\n\n", safeOrderID))
+	sb.WriteString(fmt.Sprintf("TRACKING NUMBER: %s\n", cleanTracking))
+	sb.WriteString(fmt.Sprintf("TRACK ONLINE: https://www.delhivery.com/track/package/%s\n\n", url.PathEscape(cleanTracking)))
 	sb.WriteString("SHIPPING DESTINATION:\n")
 	sb.WriteString(fmt.Sprintf("%s\n%s, %s, %s - %s\n",
-		order.ShippingName, order.ShippingAddress, order.ShippingCity, order.ShippingState, order.ShippingZIPCode))
+		sanitizeEmailText(order.ShippingName),
+		sanitizeEmailText(order.ShippingAddress),
+		sanitizeEmailText(order.ShippingCity),
+		sanitizeEmailText(order.ShippingState),
+		sanitizeEmailText(order.ShippingZIPCode)))
 	if order.ShippingPhone != "" && order.ShippingPhone != "0000000000" {
-		sb.WriteString(fmt.Sprintf("Phone: %s\n", order.ShippingPhone))
+		sb.WriteString(fmt.Sprintf("Phone: %s\n", sanitizeEmailText(order.ShippingPhone)))
 	}
 	sb.WriteString("\nITEMS EN ROUTE:\n")
 	for _, it := range order.Items {
-		sb.WriteString(fmt.Sprintf("- %s (Size: %s) x %d\n", it.ProductName, it.Size, it.Quantity))
+		sb.WriteString(fmt.Sprintf("- %s (Size: %s) x %d\n",
+			sanitizeEmailText(it.ProductName),
+			sanitizeEmailText(it.Size),
+			it.Quantity))
 	}
 	sb.WriteString("\nConcierge Support: theethnictouchsupport@gmail.com | +91 7674855289\n")
 	sb.WriteString("https://www.theethnictouch.com\n")
@@ -1209,7 +1282,9 @@ func renderOrderShippedText(order *models.Order, trackingNumber string) string {
 }
 
 func renderOrderPickedUpHTML(order *models.Order) string {
-	name := getCustomerDisplayName(order)
+	rawName := getCustomerDisplayName(order)
+	safeName := html.EscapeString(rawName)
+	safeOrderID := html.EscapeString(order.ID)
 	itemsHTML := renderOrderItemsTable(order.Items)
 
 	return fmt.Sprintf(`<!DOCTYPE html>
@@ -1259,7 +1334,7 @@ func renderOrderPickedUpHTML(order *models.Order) string {
 		<tr>
 			<td class="content-cell" style="padding: 26px 20px;">
 				<!-- Celebration / Status Icon -->
-				<img src="https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/email-assets/check_circle_green.png" alt="Order Picked Up" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />
+				<img src="https://www.theethnictouch.com/email-assets/check_circle_green.png" alt="Order Picked Up" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />
 
 				<div style="text-align: center; margin-bottom: 16px;">
 					<span style="background: linear-gradient(135deg, #FCF8F2 0%%, #F5EADB 100%%); color: #73431A; border: 1.5px solid #C99E5F; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">
@@ -1331,8 +1406,8 @@ func renderOrderPickedUpHTML(order *models.Order) string {
 	</table>
 </body>
 </html>`,
-		name,
-		iconBoxSVG, order.ID,
+		safeName,
+		iconBoxSVG, safeOrderID,
 		iconShieldSVG, formatCurrency(order.TotalAmount),
 		iconBoxSVG,
 		itemsHTML,
@@ -1344,16 +1419,20 @@ func renderOrderPickedUpHTML(order *models.Order) string {
 }
 
 func renderOrderPickedUpText(order *models.Order) string {
-	name := getCustomerDisplayName(order)
+	name := sanitizeEmailText(getCustomerDisplayName(order))
+	safeOrderID := sanitizeEmailText(order.ID)
 	var sb strings.Builder
 	sb.WriteString("THE ETHNIC TOUCH\n")
 	sb.WriteString("Thank You for Visiting Our Store!\n")
 	sb.WriteString("==================================================\n\n")
 	sb.WriteString(fmt.Sprintf("Dear %s,\n\n", name))
-	sb.WriteString(fmt.Sprintf("Your Store Pickup Order #%s has been completed.\n\n", order.ID))
+	sb.WriteString(fmt.Sprintf("Your Store Pickup Order #%s has been completed.\n\n", safeOrderID))
 	sb.WriteString("GARMENTS COLLECTED:\n")
 	for _, it := range order.Items {
-		sb.WriteString(fmt.Sprintf("- %s (Size: %s) x %d\n", it.ProductName, it.Size, it.Quantity))
+		sb.WriteString(fmt.Sprintf("- %s (Size: %s) x %d\n",
+			sanitizeEmailText(it.ProductName),
+			sanitizeEmailText(it.Size),
+			it.Quantity))
 	}
 	sb.WriteString(fmt.Sprintf("\nTOTAL AMOUNT PAID: %s\n\n", formatCurrency(order.TotalAmount)))
 	sb.WriteString("PURE COTTON & DYE CARE GUIDE:\n")

@@ -317,3 +317,65 @@ func TestEmailService_LiveSMTPVerification(t *testing.T) {
 		t.Fatalf("Live SMTP handshake and authentication failed: %v", err)
 	}
 }
+
+func TestEmailService_SecuritySanitization(t *testing.T) {
+	svc := NewEmailService(nil)
+
+	// 1. CRLF in recipient email address must be rejected
+	crlfAddrs := []string{
+		"victim@example.com\r\nBcc: evil@example.com",
+		"victim@example.com\nSubject: Injected",
+		"victim@example.com\rTo: another@example.com",
+		"victim@example.com\x00attacker@evil.com",
+	}
+	for _, addr := range crlfAddrs {
+		err := svc.SendEmail(addr, "Safe Subject", "<p>Hello</p>", "Hello")
+		if err == nil {
+			t.Errorf("Expected error for recipient address with control/CRLF chars %q, got nil", addr)
+		}
+	}
+
+	// 2. HTML injection in customer name, address, and product names must be escaped
+	xssOrder := &models.Order{
+		ID:              "ORD_XSS_001",
+		CustomerEmail:   "safe@example.com",
+		ShippingName:    `<script>alert("XSS")</script>`,
+		ShippingAddress: `123 Main St <b onmouseover="alert(1)">`,
+		ShippingCity:    `<iframe src="evil.com">`,
+		ShippingState:   `Telangana`,
+		ShippingZIPCode: `500075`,
+		ShippingPhone:   `+91 9999999999" onfocus="alert(1)`,
+		PaymentMethod:   `online" onfocus="alert(1)`,
+		CouponCode:      `DISCOUNT<script>`,
+		UnlockedGift:    `Silk Stole<img src=x onerror=alert(1)>`,
+		Items: []models.OrderItem{
+			{
+				ProductID:   `PROD" onmouseover="alert(1)`,
+				ProductName: `Jaipur Kurti <img src=x onerror=alert(1)>`,
+				Size:        `M<script>`,
+				Quantity:    1,
+				PriceAtQty:  1999.00,
+			},
+		},
+	}
+
+	htmlOutput := renderOrderConfirmationHTML(xssOrder)
+	if strings.Contains(htmlOutput, "<script>") || strings.Contains(htmlOutput, "</script>") {
+		t.Errorf("Rendered HTML contains unescaped <script> tag: %s", htmlOutput)
+	}
+	if strings.Contains(htmlOutput, `<iframe src="evil.com">`) {
+		t.Errorf("Rendered HTML contains unescaped <iframe> tag")
+	}
+	if strings.Contains(htmlOutput, `<img src=x onerror=alert(1)>`) {
+		t.Errorf("Rendered HTML contains unescaped img onerror injection")
+	}
+	if !strings.Contains(htmlOutput, `&lt;script&gt;`) {
+		t.Errorf("Rendered HTML expected to contain escaped &lt;script&gt;")
+	}
+
+	// 3. Plain text email should strip carriage returns
+	textOutput := renderOrderConfirmationText(xssOrder)
+	if strings.Contains(textOutput, "\r") {
+		t.Errorf("Plain text email should not contain carriage returns")
+	}
+}
