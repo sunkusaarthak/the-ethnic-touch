@@ -5,6 +5,7 @@ import { signOut } from 'firebase/auth';
 import { auth, API_BASE_URL } from '../data/config';
 import apiClient from '../utils/apiClient';
 import { formatError } from '../utils/errors';
+import { isStorePickupOrder } from '../utils/orderFulfilment';
 
 const ProfilePage = ({ authUser, setProfileIncomplete }) => {
     const navigate = useNavigate();
@@ -258,6 +259,8 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
         if (params.get('action') === 'add_address') {
             setActiveTab('addresses');
             setShowAddressForm(true);
+        } else if (params.get('tab') === 'orders') {
+            setActiveTab('orders');
         }
     }, [location.search]);
 
@@ -777,11 +780,39 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.8rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem', marginBottom: '1rem' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: 'var(--font-size-sm)', color: '#888' }}>Order ID:</span>
-                                                    <span style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: 'var(--font-size-input)' }}>{order.id}</span>
+                                                    <Link className="order-history-link" to={`/profile/orders/${encodeURIComponent(order.id)}`}>{order.id}</Link>
                                                     <CopyButton text={order.id} label="Copy ID" />
+                                                    <Link className="order-history-link" to={`/profile/orders/${encodeURIComponent(order.id)}`} aria-label={`View order ${order.id}`}>View order</Link>
                                                 </div>
                                                 <div>
-                                                    <span style={{ fontSize: 'var(--font-size-sm)', color: '#b97a66', fontWeight: '500', textTransform: 'uppercase' }}>{order.status}</span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                        {order.isPreorder && (
+                                                            <span style={{ fontSize: '0.72rem', background: '#7c3aed', color: '#ffffff', padding: '2px 8px', borderRadius: '12px', fontWeight: '700', letterSpacing: '0.5px' }}>
+                                                                PREORDER
+                                                            </span>
+                                                        )}
+                                                        {order.fulfilmentType === 'PREORDER_STORE_PICKUP' && (
+                                                            <span style={{ fontSize: '0.72rem', background: '#f3e8ff', color: '#7e22ce', padding: '2px 8px', borderRadius: '12px', fontWeight: '600' }}>
+                                                                🏪 Store Pickup
+                                                            </span>
+                                                        )}
+                                                        {order.fulfilmentType === 'PREORDER_HOME_DELIVERY' && (
+                                                            <span style={{ fontSize: '0.72rem', background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: '12px', fontWeight: '600' }}>
+                                                                🚚 Preorder Delivery
+                                                            </span>
+                                                        )}
+                                                        <span style={{ 
+                                                            fontSize: 'var(--font-size-sm)', 
+                                                            color: order.status === 'READY_FOR_PICKUP' ? '#15803d' : order.status === 'COLLECTED' ? '#166534' : '#b97a66', 
+                                                            background: order.status === 'READY_FOR_PICKUP' ? '#dcfce7' : order.status === 'COLLECTED' ? '#f0fdf4' : 'transparent',
+                                                            padding: ['READY_FOR_PICKUP', 'COLLECTED'].includes(order.status) ? '2px 8px' : '0',
+                                                            borderRadius: '12px',
+                                                            fontWeight: '600', 
+                                                            textTransform: 'uppercase' 
+                                                        }}>
+                                                            {order.trackingStatus ? order.trackingStatus.replaceAll('_', ' ') : order.status === 'READY_FOR_PICKUP' ? 'Ready for Pickup 🎉' : order.status === 'COLLECTED' ? 'Collected ✓' : order.status}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -797,6 +828,11 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                                  <li key={it.productId || idx} style={{ fontSize: 'var(--font-size-sm)', color: '#333', padding: '0.4rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                      <div>
                                                                          <span>{it.productName || it.productId}</span>
+                                                                         {(it.isPreorder || order.isPreorder) && (
+                                                                             <span style={{ fontSize: '0.65rem', background: '#f3e8ff', color: '#7e22ce', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '700' }}>
+                                                                                 PREORDER
+                                                                             </span>
+                                                                         )}
                                                                          {it.size && (
                                                                              <span style={{ fontSize: 'var(--font-size-xs)', background: '#fff0e9', color: '#b97a66', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '500' }}>
                                                                                  Size: {it.size}
@@ -823,7 +859,7 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                         <span style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: '500' }}>{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
                                                     </div>
                                                     <div>
-                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#888' }}>Total Amount Paid:</span>
+                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#888' }}>Order total:</span>
                                                         <span style={{ display: 'block', fontSize: 'var(--font-size-h3)', color: '#b97a66', fontWeight: '600' }}>₹{order.totalAmount.toLocaleString('en-IN')}</span>
                                                     </div>
                                                 </div>
@@ -838,14 +874,57 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                 </div>
                                             )}
 
-                                            {order.unlockedGift && (
+                                            {(order.unlockedGift || order.spinTicketsAwarded > 0) && (
                                                 <div style={{ marginTop: '0.8rem', background: '#fff9e6', padding: '0.75rem 1rem', border: '1px dashed #fcd34d', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                     <span style={{ fontSize: 'var(--font-size-sm)', color: '#854d0e' }}>
-                                                        Reward Unlocked: <strong>{order.unlockedGift}</strong>
+                                                        Rewards earned: <strong>{[
+                                                            order.spinTicketsAwarded > 0 && `${order.spinTicketsAwarded} ${order.spinTicketsAwarded === 1 ? 'spin ticket' : 'spin tickets'}`,
+                                                            order.unlockedGift
+                                                        ].filter(Boolean).join(' · ')}</strong>
                                                     </span>
-                                                    <CopyButton text={order.unlockedGift} label="Copy Code" />
+                                                    {order.unlockedGift && <CopyButton text={order.unlockedGift} label="Copy reward" />}
                                                 </div>
                                             )}
+
+                                            {isStorePickupOrder(order) && (() => {
+                                                let snap = {};
+                                                if (order.pickupLocationSnapshot) {
+                                                    try {
+                                                        snap = JSON.parse(order.pickupLocationSnapshot) || {};
+                                                    } catch (_) {}
+                                                }
+                                                const locName = snap.locationName || 'The Ethnic Touch Store';
+                                                const address = snap.address || 'ESCI road, Kajaguda lake.';
+                                                const city = snap.city || 'Hyderabad';
+                                                const state = snap.state || 'Telangana';
+                                                const zip = snap.zipCode || '500032';
+
+                                                // Format address cleanly without ever producing broken commas or dashes
+                                                const addrParts = [address, city, state].filter(Boolean);
+                                                let formattedAddress = addrParts.join(', ');
+                                                if (zip && formattedAddress) {
+                                                    formattedAddress += ` - ${zip}`;
+                                                }
+
+                                                return (
+                                                    <div style={{ marginTop: '0.8rem', background: '#FAF3ED', border: '1px solid #FFE5D9', borderRadius: '6px', padding: '0.75rem 1rem', fontSize: '0.82rem', color: '#5C5854' }}>
+                                                        <strong style={{ color: '#8F5E36' }}>📍 Pickup Location: {locName}</strong>
+                                                        {formattedAddress && <div style={{ marginTop: '0.2rem' }}>{formattedAddress}</div>}
+                                                        <div style={{ marginTop: '0.25rem', color: '#78716c', fontSize: '0.78rem' }}>
+                                                            {snap.estimatedPickupDate && <span>Ready window: <strong>{snap.estimatedPickupDate}</strong> &bull; </span>}
+                                                            {snap.availability ? <span>Timings: <strong>{snap.availability}</strong></span> : <span>Timings: <strong>Fri - Sun, 7PM - 11PM</strong></span>}
+                                                            {snap.contactInfo && <span> &bull; Desk: <strong>{snap.contactInfo}</strong></span>}
+                                                        </div>
+                                                        {snap.mapsLink && (
+                                                            <div style={{ marginTop: '0.35rem' }}>
+                                                                <a href={snap.mapsLink} target="_blank" rel="noopener noreferrer" style={{ color: '#b97a66', fontWeight: '600', textDecoration: 'underline' }}>
+                                                                    View Store on Google Maps ↗
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     ))}
                                 </div>

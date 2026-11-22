@@ -1,0 +1,195 @@
+.order-details-page {
+    width: min(100% - 2rem, 1080px);
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 3.5rem) 0 clamp(3rem, 7vw, 5.5rem);
+}
+
+.order-details-back,
+.order-history-link,
+.cart-product-link {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.order-details-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 1.25rem;
+    color: #754f32;
+    font-weight: 600;
+}
+
+.order-details-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: clamp(1.25rem, 4vw, 2.5rem);
+    margin-bottom: 1.25rem;
+    background: linear-gradient(115deg, #fff 0%, #f7ede2 100%);
+    border: 1px solid #e9dbcd;
+    border-radius: var(--border-radius-lg);
+}
+
+.order-details-page h1,
+.order-details-page h2 {
+    font-family: var(--font-heading);
+    color: var(--color-text);
+}
+
+.order-details-page h1 {
+    font-size: var(--font-size-display);
+    margin: 0 0 0.5rem;
+}
+
+.order-detail-reference {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    overflow-wrap: anywhere;
+}
+
+.order-detail-status {
+    border-radius: 999px;
+    padding: 0.45rem 0.85rem;
+    background: #eee0d0;
+    color: #5c3e28;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.order-details-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem;
+}
+
+.order-detail-side {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.order-detail-card {
+    min-width: 0;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    background: #fff;
+    border: 1px solid #ebe3db;
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 8px 24px rgba(85, 53, 31, 0.04);
+}
+
+.order-detail-card h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: var(--font-size-h2);
+    margin: 0 0 1rem;
+}
+
+.order-detail-card h2 svg {
+    flex-shrink: 0;
+    color: #986537;
+}
+
+.order-detail-muted {
+    margin: 0.45rem 0 0;
+    color: var(--color-text-light);
+    font-size: var(--font-size-sm);
+}
+
+.order-detail-items,
+.order-detail-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.order-detail-items li {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid #eee6de;
+}
+
+.order-detail-items li > div {
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.order-detail-items img {
+    width: 58px;
+    height: 70px;
+    object-fit: cover;
+    border-radius: var(--border-radius-md);
+    flex-shrink: 0;
+}
+
+.order-detail-items a,
+.order-detail-rewards a {
+    color: #754f32;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.order-detail-totals {
+    padding: 0.9rem 0 0;
+    margin: 0;
+}
+
+.order-detail-totals div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.order-detail-totals dd { margin: 0; font-weight: 600; }
+
+.order-detail-totals div:last-child {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: var(--font-size-h2);
+}
+
+.order-detail-address { display: grid; font-style: normal; overflow-wrap: anywhere; }
+
+.order-detail-waybill {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    background: #faf3ec;
+    border-radius: var(--border-radius-md);
+    padding: 0.7rem 0.85rem;
+    margin-top: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.order-detail-waybill strong,
+.order-detail-timeline span { display: block; }
+
+.order-detail-timeline { margin-top: 1rem; }
+
+.order-detail-timeline li {
+    border-inline-start: 2px solid #d7b391;
+    padding: 0.2rem 0 0.7rem 0.75rem;
+    overflow-wrap: anywhere;
+}
+
+.order-detail-timeline span { color: var(--color-text-light); font-size: var(--font-size-sm); }
+.order-detail-rewards { background: #fdf8f2; }
+
+@media (max-width: 760px) {
+    .order-details-grid { grid-template-columns: minmax(0, 1fr); }
+    .order-detail-items img { width: 44px; height: 54px; }
+}

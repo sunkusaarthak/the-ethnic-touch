@@ -51,6 +51,8 @@ func (h *ProductHandler) HandleProducts(w http.ResponseWriter, r *http.Request) 
 			"newArrival":  r.URL.Query().Get("newArrival"),
 			"bestSeller":  r.URL.Query().Get("bestSeller"),
 			"featured":    r.URL.Query().Get("featured"),
+			"preorder":    r.URL.Query().Get("preorder"),
+			"isPreorder":  r.URL.Query().Get("isPreorder"),
 			"sortBy":      r.URL.Query().Get("sortBy"),
 			"paginated":   r.URL.Query().Get("paginated"),
 			"page":        r.URL.Query().Get("page"),
@@ -118,7 +120,7 @@ func (h *ProductHandler) HandleProductByID(w http.ResponseWriter, r *http.Reques
 			productID = parts[2]
 		}
 	}
-	
+
 	if productID == "" {
 		http.Error(w, "Product ID is required", http.StatusBadRequest)
 		return
@@ -160,6 +162,20 @@ func (h *ProductHandler) HandleProductByID(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ProductHandler) HandleProductReviews(w http.ResponseWriter, r *http.Request) {
+	type publicReview struct {
+		ID        int    `json:"id"`
+		ProductID string `json:"productId"`
+		UserName  string `json:"userName"`
+		Rating    int    `json:"rating"`
+		Comment   string `json:"comment"`
+		CreatedAt string `json:"createdAt"`
+	}
+	presentReview := func(review models.ProductReview) publicReview {
+		return publicReview{
+			ID: review.ID, ProductID: review.ProductID, UserName: review.UserName,
+			Rating: review.Rating, Comment: review.Comment, CreatedAt: review.CreatedAt,
+		}
+	}
 	// Route is expected to be /api/products/{id}/reviews
 	// since we are using std lib 1.22+, we can use PathValue
 	productID := r.PathValue("id")
@@ -179,7 +195,11 @@ func (h *ProductHandler) HandleProductReviews(w http.ResponseWriter, r *http.Req
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(reviews)
+		publicReviews := make([]publicReview, len(reviews))
+		for i, review := range reviews {
+			publicReviews[i] = presentReview(review)
+		}
+		json.NewEncoder(w).Encode(publicReviews)
 	} else if r.Method == http.MethodPost {
 		var rev models.ProductReview
 		if err := json.NewDecoder(r.Body).Decode(&rev); err != nil {
@@ -195,7 +215,7 @@ func (h *ProductHandler) HandleProductReviews(w http.ResponseWriter, r *http.Req
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(rev)
+		json.NewEncoder(w).Encode(presentReview(rev))
 	} else {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -316,10 +336,10 @@ func uploadToR2(fileBytes []byte, fileName string, contentType string) (string, 
 	})
 
 	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
-		Bucket:             aws.String(bucket),
-		Key:                aws.String(objectKey),
-		Body:               bytes.NewReader(fileBytes),
-		ContentType:        aws.String(contentType),
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(objectKey),
+		Body:        bytes.NewReader(fileBytes),
+		ContentType: aws.String(contentType),
 		// Cache for 1 year — images are content-addressed so they never change.
 		// Cloudflare edge + browsers will serve from cache; no R2 Class B op on repeat views.
 		CacheControl:       aws.String("public, max-age=31536000, immutable"),

@@ -21,12 +21,14 @@ import (
 )
 
 type App struct {
-	DB         *sql.DB
-	Router     *http.ServeMux
+	DB           *sql.DB
+	Router       *http.ServeMux
 	Config       *config.Config
 	Logger       *slog.Logger
 	HTTPServer   *http.Server
 	OrderService service.OrderService
+	jobsCtx      context.Context
+	cancelJobs   context.CancelFunc
 }
 
 func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
@@ -35,12 +37,16 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	app := &App{
-		DB:     db,
+		DB:           db,
 		Router:       http.NewServeMux(),
 		Config:       cfg,
 		Logger:       logger,
 		OrderService: nil, // set in setupRoutes
+		jobsCtx:      ctx,
+		cancelJobs:   cancel,
 	}
 
 	app.setupRoutes()
@@ -57,29 +63,45 @@ func (a *App) setupRoutes() {
 	configRepo := repository.NewConfigRepository(a.DB)
 	contactRepo := repository.NewContactRepository(a.DB)
 
-	delhiverySvc := service.NewDelhiveryService("dummy_secret")
-	
-	cron.StartDelhiveryCron(orderRepo, delhiverySvc)
+	delhiverySvc := service.NewDelhiveryService(a.Config.DelhiveryWebhookSecret, a.Config.DelhiveryAPIKey, a.Config.ShippingProvider)
 
 	// Services
 	configSvc := service.NewConfigService(configRepo)
 	productSvc := service.NewProductService(productRepo)
 	couponSvc := service.NewCouponService(couponRepo)
 	orderSvc := service.NewOrderService(orderRepo, couponSvc, productRepo, configSvc, delhiverySvc)
+	cron.StartDelhiveryCron(a.jobsCtx, orderSvc)
+	saleStore := repository.SaleStore{DB: a.DB}
+	orderSvc.SetSaleLoader(saleStore.Load)
 	profileSvc := service.NewProfileService(profileRepo)
 	cartSvc := service.NewCartService(cartRepo)
 	contactSvc := service.NewContactService(contactRepo)
+	emailSvc := service.NewEmailService(a.Config)
+	orderSvc.SetPaymentConfirmedHandler(func(order *models.Order) {
+		configSvc.IncrementOrderKurthiCounter()
+		if emailSvc != nil {
+			go func() {
+				if fullOrder, err := orderSvc.GetOrder(order.ID); err == nil {
+					order = fullOrder
+				}
+				if err := emailSvc.SendOrderConfirmation(order); err != nil {
+					a.Logger.Error("Could not send order confirmation", "order_id", order.ID, "error", err)
+				}
+			}()
+		}
+	})
 
 	adminUserRepo := repository.NewAdminUserRepository(a.DB)
 
 	// Handlers
 	productHandler := handlers.NewProductHandler(productSvc)
-	orderHandler := handlers.NewOrderHandler(orderSvc, profileSvc, configSvc, delhiverySvc)
+	orderHandler := handlers.NewOrderHandler(orderSvc, profileSvc, configSvc, delhiverySvc, emailSvc)
 	couponHandler := handlers.NewCouponHandler(couponSvc)
 	profileHandler := handlers.NewProfileHandler(profileSvc, configSvc)
 	cartHandler := handlers.NewCartHandler(cartSvc)
 	spinHandler := handlers.NewSpinHandler(profileSvc, couponSvc, configSvc)
 	configHandler := handlers.NewConfigHandler(configSvc, couponSvc)
+	configHandler.SetFlashCatalog(productSvc)
 	staffHandler := handlers.NewStaffHandler(adminUserRepo)
 	contactHandler := handlers.NewContactHandler(contactSvc)
 	sitemapHandler := handlers.NewSitemapHandler(productSvc)
@@ -105,6 +127,9 @@ func (a *App) setupRoutes() {
 
 	adminOnly := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin")
 	adminOrEmployee := middleware.AdminAuthMiddleware(a.Config.SuperAdminEmail, adminUserRepo, "admin", "employee")
+	customerAuth := middleware.CustomerAuthMiddleware
+	a.Router.HandleFunc("/api/config/sale", handlers.SaleHandler(saleStore, false))
+	a.Router.Handle("/api/admin/config/sale", adminOnly(handlers.SaleHandler(saleStore, true)))
 
 	a.OrderService = orderSvc
 
@@ -132,45 +157,47 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/checkout/shipping-estimate", orderHandler.HandleShippingEstimate)
 	a.Router.HandleFunc("/api/checkout/shipping-timeline", orderHandler.HandleShippingTimeline)
 	a.Router.HandleFunc("/api/webhooks/delhivery", orderHandler.HandleDelhiveryWebhook)
-	
-	a.Router.HandleFunc("/api/orders", func(w http.ResponseWriter, r *http.Request) {
+	a.Router.HandleFunc("/api/webhooks/razorpay", orderHandler.HandleRazorpayWebhook)
+
+	a.Router.Handle("/api/orders", rateLimiter.Limit(customerAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			orderHandler.HandleGetOrder(w, r)
 		} else {
-			rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP(w, r)
+			orderHandler.HandleCheckout(w, r)
 		}
-	})
-	a.Router.HandleFunc("/api/orders/create", rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP)
-	a.Router.HandleFunc("/api/checkout", rateLimiter.Limit(http.HandlerFunc(orderHandler.HandleCheckout)).ServeHTTP)
+	}))))
+	a.Router.Handle("/api/orders/create", rateLimiter.Limit(customerAuth(http.HandlerFunc(orderHandler.HandleCheckout))))
+	a.Router.Handle("/api/checkout", rateLimiter.Limit(customerAuth(http.HandlerFunc(orderHandler.HandleCheckout))))
 
-	a.Router.HandleFunc("/api/orders/verify", orderHandler.HandleVerifyPayment)
-	a.Router.HandleFunc("/api/verify-payment", orderHandler.HandleVerifyPayment)
+	a.Router.Handle("/api/orders/verify", rateLimiter.Limit(customerAuth(http.HandlerFunc(orderHandler.HandleVerifyPayment))))
+	a.Router.Handle("/api/verify-payment", rateLimiter.Limit(customerAuth(http.HandlerFunc(orderHandler.HandleVerifyPayment))))
 
-	a.Router.HandleFunc("/api/orders/{id}/cancel", orderHandler.HandleCancelOrder)
-	a.Router.HandleFunc("/api/orders/cancel", orderHandler.HandleCancelOrder)
+	a.Router.Handle("/api/orders/{id}/cancel", rateLimiter.Limit(customerAuth(http.HandlerFunc(orderHandler.HandleCancelOrder))))
+	a.Router.Handle("/api/orders/cancel", rateLimiter.Limit(customerAuth(http.HandlerFunc(orderHandler.HandleCancelOrder))))
 
-	a.Router.HandleFunc("/api/profile/orders", orderHandler.HandleGetOrder)
+	a.Router.Handle("/api/profile/orders", customerAuth(http.HandlerFunc(orderHandler.HandleGetOrder)))
 
 	// Coupons & Gifting
 	a.Router.HandleFunc("/api/gift-tiers", couponHandler.HandleGetGiftTiers)
 	a.Router.HandleFunc("/api/admin/gift-tiers", adminOnly(http.HandlerFunc(couponHandler.HandleUpdateGiftTiers)).ServeHTTP)
 	a.Router.HandleFunc("/api/coupons/validate", rateLimiter.Limit(http.HandlerFunc(couponHandler.HandleValidateCoupon)).ServeHTTP)
-	
+
 	// Spin the Wheel
-	a.Router.HandleFunc("/api/spin-wheel", rateLimiter.Limit(http.HandlerFunc(spinHandler.HandleSpin)).ServeHTTP)
-	
+	a.Router.Handle("/api/spin-wheel", rateLimiter.Limit(customerAuth(http.HandlerFunc(spinHandler.HandleSpin))))
+
 	// Admin API Endpoints
 	a.Router.HandleFunc("/api/admin/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/orders/confirm-pickup", adminOrEmployee(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/delhivery/batch-pickup", adminOnly(http.HandlerFunc(orderHandler.HandleTriggerDelhiveryBatch)).ServeHTTP)
-	
+	a.Router.Handle("/api/admin/delhivery/resolve-dispatch", adminOnly(http.HandlerFunc(orderHandler.HandleResolveDelhiveryDispatch)))
+
 	a.Router.HandleFunc("/api/admin/profiles", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/edit", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/details", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDetails)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/delete", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileDelete)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/upload", adminOnly(http.HandlerFunc(productHandler.HandleAdminUpload)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/coupons", adminOnly(http.HandlerFunc(couponHandler.HandleAdminCoupons)).ServeHTTP)
-	
+
 	// Staff Management
 	a.Router.HandleFunc("/api/admin/staff", adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -181,7 +208,7 @@ func (a *App) setupRoutes() {
 			staffHandler.HandleDeleteStaff(w, r)
 		}
 	})).ServeHTTP)
-	
+
 	// Contact Us Endpoints
 	a.Router.HandleFunc("/api/contact", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -198,7 +225,7 @@ func (a *App) setupRoutes() {
 			contactHandler.HandleAdminMarkRead(w, r)
 		}
 	})).ServeHTTP)
-	
+
 	// Staff Identity
 	a.Router.HandleFunc("/api/admin/me", adminOrEmployee(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role := r.Context().Value(middleware.RoleKey).(string)
@@ -206,10 +233,16 @@ func (a *App) setupRoutes() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"email": email, "role": role})
 	})).ServeHTTP)
-	
+
 	// Config API Endpoints
 	a.Router.HandleFunc("/api/config/spin-wheel", configHandler.HandleGetSpinConfig)
-	a.Router.HandleFunc("/api/admin/config/spin-wheel", adminOnly(http.HandlerFunc(configHandler.HandleUpdateSpinConfig)).ServeHTTP)
+	a.Router.Handle("/api/admin/config/spin-wheel", adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			configHandler.HandleGetAdminSpinConfig(w, r)
+			return
+		}
+		configHandler.HandleUpdateSpinConfig(w, r)
+	})))
 	a.Router.HandleFunc("/api/admin/config/spin-wheel/stats", adminOnly(http.HandlerFunc(configHandler.HandleGetSpinStats)).ServeHTTP)
 
 	a.Router.HandleFunc("/api/config/auth", configHandler.HandleGetAuthConfig)
@@ -222,24 +255,34 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/admin/config/homepage", adminOnly(http.HandlerFunc(configHandler.HandleUpdateHomepageConfig)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/config/flash-drop", adminOnly(http.HandlerFunc(configHandler.HandleFlashDropConfig)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/config/instagram", adminOnly(http.HandlerFunc(configHandler.HandleUpdateInstagramConfig)).ServeHTTP)
-	a.Router.HandleFunc("/api/reels/fetch-thumbnail", configHandler.HandleFetchInstagramThumbnail)
-	a.Router.HandleFunc("/api/admin/reels/fetch-thumbnail", configHandler.HandleFetchInstagramThumbnail)
+	a.Router.HandleFunc("/api/admin/reels/fetch-thumbnail", adminOnly(http.HandlerFunc(configHandler.HandleFetchInstagramThumbnail)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/reels/sync-thumbnails", adminOnly(http.HandlerFunc(configHandler.HandleSyncAllInstagramThumbnails)).ServeHTTP)
 	a.Router.HandleFunc("/api/reels/video-url", configHandler.HandleGetInstagramReelVideo)
 
+	// Preorder Pickup Config
+	a.Router.HandleFunc("/api/config/preorder-pickup", configHandler.HandleGetPreorderPickupConfig)
+	a.Router.HandleFunc("/api/admin/config/preorder-pickup", adminOnly(http.HandlerFunc(configHandler.HandleUpdatePreorderPickupConfig)).ServeHTTP)
+
+	// Preorder Pickup Management
+	a.Router.HandleFunc("/api/admin/preorder/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetPreorderOrders)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/orders/{id}/audit", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetPreorderPickupAudit)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/mark-ready", adminOnly(http.HandlerFunc(orderHandler.HandleMarkPreorderPickupReady)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/mark-all-ready", adminOnly(http.HandlerFunc(orderHandler.HandleMarkAllPreorderPickupReady)).ServeHTTP)
+	a.Router.HandleFunc("/api/admin/preorder/confirm-pickup", adminOnly(http.HandlerFunc(orderHandler.HandleConfirmPreorderPickup)).ServeHTTP)
+
 	// User Profiles & Addresses
-	a.Router.HandleFunc("/api/profile", profileHandler.HandleProfile)
-	a.Router.HandleFunc("/api/profile/me", profileHandler.HandleProfile)
-	a.Router.HandleFunc("/api/addresses", profileHandler.HandleAddresses)
-	a.Router.HandleFunc("/api/profile/addresses", profileHandler.HandleAddresses)
-	a.Router.HandleFunc("/api/profile/coupons", couponHandler.HandleUserCoupons)
+	a.Router.Handle("/api/profile", customerAuth(http.HandlerFunc(profileHandler.HandleProfile)))
+	a.Router.Handle("/api/profile/me", customerAuth(http.HandlerFunc(profileHandler.HandleProfile)))
+	a.Router.Handle("/api/addresses", customerAuth(http.HandlerFunc(profileHandler.HandleAddresses)))
+	a.Router.Handle("/api/profile/addresses", customerAuth(http.HandlerFunc(profileHandler.HandleAddresses)))
+	a.Router.Handle("/api/profile/coupons", customerAuth(http.HandlerFunc(couponHandler.HandleUserCoupons)))
 
-	// Cart & Wishlist
-	a.Router.HandleFunc("/api/cart", cartHandler.HandleCart)
-	a.Router.HandleFunc("/api/cart/merge", cartHandler.HandleCart)
+	// Cart & Wishlist (Protected with CustomerAuthMiddleware against IDOR)
+	a.Router.Handle("/api/cart", customerAuth(http.HandlerFunc(cartHandler.HandleCart)))
+	a.Router.Handle("/api/cart/merge", customerAuth(http.HandlerFunc(cartHandler.HandleCart)))
 
-	a.Router.HandleFunc("/api/wishlist", cartHandler.HandleWishlist)
-	a.Router.HandleFunc("/api/wishlist/merge", cartHandler.HandleWishlist)
+	a.Router.Handle("/api/wishlist", customerAuth(http.HandlerFunc(cartHandler.HandleWishlist)))
+	a.Router.Handle("/api/wishlist/merge", customerAuth(http.HandlerFunc(cartHandler.HandleWishlist)))
 
 	// Health check endpoint
 	a.Router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -257,6 +300,33 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/sitemap.xml", sitemapHandler.HandleSitemap)
 	a.Router.HandleFunc("/api/og-image/", ogHandler.HandleOgImage)
 
+	// Dev Email Preview Endpoint (For testing & mobile preview in browser)
+	previewHandler := func(w http.ResponseWriter, r *http.Request) {
+		previewType := r.URL.Query().Get("type")
+		view := r.URL.Query().Get("view")
+		if view == "hub" || previewType == "hub" || (previewType == "" && !r.URL.Query().Has("type")) {
+			if hubBytes, err := os.ReadFile("email_previews/index.html"); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write(hubBytes)
+				return
+			}
+		}
+		if previewType == "" {
+			previewType = "prepaid_pickup"
+		}
+		_, html, err := emailSvc.GeneratePreview(previewType)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+	}
+
+	a.Router.HandleFunc("/api/dev/email-preview", previewHandler)
+	a.Router.HandleFunc("/dev/email-preview", previewHandler)
+	a.Router.HandleFunc("/email-preview", previewHandler)
+
 	// Static file server fallback for SPA & Admin Portal
 	frontendDist := "./frontend/dist"
 	frontendPublic := "./frontend/public"
@@ -267,8 +337,14 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Direct match for /admin, /admin/, or /admin/index.html
-		if path == "/admin" || path == "/admin/" || path == "/admin/index.html" {
+		// Canonical redirect /admin -> /admin/
+		if path == "/admin" {
+			http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
+			return
+		}
+
+		// Direct match for /admin/ or /admin/index.html
+		if path == "/admin/" || path == "/admin/index.html" {
 			adminFile := frontendPublic + "/admin/index.html"
 			if _, err := os.Stat(frontendDist + "/admin/index.html"); err == nil {
 				adminFile = frontendDist + "/admin/index.html"
@@ -288,7 +364,25 @@ func (a *App) setupRoutes() {
 			} else if strings.HasPrefix(filePath, "/images/") || strings.HasSuffix(filePath, ".png") || strings.HasSuffix(filePath, ".jpg") || strings.HasSuffix(filePath, ".jpeg") || strings.HasSuffix(filePath, ".webp") || strings.HasSuffix(filePath, ".svg") || strings.HasSuffix(filePath, ".ico") {
 				// Static images and icons
 				w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+			} else {
+				// HTML, unhashed admin files (admin.js, admin.css), and configs must NEVER be cached by browser
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				w.Header().Set("Pragma", "no-cache")
+				w.Header().Set("Expires", "0")
 			}
+		}
+
+		// Direct match for root or /index.html (always no-cache so clients receive updated index immediately)
+		if path == "/" || path == "/index.html" {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+			htmlPath := frontendDist + "/index.html"
+			if _, err := os.Stat(htmlPath); err != nil {
+				htmlPath = frontendPublic + "/index.html"
+			}
+			http.ServeFile(w, r, htmlPath)
+			return
 		}
 
 		// Check if file exists in frontend/dist
@@ -335,7 +429,7 @@ func (a *App) setupRoutes() {
 						htmlContent := string(htmlBytes)
 						// Create dynamic meta tags
 						imageURL := "https://www.theethnictouch.com/api/og-image/" + product.ID + ".jpg"
-						
+
 						// Check availability for Schema
 						availability := "https://schema.org/OutOfStock"
 						for _, stock := range product.SizesStock {
@@ -388,9 +482,9 @@ func (a *App) setupRoutes() {
 							<meta name="twitter:label1" content="Price">
 							<meta name="twitter:data1" content="%s">
 							%s
-						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://www.theethnictouch.com"+path, product.Price, availability, product.Name, product.Description, imageURL, twitterPrice, jsonLD)						
+						`, product.Name, product.Description, product.Name, product.Description, imageURL, "https://www.theethnictouch.com"+path, product.Price, availability, product.Name, product.Description, imageURL, twitterPrice, jsonLD)
 						htmlContent = strings.Replace(htmlContent, "<!-- DYNAMIC_META_TAGS -->", dynamicTags, 1)
-						
+
 						w.Header().Set("Content-Type", "text/html; charset=utf-8")
 						w.Write([]byte(htmlContent))
 						return
@@ -417,6 +511,22 @@ func (a *App) Run(port string) error {
 }
 
 func (a *App) StartBackgroundJobs() {
+	if a.OrderService != nil && a.Config.DelhiveryAPIKey != "" && a.Config.ShippingProvider != "mock" {
+		go func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+			for {
+				if err := a.OrderService.RefreshShipmentTracking(a.jobsCtx); err != nil && a.jobsCtx.Err() == nil {
+					a.Logger.Warn("Could not refresh shipment tracking", "error", err)
+				}
+				select {
+				case <-a.jobsCtx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	}
 	go func() {
 		// Run initial cleanup immediately upon startup (useful when waking up from Render spin-down)
 		if a.OrderService != nil {
@@ -430,13 +540,18 @@ func (a *App) StartBackgroundJobs() {
 
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			if a.OrderService != nil {
-				cleaned, err := a.OrderService.CleanupAbandonedOrders(15 * time.Minute)
-				if err != nil {
-					a.Logger.Error("Failed to cleanup abandoned orders", "error", err)
-				} else if cleaned > 0 {
-					a.Logger.Info("Cleaned abandoned orders", "count", cleaned)
+		for {
+			select {
+			case <-a.jobsCtx.Done():
+				return
+			case <-ticker.C:
+				if a.OrderService != nil {
+					cleaned, err := a.OrderService.CleanupAbandonedOrders(15 * time.Minute)
+					if err != nil {
+						a.Logger.Error("Failed to cleanup abandoned orders", "error", err)
+					} else if cleaned > 0 {
+						a.Logger.Info("Cleaned abandoned orders", "count", cleaned)
+					}
 				}
 			}
 		}
@@ -444,6 +559,9 @@ func (a *App) StartBackgroundJobs() {
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
+	if a.cancelJobs != nil {
+		a.cancelJobs()
+	}
 	if a.HTTPServer != nil {
 		return a.HTTPServer.Shutdown(ctx)
 	}

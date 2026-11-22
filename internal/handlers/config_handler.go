@@ -1,14 +1,19 @@
 package handlers
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,9 +23,12 @@ import (
 )
 
 type ConfigHandler struct {
-	configSvc service.ConfigService
-	couponSvc service.CouponService
+	flashCatalog service.ProductService
+	configSvc    service.ConfigService
+	couponSvc    service.CouponService
 }
+
+func (h *ConfigHandler) SetFlashCatalog(catalog service.ProductService) { h.flashCatalog = catalog }
 
 func NewConfigHandler(configSvc service.ConfigService, couponSvc service.CouponService) *ConfigHandler {
 	return &ConfigHandler{
@@ -30,6 +38,14 @@ func NewConfigHandler(configSvc service.ConfigService, couponSvc service.CouponS
 }
 
 func (h *ConfigHandler) HandleGetSpinConfig(w http.ResponseWriter, r *http.Request) {
+	h.getSpinConfig(w, r, false)
+}
+
+func (h *ConfigHandler) HandleGetAdminSpinConfig(w http.ResponseWriter, r *http.Request) {
+	h.getSpinConfig(w, r, true)
+}
+
+func (h *ConfigHandler) getSpinConfig(w http.ResponseWriter, r *http.Request, includeSettings bool) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -42,6 +58,11 @@ func (h *ConfigHandler) HandleGetSpinConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	if !includeSettings {
+		json.NewEncoder(w).Encode(map[string]bool{"enabled": config.Enabled})
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(config)
 }
 
@@ -167,78 +188,116 @@ func (h *ConfigHandler) HandleUpdateCheckoutConfig(w http.ResponseWriter, r *htt
 
 func (h *ConfigHandler) recalculateFlashDropTiming(fd *models.FlashDropConfig) {
 	now := time.Now()
-
-	// If mode is manual, check if expires_at has passed
+	fd.FeaturedProductID = ""
+	fd.FeaturedProduct = nil
+	durationMinutes := fd.DurationHours*60 + fd.DurationMins
+	if durationMinutes <= 0 || durationMinutes > 72*60+59 {
+		durationMinutes = 360
+	}
+	duration := time.Duration(durationMinutes) * time.Minute
+	anchor, _ := time.Parse(time.RFC3339, fd.CycleStartedAt)
+	var previousManual string
 	if fd.Mode == "manual" {
-		if fd.ExpiresAt != "" {
-			expiresTime, err := time.Parse(time.RFC3339, fd.ExpiresAt)
-			if err == nil {
-				if now.After(expiresTime) {
-					// Time has expired! Revert to random rotation
-					fd.Mode = "random"
-					fd.ExpiresAt = ""
-					go func() {
-						if currentCfg, err := h.configSvc.GetHomepageConfig(); err == nil {
-							currentCfg.FlashDrop.Mode = "random"
-							currentCfg.FlashDrop.ExpiresAt = ""
-							_ = h.configSvc.UpdateHomepageConfig(currentCfg)
-						}
-					}()
-				} else {
-					diff := expiresTime.Sub(now)
-					remSec := int(diff.Seconds())
-					if remSec < 0 {
-						remSec = 0
-					}
-					fd.HoursLeft = remSec / 3600
-					fd.MinutesLeft = (remSec % 3600) / 60
-					fd.SecondsLeft = remSec % 60
-					return
+		deadline, _ := time.Parse(time.RFC3339, fd.ExpiresAt)
+		if now.Before(deadline) {
+			fd.FeaturedProductID = fd.ProductID
+			if h.flashCatalog != nil {
+				product, err := h.flashCatalog.GetProductByID(fd.ProductID)
+				if err == nil && product != nil && spotlightInStock(*product) {
+					fd.FeaturedProduct = product
 				}
-			} else {
-				fd.Mode = "random"
 			}
-		} else {
-			fd.Mode = "random"
+			setFlashDeadline(fd, now, deadline)
+			return
+		}
+		previousManual = fd.ProductID
+		anchor = deadline
+	}
+	fd.Mode = "random"
+	if fd.RotationMinutes > 0 && fd.RotationMinutes <= 72*60+59 {
+		duration = time.Duration(fd.RotationMinutes) * time.Minute
+	}
+	if anchor.IsZero() || anchor.After(now) {
+		anchor = time.Unix(0, 0).UTC()
+	}
+	cycle := int64(now.Sub(anchor) / duration)
+	deadline := anchor.Add(time.Duration(cycle+1) * duration)
+	fd.CycleStartedAt = anchor.Format(time.RFC3339)
+	setFlashDeadline(fd, now, deadline)
+	if h.flashCatalog == nil {
+		return
+	}
+	products, _, err := h.flashCatalog.GetProducts(nil)
+	if err != nil {
+		return
+	}
+	ids := make([]string, 0, len(products))
+	for _, product := range products {
+		if spotlightInStock(product) {
+			ids = append(ids, product.ID)
 		}
 	}
-
-	// For random mode (or auto-reverted):
-	// Cycle through products deterministically or dynamically using configured cycle interval
-	totalCycleMins := fd.DurationHours*60 + fd.DurationMins
-	if totalCycleMins <= 0 {
-		totalCycleMins = 360 // default 6 hours
-		fd.DurationHours = 6
-		fd.DurationMins = 0
-	}
-	cycleSec := int64(totalCycleMins * 60)
-
-	var startTime time.Time
-	if fd.CycleStartedAt != "" {
-		if t, err := time.Parse(time.RFC3339, fd.CycleStartedAt); err == nil {
-			startTime = t
+	fd.FeaturedProductID = rotatingSpotlight(ids, anchor.Format(time.RFC3339), previousManual, cycle)
+	for i := range products {
+		if products[i].ID == fd.FeaturedProductID {
+			fd.FeaturedProduct = &products[i]
+			break
 		}
 	}
-	if startTime.IsZero() || startTime.After(now) {
-		startTime = now
-		fd.CycleStartedAt = now.Format(time.RFC3339)
-	}
+}
 
-	elapsedSec := int64(now.Sub(startTime).Seconds())
-	if elapsedSec < 0 {
-		elapsedSec = 0
+func spotlightInStock(product models.Product) bool {
+	if product.IsPreorder {
+		return false
 	}
+	if product.Stock > 0 {
+		return true
+	}
+	for _, quantity := range product.SizesStock {
+		if quantity > 0 {
+			return true
+		}
+	}
+	return false
+}
 
-	remSec := int(cycleSec - (elapsedSec % cycleSec))
-	if remSec < 0 {
-		remSec = 0
+func setFlashDeadline(fd *models.FlashDropConfig, now, deadline time.Time) {
+	fd.ServerTime = now.Format(time.RFC3339Nano)
+	fd.NextChangeAt = deadline.Format(time.RFC3339Nano)
+	remaining := int((deadline.Sub(now) + time.Second - 1) / time.Second)
+	fd.HoursLeft = remaining / 3600
+	fd.MinutesLeft = remaining / 60 % 60
+	fd.SecondsLeft = remaining % 60
+}
+
+func rotatingSpotlight(ids []string, seed, previousManual string, cycle int64) string {
+	if len(ids) == 0 {
+		return ""
 	}
-	fd.HoursLeft = remSec / 3600
-	fd.MinutesLeft = (remSec % 3600) / 60
-	fd.SecondsLeft = remSec % 60
-	if fd.Mode == "" {
-		fd.Mode = "random"
+	round := cycle / int64(len(ids))
+	if len(ids) > 2 && round > 0 {
+		previous := append([]string(nil), ids...)
+		shuffleSpotlight(previous, seed, round-1)
+		previousManual = previous[len(previous)-1]
 	}
+	if len(ids) < 3 {
+		// With two choices, avoiding repeats means alternating.
+		round = 0
+	}
+	shuffleSpotlight(ids, seed, round)
+	if len(ids) > 1 && ids[0] == previousManual {
+		ids[0], ids[1] = ids[1], ids[0]
+	}
+	return ids[cycle%int64(len(ids))]
+}
+
+func shuffleSpotlight(ids []string, seed string, round int64) {
+	salt := fmt.Sprintf("%s:%d:", seed, round)
+	sort.Slice(ids, func(i, j int) bool {
+		a := sha256.Sum256([]byte(salt + ids[i]))
+		b := sha256.Sum256([]byte(salt + ids[j]))
+		return bytes.Compare(a[:], b[:]) < 0
+	})
 }
 
 func (h *ConfigHandler) HandleGetHomepageConfig(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +313,7 @@ func (h *ConfigHandler) HandleGetHomepageConfig(w http.ResponseWriter, r *http.R
 	}
 
 	h.recalculateFlashDropTiming(&config.FlashDrop)
+	w.Header().Set("Cache-Control", "no-store")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(config)
@@ -340,6 +400,12 @@ func (h *ConfigHandler) HandleFlashDropConfig(w http.ResponseWriter, r *http.Req
 		}
 
 		if req.Mode == "manual" {
+			if req.RotationMinutes <= 0 {
+				req.RotationMinutes = homepageConfig.FlashDrop.RotationMinutes
+			}
+			if req.RotationMinutes <= 0 {
+				req.RotationMinutes = 360
+			}
 			totalMins := req.DurationHours*60 + req.DurationMins
 			if totalMins <= 0 {
 				totalMins = 360 // default 6 hours
@@ -350,20 +416,21 @@ func (h *ConfigHandler) HandleFlashDropConfig(w http.ResponseWriter, r *http.Req
 		} else {
 			req.Mode = "random"
 			req.ExpiresAt = ""
+			req.ProductID = ""
 			if req.DurationHours <= 0 && req.DurationMins <= 0 {
 				req.DurationHours = 6
 				req.DurationMins = 0
 			}
+			req.RotationMinutes = req.DurationHours*60 + req.DurationMins
 			req.CycleStartedAt = time.Now().Format(time.RFC3339)
 		}
 
 		homepageConfig.FlashDrop = req
-		h.recalculateFlashDropTiming(&homepageConfig.FlashDrop)
-
 		if err := h.configSvc.UpdateHomepageConfig(homepageConfig); err != nil {
 			http.Error(w, "Failed to save flash drop configuration", http.StatusInternalServerError)
 			return
 		}
+		h.recalculateFlashDropTiming(&homepageConfig.FlashDrop)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -601,7 +668,81 @@ func (h *ConfigHandler) HandleSyncAllInstagramThumbnails(w http.ResponseWriter, 
 	})
 }
 
+var (
+	instaHTTPTransport http.RoundTripper = nil
+	instaLookupIP                         = net.LookupIP
+)
+
+func isAllowedInstagramHost(hostname string) bool {
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+	if h, _, err := net.SplitHostPort(hostname); err == nil {
+		hostname = h
+	}
+	allowedExact := map[string]bool{
+		"instagram.com":     true,
+		"www.instagram.com": true,
+		"instagr.am":         true,
+		"www.instagr.am":     true,
+	}
+	return allowedExact[hostname]
+}
+
+func isAllowedMediaCDNHost(hostname string) bool {
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+	if h, _, err := net.SplitHostPort(hostname); err == nil {
+		hostname = h
+	}
+	if isAllowedInstagramHost(hostname) {
+		return true
+	}
+	if hostname == "cdninstagram.com" || hostname == "fbcdn.net" {
+		return true
+	}
+	for _, suffix := range []string{".cdninstagram.com", ".fbcdn.net"} {
+		if strings.HasSuffix(hostname, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateSafePublicHost(hostname string) error {
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+	if h, _, err := net.SplitHostPort(hostname); err == nil {
+		hostname = h
+	}
+
+	ips, err := instaLookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("failed to resolve host %s: %w", hostname, err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("no IP resolved for host %s", hostname)
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("host %s resolves to restricted/internal IP %s", hostname, ip.String())
+		}
+	}
+	return nil
+}
+
 func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsedURL.Scheme != "https" {
+		return "", "", fmt.Errorf("disallowed URL scheme %q: only https is permitted", parsedURL.Scheme)
+	}
+	initialHost := parsedURL.Hostname()
+	if !isAllowedInstagramHost(initialHost) {
+		return "", "", fmt.Errorf("disallowed hostname %q: only official instagram hosts permitted", initialHost)
+	}
+	if err := validateSafePublicHost(initialHost); err != nil {
+		return "", "", fmt.Errorf("prohibited host resolution: %w", err)
+	}
+
 	// Extract reel code if present
 	reCode := regexp.MustCompile(`/reel/([A-Za-z0-9_-]+)`)
 	matches := reCode.FindStringSubmatch(rawURL)
@@ -611,7 +752,24 @@ func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
 	}
 
 	client := &http.Client{
-		Timeout: 15 * time.Second,
+		Timeout:   15 * time.Second,
+		Transport: instaHTTPTransport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("too many redirects (max 5)")
+			}
+			if req.URL.Scheme != "https" {
+				return fmt.Errorf("redirect to non-https scheme: %s", req.URL.Scheme)
+			}
+			h := req.URL.Hostname()
+			if !isAllowedInstagramHost(h) && !isAllowedMediaCDNHost(h) {
+				return fmt.Errorf("redirect to disallowed host: %s", h)
+			}
+			if err := validateSafePublicHost(h); err != nil {
+				return fmt.Errorf("redirect to prohibited host: %w", err)
+			}
+			return nil
+		},
 	}
 
 	req, err := http.NewRequest("GET", rawURL, nil)
@@ -627,9 +785,14 @@ func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	const maxPageBytes = 5 << 20 // 5 MB
+	lrPage := io.LimitReader(resp.Body, maxPageBytes+1)
+	bodyBytes, err := io.ReadAll(lrPage)
 	if err != nil {
 		return "", reelCode, fmt.Errorf("failed to read response: %w", err)
+	}
+	if int64(len(bodyBytes)) > maxPageBytes {
+		return "", reelCode, fmt.Errorf("instagram page response exceeds 5MB limit")
 	}
 
 	bodyStr := string(bodyBytes)
@@ -645,8 +808,21 @@ func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
 	}
 
 	imgURL := html.UnescapeString(ogMatches[1])
+	parsedImgURL, err := url.Parse(imgURL)
+	if err != nil {
+		return "", reelCode, fmt.Errorf("invalid image URL in metadata: %w", err)
+	}
+	if parsedImgURL.Scheme != "https" {
+		return "", reelCode, fmt.Errorf("image URL scheme %q not permitted", parsedImgURL.Scheme)
+	}
+	imgHost := parsedImgURL.Hostname()
+	if !isAllowedMediaCDNHost(imgHost) {
+		return "", reelCode, fmt.Errorf("image host %q is not an allowed CDN host", imgHost)
+	}
+	if err := validateSafePublicHost(imgHost); err != nil {
+		return "", reelCode, fmt.Errorf("prohibited image host resolution: %w", err)
+	}
 
-	// Download image bytes from Instagram CDN
 	imgReq, err := http.NewRequest("GET", imgURL, nil)
 	if err != nil {
 		return "", reelCode, fmt.Errorf("failed to create image request: %w", err)
@@ -663,9 +839,23 @@ func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
 		return "", reelCode, fmt.Errorf("image download returned status %d", imgResp.StatusCode)
 	}
 
-	imgBytes, err := io.ReadAll(imgResp.Body)
+	const maxImageBytes = 5 << 20 // 5 MB
+	lrImg := io.LimitReader(imgResp.Body, maxImageBytes+1)
+	imgBytes, err := io.ReadAll(lrImg)
 	if err != nil {
 		return "", reelCode, fmt.Errorf("failed to read image bytes: %w", err)
+	}
+	if int64(len(imgBytes)) > maxImageBytes {
+		return "", reelCode, fmt.Errorf("downloaded image exceeds 5MB limit")
+	}
+	if len(imgBytes) == 0 {
+		return "", reelCode, fmt.Errorf("downloaded image is empty")
+	}
+
+	// Verify image MIME type
+	detectedType := http.DetectContentType(imgBytes)
+	if !strings.HasPrefix(detectedType, "image/") {
+		return "", reelCode, fmt.Errorf("downloaded content is not a valid image format (detected %s)", detectedType)
 	}
 
 	// Create directory if not exists
@@ -682,7 +872,7 @@ func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
 	}
 
 	// Try uploading to Cloudflare R2 if configured (production)
-	if r2URL, err := uploadToR2(imgBytes, fileName, "image/jpeg"); err == nil && r2URL != "" {
+	if r2URL, err := uploadToR2(imgBytes, fileName, detectedType); err == nil && r2URL != "" {
 		return r2URL, reelCode, nil
 	}
 
@@ -695,4 +885,39 @@ func fetchAndSaveInstaThumbnail(rawURL string) (string, string, error) {
 	return thumbLocalPath, reelCode, nil
 }
 
+func (h *ConfigHandler) HandleGetPreorderPickupConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
+	config, err := h.configSvc.GetPreorderPickupConfig()
+	if err != nil {
+		http.Error(w, "Failed to load preorder pickup config", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+func (h *ConfigHandler) HandleUpdatePreorderPickupConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var config models.PreorderPickupConfig
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "Invalid input data", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.configSvc.UpdatePreorderPickupConfig(&config); err != nil {
+		http.Error(w, "Failed to update preorder pickup config", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Preorder pickup config updated successfully"})
+}

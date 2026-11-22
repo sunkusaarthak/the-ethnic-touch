@@ -44,25 +44,30 @@ type HeroSlideItem struct {
 }
 
 type FlashDropConfig struct {
-	Mode           string  `json:"mode"`                      // "random" or "manual"
-	ProductID      string  `json:"product_id"`                // Selected product ID
-	ImageURL       string  `json:"image_url,omitempty"`       // Product image URL
-	Price          float64 `json:"price,omitempty"`           // Product display price
-	OriginalPrice  float64 `json:"original_price,omitempty"`  // Product original / strike price
-	ExpiresAt      string  `json:"expires_at"`                // RFC3339 timestamp when manual spotlight expires
-	CycleStartedAt string  `json:"cycle_started_at,omitempty"` // RFC3339 timestamp when current rotation cycle started
-	DurationHours  int     `json:"duration_hours"`            // Configured duration hours (e.g. 6)
-	DurationMins   int     `json:"duration_mins"`             // Configured duration minutes (e.g. 0)
-	Title          string  `json:"title"`
-	Highlight      string  `json:"highlight"`
-	Desc           string  `json:"desc"`
-	HoursLeft      int     `json:"hours_left"`
-	MinutesLeft    int     `json:"minutes_left"`
-	SecondsLeft    int     `json:"seconds_left"`
-	RemainingStock int     `json:"remaining_stock"`
-	TotalStock     int     `json:"total_stock"`
-	BadgeText      string  `json:"badge_text,omitempty"`
-	FeatureText    string  `json:"feature_text,omitempty"`
+	FeaturedProduct   *Product `json:"featured_product,omitempty"`
+	FeaturedProductID string   `json:"featured_product_id,omitempty"`
+	NextChangeAt      string   `json:"next_change_at,omitempty"`
+	ServerTime        string   `json:"server_time,omitempty"`
+	RotationMinutes   int      `json:"rotation_minutes,omitempty"`
+	Mode              string   `json:"mode"`                       // "random" or "manual"
+	ProductID         string   `json:"product_id"`                 // Selected product ID
+	ImageURL          string   `json:"image_url,omitempty"`        // Product image URL
+	Price             float64  `json:"price,omitempty"`            // Product display price
+	OriginalPrice     float64  `json:"original_price,omitempty"`   // Product original / strike price
+	ExpiresAt         string   `json:"expires_at"`                 // RFC3339 timestamp when manual spotlight expires
+	CycleStartedAt    string   `json:"cycle_started_at,omitempty"` // RFC3339 timestamp when current rotation cycle started
+	DurationHours     int      `json:"duration_hours"`             // Configured duration hours (e.g. 6)
+	DurationMins      int      `json:"duration_mins"`              // Configured duration minutes (e.g. 0)
+	Title             string   `json:"title"`
+	Highlight         string   `json:"highlight"`
+	Desc              string   `json:"desc"`
+	HoursLeft         int      `json:"hours_left"`
+	MinutesLeft       int      `json:"minutes_left"`
+	SecondsLeft       int      `json:"seconds_left"`
+	RemainingStock    int      `json:"remaining_stock"`
+	TotalStock        int      `json:"total_stock"`
+	BadgeText         string   `json:"badge_text,omitempty"`
+	FeatureText       string   `json:"feature_text,omitempty"`
 }
 
 type LookbookHotspot struct {

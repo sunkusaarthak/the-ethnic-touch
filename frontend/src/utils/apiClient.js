@@ -41,9 +41,11 @@ export async function fetchWithAuth(url, options = {}) {
 
         if (!response.ok) {
             let errorMsg = `Server error (${response.status})`;
+            let errorData;
             if (contentType.includes('application/json')) {
                 try {
                     const errData = await response.json();
+                    errorData = errData;
                     if (errData && (errData.error || errData.message)) {
                         errorMsg = errData.error || errData.message;
                     }
@@ -53,6 +55,7 @@ export async function fetchWithAuth(url, options = {}) {
             }
             const error = new Error(errorMsg);
             error.status = response.status;
+            error.data = errorData;
             throw error;
         }
 

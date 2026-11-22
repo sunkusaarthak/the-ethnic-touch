@@ -1,89 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Flame, ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
+import { createProductSlug } from '../../utils/slugHelper';
 import { getOptimizedImageUrl } from '../../utils/imageHelper';
 
 const pad = (n) => String(n ?? 0).padStart(2, '0');
+const lowStockLimit = 5;
 
 const FlashLoomDrop = ({ flashConfig, featuredProduct, onExpire }) => {
+    const product = featuredProduct;
     const isManual = flashConfig?.mode === 'manual';
-    const badgeText = flashConfig?.badge_text || 'SELLING FAST';
-
-    const product = featuredProduct || {
-        id: flashConfig?.product_id || 'p_Pi_88000',
-        name: 'Pink Paisley Printed Straight Kurti',
-        price: 549,
-        originalPrice: 699,
-        imageUrl: getOptimizedImageUrl('/images/kurthi_peach.png'),
-        stock: 5,
-        fabric: 'Cotton'
-    };
-
-    // If custom values were saved by admin, honor them; otherwise fallback to active rotating product
-    const title = flashConfig?.title !== undefined && flashConfig.title !== '' ? flashConfig.title : 'Customer Favorite: ';
-    const highlight = flashConfig?.highlight && flashConfig.highlight.trim() !== ''
-        ? flashConfig.highlight 
-        : product.name;
-
-    const desc = flashConfig?.desc && flashConfig.desc.trim() !== ''
-        ? flashConfig.desc 
-        : (product.description || `Crafted in 100% soft breathable ${product.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`);
-
-    const remainingStock = (flashConfig?.remaining_stock !== undefined && flashConfig.remaining_stock > 0)
-        ? flashConfig.remaining_stock 
-        : (product.stock !== undefined ? product.stock : 5);
-
-    const totalStock = flashConfig?.total_stock !== undefined 
-        ? flashConfig.total_stock 
-        : Math.max(remainingStock + 10, 20);
-
-    const stockPercent = Math.min(100, Math.max(10, Math.round(((totalStock - remainingStock) / totalStock) * 100)));
-
-    const featureText = flashConfig?.feature_text && flashConfig.feature_text.trim() !== ''
-        ? flashConfig.feature_text 
-        : (product.fabric ? `100% Pure Breathable ${product.fabric}` : '100% Pure Breathable Cotton');
-
-    const displayImage = getOptimizedImageUrl(product.imageUrl || flashConfig?.image_url || '/images/kurthi_peach.png');
-    const displayPrice = flashConfig?.price || product.price || 449;
-    const displayProductId = product.id || flashConfig?.product_id || '';
-
-    const [timeLeft, setTimeLeft] = useState({
-        hours: flashConfig?.hours_left !== undefined ? flashConfig.hours_left : 0,
-        minutes: flashConfig?.minutes_left !== undefined ? flashConfig.minutes_left : 0,
-        seconds: flashConfig?.seconds_left !== undefined ? flashConfig.seconds_left : 0
-    });
+    const deadline = Date.parse(flashConfig?.next_change_at);
+    const serverTime = Date.parse(flashConfig?.server_time);
+    const [remaining, setRemaining] = useState(0);
 
     useEffect(() => {
-        if (flashConfig) {
-            setTimeLeft({
-                hours: flashConfig.hours_left !== undefined ? flashConfig.hours_left : 0,
-                minutes: flashConfig.minutes_left !== undefined ? flashConfig.minutes_left : 0,
-                seconds: flashConfig.seconds_left !== undefined ? flashConfig.seconds_left : 0
-            });
-        }
-    }, [flashConfig]);
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev.seconds > 0) {
-                    return { ...prev, seconds: prev.seconds - 1 };
-                } else if (prev.minutes > 0) {
-                    return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-                } else if (prev.hours > 0) {
-                    return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-                } else {
-                    // Timer reached 0! Trigger auto-revert or cycle refresh
-                    if (onExpire) {
-                        onExpire();
-                    }
-                    return { hours: 0, minutes: 0, seconds: 0 };
+        if (!Number.isFinite(deadline)) return;
+        let running = true;
+        let timer;
+        const localDeadline = Number.isFinite(serverTime) ? Date.now() + deadline - serverTime : deadline;
+        const tick = async () => {
+            const seconds = Math.max(0, Math.ceil((localDeadline - Date.now()) / 1000));
+            setRemaining(seconds);
+            if (!seconds) {
+                try {
+                    await onExpire();
+                } catch {
+                    if (running) timer = setTimeout(tick, 5000);
                 }
-            });
-        }, 1000);
+                return;
+            }
+            timer = setTimeout(tick, Math.min(1000, Math.max(5, localDeadline - Date.now())));
+        };
+        tick();
+        return () => { running = false; clearTimeout(timer); };
+    }, [deadline, serverTime, onExpire]);
 
-        return () => clearInterval(timer);
-    }, [onExpire]);
+    if (!flashConfig) return null;
+    if (!product) return (
+        <section className="flash-drop-section" id="flash-drop-section">
+            <div className="flash-drop-card">
+                <div className="flash-drop-content">
+                    <h2 className="flash-title">Flash Spotlight Drop</h2>
+                    <p className="flash-desc">Browse the collection while we prepare the next Spotlight.</p>
+                    <Link className="flash-cta-btn" to="/shop">Shop the collection <ArrowRight size={16} /></Link>
+                </div>
+            </div>
+        </section>
+    );
+    const badgeText = isManual && flashConfig?.badge_text ? flashConfig.badge_text : 'Flash Spotlight Drop';
+    const title = isManual && flashConfig?.title ? flashConfig.title : 'Featured style: ';
+    const highlight = isManual && flashConfig?.highlight?.trim() ? flashConfig.highlight : product.name;
+    const desc = isManual && flashConfig?.desc?.trim() ? flashConfig.desc : product.description;
+    const featureText = isManual && flashConfig?.feature_text?.trim() ? flashConfig.feature_text : product.fabric;
+    const displayImage = product.imageUrl?.trim() ? getOptimizedImageUrl(product.imageUrl) : null;
+    const displayPrice = product.price;
+    const displayProductId = product.id;
+    const sizeQuantities = Object.values(product.sizesStock || {}).map(Number);
+    const remainingStock = sizeQuantities.length ? sizeQuantities.reduce((sum, qty) => sum + Math.max(0, qty), 0) : Number(product.stock);
+    const showStock = Number.isSafeInteger(remainingStock) && remainingStock > 0;
+    const stockLabel = remainingStock <= lowStockLimit
+        ? `Only ${remainingStock} ${remainingStock === 1 ? 'piece' : 'pieces'} remaining`
+        : `In stock · ${remainingStock} pieces`;
+    const stockFill = Math.min(100, remainingStock / lowStockLimit * 100);
+    const timeLeft = { hours: Math.floor(remaining / 3600), minutes: Math.floor(remaining / 60) % 60, seconds: remaining % 60 };
 
     return (
         <section className="flash-drop-section" id="flash-drop-section">
@@ -101,7 +81,7 @@ const FlashLoomDrop = ({ flashConfig, featuredProduct, onExpire }) => {
                     <p className="flash-desc">{desc}</p>
 
                     {/* Countdown Timer */}
-                    <div className="flash-timer-row">
+                    {Number.isFinite(deadline) && <div className="flash-timer-row">
                         <div className="timer-box">
                             <span className="timer-number">{pad(timeLeft.hours)}</span>
                             <span className="timer-label">Hours</span>
@@ -116,22 +96,21 @@ const FlashLoomDrop = ({ flashConfig, featuredProduct, onExpire }) => {
                             <span className="timer-number">{pad(timeLeft.seconds)}</span>
                             <span className="timer-label">Secs</span>
                         </div>
-                    </div>
+                    </div>}
 
-                    {/* Remaining Stock Meter */}
-                    <div className="flash-stock-meter">
+                    {showStock && <div className="flash-stock-meter">
                         <div className="flash-stock-info">
                             <span>Stock Availability</span>
-                            <strong>Only {remainingStock} Pieces Remaining</strong>
+                            <strong>{stockLabel}</strong>
                         </div>
-                        <div className="flash-stock-bar">
-                            <div className="flash-stock-fill" style={{ width: `${stockPercent}%` }}></div>
+                        <div className="flash-stock-bar" aria-hidden="true">
+                            <div className="flash-stock-fill" style={{ width: `${stockFill}%` }} />
                         </div>
-                    </div>
+                    </div>}
 
                     <div className="flash-cta-group">
-                        <Link 
-                            to={`/product/${displayProductId}/kurti`} 
+                        <Link
+                            to={`/product/${displayProductId}/${createProductSlug(product.name)}`}
                             className="flash-cta-btn"
                         >
                             Order Now &bull; ₹{Number(displayPrice).toLocaleString('en-IN')}
@@ -143,7 +122,7 @@ const FlashLoomDrop = ({ flashConfig, featuredProduct, onExpire }) => {
                     </div>
                 </div>
 
-                <div className="flash-drop-visual">
+                {displayImage && <div className="flash-drop-visual">
                     <div className="flash-image-wrap">
                         <img 
                             src={displayImage} 
@@ -151,7 +130,7 @@ const FlashLoomDrop = ({ flashConfig, featuredProduct, onExpire }) => {
                             loading="lazy" 
                         />
                     </div>
-                </div>
+                </div>}
             </div>
         </section>
     );

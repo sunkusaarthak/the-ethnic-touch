@@ -22,6 +22,9 @@ type ConfigService interface {
 	UpdateCheckoutConfig(config *models.CheckoutConfig) error
 	GetHomepageConfig() (*models.HomepageConfig, error)
 	UpdateHomepageConfig(config *models.HomepageConfig) error
+
+	GetPreorderPickupConfig() (*models.PreorderPickupConfig, error)
+	UpdatePreorderPickupConfig(config *models.PreorderPickupConfig) error
 }
 
 type configService struct {
@@ -104,3 +107,10 @@ func (s *configService) UpdateHomepageConfig(config *models.HomepageConfig) erro
 	return s.repo.UpdateHomepageConfig(config)
 }
 
+func (s *configService) GetPreorderPickupConfig() (*models.PreorderPickupConfig, error) {
+	return s.repo.GetPreorderPickupConfig()
+}
+
+func (s *configService) UpdatePreorderPickupConfig(config *models.PreorderPickupConfig) error {
+	return s.repo.UpdatePreorderPickupConfig(config)
+}

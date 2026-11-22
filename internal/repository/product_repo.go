@@ -237,6 +237,13 @@ func (r *postgresProductRepo) GetProducts(filters map[string]string) ([]models.P
 	if featuredStr == "true" {
 		conditions = append(conditions, "p.is_featured = TRUE")
 	}
+	preorderStr := filters["isPreorder"]
+	if preorderStr == "" {
+		preorderStr = filters["preorder"]
+	}
+	if preorderStr == "true" {
+		conditions = append(conditions, "p.is_preorder = TRUE")
+	}
 
 	baseQuery := `
 		SELECT 
@@ -245,7 +252,7 @@ func (r *postgresProductRepo) GetProducts(filters map[string]string) ([]models.P
 			COALESCE(p.collection, ''), COALESCE(p.fabric, ''), COALESCE(p.color, ''), 
 			COALESCE(p.sleeve_type, ''), COALESCE(p.neck_type, ''), COALESCE(p.pattern, ''), 
 			COALESCE(p.occasion, ''), COALESCE(p.sku, ''), COALESCE(p.tags, ''), 
-			COALESCE(p.original_price, 0), p.is_new_arrival, p.is_best_seller, p.is_featured, 
+			COALESCE(p.original_price, 0), p.is_new_arrival, p.is_best_seller, p.is_featured, COALESCE(p.is_preorder, FALSE), 
 			COALESCE(p.created_at, ''),
 			COALESCE(r.avg_rating, 0.0) as avg_rating,
 			COALESCE(r.review_count, 0) as review_count
@@ -330,7 +337,7 @@ func (r *postgresProductRepo) GetProducts(filters map[string]string) ([]models.P
 			&sizesStr, &sizesStockStr,
 			&p.Collection, &p.Fabric, &p.Color, &p.SleeveType, &p.NeckType, &p.Pattern,
 			&p.Occasion, &p.SKU, &p.Tags, &p.OriginalPrice, &p.IsNewArrival, &p.IsBestSeller,
-			&p.IsFeatured, &p.CreatedAt, &p.AvgRating, &p.ReviewCount,
+			&p.IsFeatured, &p.IsPreorder, &p.CreatedAt, &p.AvgRating, &p.ReviewCount,
 		); err != nil {
 			return nil, nil, err
 		}
@@ -397,11 +404,11 @@ func (r *postgresProductRepo) CreateProduct(p *models.Product) error {
 		INSERT INTO products (
 			id, name, description, price, image_url, sizes, sizes_stock, stock, category,
 			collection, fabric, color, sleeve_type, neck_type, pattern, occasion,
-			sku, tags, original_price, is_new_arrival, is_best_seller, is_featured, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+			sku, tags, original_price, is_new_arrival, is_best_seller, is_featured, is_preorder, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
 		p.ID, p.Name, p.Description, p.Price, p.ImageURL, sizesStr, sizesStockStr, p.Stock, p.Category,
 		p.Collection, p.Fabric, p.Color, p.SleeveType, p.NeckType, p.Pattern, p.Occasion,
-		p.SKU, p.Tags, p.OriginalPrice, p.IsNewArrival, p.IsBestSeller, p.IsFeatured, p.CreatedAt)
+		p.SKU, p.Tags, p.OriginalPrice, p.IsNewArrival, p.IsBestSeller, p.IsFeatured, p.IsPreorder, p.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -441,12 +448,12 @@ func (r *postgresProductRepo) UpdateProduct(p *models.Product) error {
 			name = $1, description = $2, price = $3, image_url = $4, sizes = $5, sizes_stock = $6, stock = $7, 
 			category = $8, collection = $9, fabric = $10, color = $11, sleeve_type = $12, neck_type = $13, 
 			pattern = $14, occasion = $15, sku = $16, tags = $17, original_price = $18, is_new_arrival = $19, 
-			is_best_seller = $20, is_featured = $21
-		WHERE id = $22`,
+			is_best_seller = $20, is_featured = $21, is_preorder = $22
+		WHERE id = $23`,
 		p.Name, p.Description, p.Price, p.ImageURL, sizesStr, sizesStockStr, p.Stock,
 		p.Category, p.Collection, p.Fabric, p.Color, p.SleeveType, p.NeckType,
 		p.Pattern, p.Occasion, p.SKU, p.Tags, p.OriginalPrice, p.IsNewArrival,
-		p.IsBestSeller, p.IsFeatured, p.ID)
+		p.IsBestSeller, p.IsFeatured, p.IsPreorder, p.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update product: %w", err)
 	}
@@ -521,7 +528,7 @@ func (r *postgresProductRepo) GetProductByID(id string) (*models.Product, error)
 			p.sizes, p.sizes_stock,
 			p.collection, p.fabric, p.color, p.sleeve_type, p.neck_type, p.pattern, 
 			p.occasion, p.sku, p.tags, p.original_price, p.is_new_arrival, p.is_best_seller, 
-			p.is_featured, p.created_at,
+			p.is_featured, COALESCE(p.is_preorder, FALSE), p.created_at,
 			COALESCE(r.avg_rating, 0.0) as avg_rating, 
 			COALESCE(r.review_count, 0) as review_count
 		FROM products p
@@ -541,7 +548,7 @@ func (r *postgresProductRepo) GetProductByID(id string) (*models.Product, error)
 		&sizesStr, &sizesStockStr,
 		&p.Collection, &p.Fabric, &p.Color, &p.SleeveType, &p.NeckType, &p.Pattern,
 		&p.Occasion, &p.SKU, &p.Tags, &p.OriginalPrice, &p.IsNewArrival, &p.IsBestSeller,
-		&p.IsFeatured, &p.CreatedAt, &p.AvgRating, &p.ReviewCount,
+		&p.IsFeatured, &p.IsPreorder, &p.CreatedAt, &p.AvgRating, &p.ReviewCount,
 	)
 	
 	if err != nil {

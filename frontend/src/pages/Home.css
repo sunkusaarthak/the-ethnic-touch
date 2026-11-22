@@ -40,6 +40,19 @@
     flex-shrink: 0;
 }
 
+.ticker-sale {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+    text-decoration: none;
+}
+
+.ticker-sale-cta {
+    text-decoration: underline;
+    white-space: nowrap;
+}
+
 .ticker-dot {
     width: 4px;
     height: 4px;

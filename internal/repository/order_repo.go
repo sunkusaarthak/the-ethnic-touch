@@ -10,16 +10,37 @@ import (
 	"ethnictouch/internal/models"
 )
 
+// Sentinel errors for preorder pickup operations.
+var ErrAlreadyCollected = fmt.Errorf("order already marked as collected")
+var ErrInvalidPreorderStatus = fmt.Errorf("invalid status transition for preorder order")
+var ErrInvalidShipmentTransition = fmt.Errorf("order is not eligible for this shipment update")
+
 type OrderRepository interface {
 	GetOrder(orderID string) (*models.Order, error)
+	GetOrderDetails(order *models.Order) error
+	GetOrderByRazorpayID(razorpayOrderID string) (*models.Order, error)
 	GetAllOrders(email string) ([]models.Order, error)
 	GetAdminOrders(orderID string) ([]models.Order, error)
 	GetPendingDeliveryOrders() ([]models.Order, error)
+	ClaimPendingDeliveryOrders(limit int, orderID string) ([]models.Order, error)
+	FinishDeliveryDispatch(orderID string, startedAt *time.Time, status, tracking, reason string) error
+	ResolveDeliveryDispatch(orderID, tracking string) error
+	ApplyCarrierTrackingUpdate(orderID, status, tracking, eventTime string) error
+	RecordShipmentEvent(orderID, tracking string, event models.ShipmentEvent) error
+	ClaimTrackingOrders() ([]models.Order, error)
 	CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
-	UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error
+	RecordCapturedPayment(orderID, paymentID string) (status string, changed bool, err error)
+	SaveOrderGift(orderID, gift string, coupon *models.Coupon) (string, error)
 	ConfirmStorePickup(orderID string) error
 	CancelPendingOrder(orderID string) error
+	// Preorder pickup methods
+	ConfirmPreorderPickup(orderID, adminEmail, notes string) error
+	MarkPreorderPickupReady(orderID string) error
+	MarkAllPreorderPickupReady() (int, error)
+	GetPreorderPickupOrders(filter string) ([]models.Order, error)
+	GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error)
+	MarkPickupNotificationSent(orderID string) error
 }
 
 type postgresOrderRepo struct {
@@ -30,39 +51,87 @@ func NewOrderRepository(db *sql.DB) OrderRepository {
 	return &postgresOrderRepo{db: db}
 }
 
-func (r *postgresOrderRepo) GetOrder(orderID string) (*models.Order, error) {
-	var o models.Order
-	err := r.db.QueryRow(`
-		SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, 
-		COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
-		COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
-		COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
-		COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
-		COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') 
-		FROM orders WHERE id = $1`, orderID).
-		Scan(&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
-			&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift,
-			&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
-			&o.CheckoutType, &o.PaymentMethod)
+// orderColumns is the shared SELECT column list for orders.
+const orderColumns = `id, customer_email, total_amount, discount_amt, coupon_code, status, created_at,
+	COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''),
+	COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
+	COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
+	COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
+	COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online'),
+	COALESCE(fulfilment_type, ''), COALESCE(pickup_location_snapshot, ''),
+	COALESCE(pickup_collected_at, ''), COALESCE(pickup_collected_by, ''),
+	COALESCE(pickup_notification_sent, FALSE), dispatch_started_at, COALESCE(dispatch_error, ''), spin_tickets_awarded,
+	COALESCE((SELECT e.status FROM order_tracking_events e WHERE e.order_id = orders.id
+		ORDER BY e.occurred_at DESC, e.status DESC LIMIT 1), '')`
 
+func scanOrder(scanner interface {
+	Scan(dest ...interface{}) error
+}) (models.Order, error) {
+	var o models.Order
+	err := scanner.Scan(
+		&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
+		&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift,
+		&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
+		&o.CheckoutType, &o.PaymentMethod,
+		&o.FulfilmentType, &o.PickupLocationSnapshot,
+		&o.PickupCollectedAt, &o.PickupCollectedBy, &o.PickupNotificationSent,
+		&o.DispatchStartedAt, &o.DispatchError, &o.SpinTicketsAwarded, &o.TrackingStatus,
+	)
+	if err == nil {
+		o.IsPreorder = o.FulfilmentType == models.FulfilmentTypePreorderStorePickup || o.FulfilmentType == models.FulfilmentTypePreorderHomeDelivery
+	}
+	return o, err
+}
+
+func (r *postgresOrderRepo) GetOrder(orderID string) (*models.Order, error) {
+	row := r.db.QueryRow(`SELECT `+orderColumns+` FROM orders WHERE id = $1`, orderID)
+	o, err := scanOrder(row)
 	if err != nil {
 		return nil, err
 	}
-
-	items, err := r.getOrderItems(orderID)
+	items, err := r.getOrderItems(o)
 	if err == nil {
 		o.Items = items
 	}
-
 	return &o, nil
 }
 
-func (r *postgresOrderRepo) getOrderItems(orderID string) ([]models.OrderItem, error) {
-	rows, err := r.db.Query(`
-		SELECT COALESCE(oi.product_id, ''), oi.quantity, oi.price_at_qty, COALESCE(p.name, ''), COALESCE(oi.size, '')
+func (r *postgresOrderRepo) GetOrderDetails(order *models.Order) error {
+	rows, err := r.db.Query(`SELECT status, occurred_at, location FROM order_tracking_events
+		WHERE order_id = $1 ORDER BY occurred_at DESC, status DESC LIMIT 50`, order.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var event models.ShipmentEvent
+		if err := rows.Scan(&event.Status, &event.OccurredAt, &event.Location); err != nil {
+			return err
+		}
+		order.TrackingEvents = append(order.TrackingEvents, event)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if err := r.db.QueryRow(`SELECT code FROM coupons WHERE id = $1`, models.OrderGiftCouponIDPrefix+order.ID).
+		Scan(&order.EarnedCoupon); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	return nil
+}
+
+func (r *postgresOrderRepo) getOrderItems(order models.Order) ([]models.OrderItem, error) {
+	return readOrderItems(r.db, order)
+}
+
+func readOrderItems(db interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}, order models.Order) ([]models.OrderItem, error) {
+	rows, err := db.Query(`
+		SELECT COALESCE(oi.product_id, ''), oi.quantity, oi.price_at_qty, COALESCE(p.name, ''), COALESCE(oi.size, ''), COALESCE(p.image_url, '')
 		FROM order_items oi
 		LEFT JOIN products p ON oi.product_id = p.id
-		WHERE oi.order_id = $1`, orderID)
+		WHERE oi.order_id = $1`, order.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +139,14 @@ func (r *postgresOrderRepo) getOrderItems(orderID string) ([]models.OrderItem, e
 
 	var items []models.OrderItem
 	for rows.Next() {
-		var it models.OrderItem
-		if err := rows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName, &it.Size); err == nil {
-			items = append(items, it)
+		// Checkout records a single fulfillment type for all items in the order.
+		it := models.OrderItem{IsPreorder: order.IsPreorder}
+		if err := rows.Scan(&it.ProductID, &it.Quantity, &it.PriceAtQty, &it.ProductName, &it.Size, &it.ImageURL); err != nil {
+			return nil, err
 		}
+		items = append(items, it)
 	}
-	return items, nil
+	return items, rows.Err()
 }
 
 func (r *postgresOrderRepo) ConfirmStorePickup(orderID string) error {
@@ -84,6 +155,23 @@ func (r *postgresOrderRepo) ConfirmStorePickup(orderID string) error {
 		return fmt.Errorf("failed to start order transaction: %w", err)
 	}
 	defer tx.Rollback()
+	var status, checkoutType, paymentMethod, fulfilmentType string
+	if err := tx.QueryRow(`SELECT status, COALESCE(checkout_type, ''), COALESCE(payment_method, 'online'), COALESCE(fulfilment_type, '')
+		FROM orders WHERE id = $1 FOR UPDATE`, orderID).Scan(&status, &checkoutType, &paymentMethod, &fulfilmentType); err != nil {
+		return err
+	}
+	if checkoutType != "pickup" || fulfilmentType != "" {
+		return fmt.Errorf("order is not eligible for regular store pickup")
+	}
+	if paymentMethod == "online" && (status == "paid" || status == "ready_for_pickup") {
+		if _, err := tx.Exec(`UPDATE orders SET status = 'picked_up' WHERE id = $1`, orderID); err != nil {
+			return fmt.Errorf("confirm prepaid store pickup: %w", err)
+		}
+		return tx.Commit()
+	}
+	if paymentMethod != "offline_qr" || status != "pending_payment" {
+		return fmt.Errorf("order is not awaiting in-store payment")
+	}
 
 	// 1. Fetch order items
 	rows, err := tx.Query(`SELECT product_id, quantity, COALESCE(size, '') FROM order_items WHERE order_id = $1`, orderID)
@@ -151,32 +239,24 @@ func (r *postgresOrderRepo) ConfirmStorePickup(orderID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to update order status: %w", err)
 	}
+	if err := awardOrderSpinTicket(tx, orderID); err != nil {
+		return err
+	}
 
 	return tx.Commit()
 }
 
 func (r *postgresOrderRepo) GetAllOrders(email string) ([]models.Order, error) {
-	var rows *sql.Rows
+	var dbRows *sql.Rows
 	var err error
 
 	if email != "" {
-		rows, err = r.db.Query(`
-			SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at,
-			COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''),
-			COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
-			COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
-			COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
-			COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online')
-			FROM orders WHERE LOWER(customer_email) = LOWER($1) ORDER BY created_at DESC`, email)
+		dbRows, err = r.db.Query(`SELECT `+orderColumns+`
+			FROM orders WHERE LOWER(customer_email) = LOWER($1)
+			AND status NOT IN ('cancelled', 'payment_failed')
+			ORDER BY created_at DESC`, email)
 	} else {
-		rows, err = r.db.Query(`
-			SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at,
-			COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''),
-			COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
-			COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
-			COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
-			COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online')
-			FROM orders ORDER BY created_at DESC`)
+		dbRows, err = r.db.Query(`SELECT ` + orderColumns + ` FROM orders ORDER BY created_at DESC`)
 	}
 
 	if err != nil {
@@ -184,21 +264,16 @@ func (r *postgresOrderRepo) GetAllOrders(email string) ([]models.Order, error) {
 	}
 
 	var orders []models.Order
-	for rows.Next() {
-		var o models.Order
-		err := rows.Scan(&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
-			&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift,
-			&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
-			&o.CheckoutType, &o.PaymentMethod)
+	for dbRows.Next() {
+		o, err := scanOrder(dbRows)
 		if err == nil {
 			orders = append(orders, o)
 		}
 	}
-	rows.Close()
+	dbRows.Close()
 
-	// Safely fetch items for each order after main connection rows are closed
 	for i := range orders {
-		items, _ := r.getOrderItems(orders[i].ID)
+		items, _ := r.getOrderItems(orders[i])
 		orders[i].Items = items
 	}
 
@@ -223,11 +298,14 @@ func (r *postgresOrderRepo) CreateOrderWithTransaction(order *models.Order, stoc
 	}
 	defer tx.Rollback()
 
-	// 1. Lock and update product stocks (SKIP for pending store pickups)
-	isPendingPickup := order.CheckoutType == "pickup" && order.PaymentMethod == "offline_qr" && order.Status == "pending_payment"
-	
+	// 1. Lock and update product stocks (SKIP for pending store pickups and all preorder orders)
+	isPendingPickup := (order.CheckoutType == "pickup" && order.PaymentMethod == "offline_qr" && order.Status == "pending_payment")
+
 	if !isPendingPickup {
 		for _, item := range order.Items {
+			if item.IsPreorder {
+				continue
+			}
 			var prodName string
 			var totalStock int
 			var sizesStockStr string
@@ -238,40 +316,59 @@ func (r *postgresOrderRepo) CreateOrderWithTransaction(order *models.Order, stoc
 				return fmt.Errorf("failed to lock product %s: %w", item.ProductID, err)
 			}
 
+			// Reject any stock shortfall inside the transaction: DO NOT CLAMP TO 0!
+			if totalStock < item.Quantity {
+				return fmt.Errorf("insufficient stock for product %s: requested %d, available %d", prodName, item.Quantity, totalStock)
+			}
+
 			var sizesStock map[string]int
 			json.Unmarshal([]byte(sizesStockStr), &sizesStock)
 			if sizesStock == nil {
 				sizesStock = map[string]int{}
 			}
 
-			if item.Size != "" {
-				// Must exist and have enough stock
+			if len(sizesStock) > 0 {
+				if strings.TrimSpace(item.Size) == "" {
+					return fmt.Errorf("size is required for sized product %s", prodName)
+				}
 				curr, ok := sizesStock[item.Size]
 				if !ok || curr < item.Quantity {
-					return fmt.Errorf("insufficient stock for product %s size %s", prodName, item.Size)
+					return fmt.Errorf("insufficient stock for product %s size %s: requested %d, available %d", prodName, item.Size, item.Quantity, curr)
 				}
 				sizesStock[item.Size] = curr - item.Quantity
+			} else if item.Size != "" {
+				if curr, ok := sizesStock[item.Size]; ok {
+					if curr < item.Quantity {
+						return fmt.Errorf("insufficient stock for product %s size %s: requested %d, available %d", prodName, item.Size, item.Quantity, curr)
+					}
+					sizesStock[item.Size] = curr - item.Quantity
+				}
 			}
 
 			newTotalStock := totalStock - item.Quantity
-			if newTotalStock < 0 {
-				newTotalStock = 0
-			}
 
 			sizesStockBytes, _ := json.Marshal(sizesStock)
-			_, err = tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3", newTotalStock, string(sizesStockBytes), item.ProductID)
+			res, err := tx.Exec("UPDATE products SET stock = $1, sizes_stock = $2 WHERE id = $3 AND stock >= $4", newTotalStock, string(sizesStockBytes), item.ProductID, item.Quantity)
 			if err != nil {
 				return fmt.Errorf("failed to update stock for product %s: %w", item.ProductID, err)
+			}
+			rowsAffected, err := res.RowsAffected()
+			if err != nil || rowsAffected == 0 {
+				return fmt.Errorf("concurrent stock conflict for product %s: insufficient inventory remaining", prodName)
 			}
 		}
 	}
 
-	// 2. Increment coupon usage count if applied
+	// 2. Increment coupon usage count if applied (atomic conditional check)
 	if couponCode != "" {
 		trimmedCode := strings.TrimSpace(couponCode)
-		_, err = tx.Exec("UPDATE coupons SET used_count = used_count + 1 WHERE UPPER(TRIM(code)) = UPPER(TRIM($1))", trimmedCode)
+		res, err := tx.Exec("UPDATE coupons SET used_count = used_count + 1 WHERE UPPER(TRIM(code)) = UPPER(TRIM($1)) AND is_active = TRUE AND (usage_limit = 0 OR usage_limit IS NULL OR used_count < usage_limit)", trimmedCode)
 		if err != nil {
 			return fmt.Errorf("failed to update coupon usage: %w", err)
+		}
+		rowsAffected, err := res.RowsAffected()
+		if err != nil || rowsAffected == 0 {
+			return fmt.Errorf("coupon %s is unavailable, inactive, or has reached its redemption limit", couponCode)
 		}
 	}
 
@@ -281,12 +378,15 @@ func (r *postgresOrderRepo) CreateOrderWithTransaction(order *models.Order, stoc
 		createdAt = order.CreatedAt
 	}
 
-	_, err = tx.Exec(`INSERT INTO orders (id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, razorpay_order_id, razorpay_payment_id,
-		shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_zip_code, checkout_type, payment_method)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+	_, err = tx.Exec(`INSERT INTO orders (id, customer_email, total_amount, discount_amt, coupon_code, status, created_at,
+		razorpay_order_id, razorpay_payment_id,
+		shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_zip_code,
+		checkout_type, payment_method, fulfilment_type, pickup_location_snapshot)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
 		order.ID, order.CustomerEmail, order.TotalAmount, order.DiscountAmt, order.CouponCode, order.Status, createdAt,
 		order.RazorpayOrderID, order.RazorpayPaymentID, order.ShippingName, order.ShippingPhone, order.ShippingAddress,
-		order.ShippingCity, order.ShippingState, order.ShippingZIPCode, order.CheckoutType, order.PaymentMethod)
+		order.ShippingCity, order.ShippingState, order.ShippingZIPCode, order.CheckoutType, order.PaymentMethod,
+		order.FulfilmentType, order.PickupLocationSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to insert order: %w", err)
 	}
@@ -346,46 +446,103 @@ func (r *postgresOrderRepo) UpdateOrderStatus(orderID, status, paymentID, tracki
 	return tx.Commit()
 }
 
-func (r *postgresOrderRepo) UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error {
+func (r *postgresOrderRepo) GetOrderByRazorpayID(razorpayOrderID string) (*models.Order, error) {
+	order, err := scanOrder(r.db.QueryRow(`SELECT `+orderColumns+` FROM orders WHERE razorpay_order_id = $1`, razorpayOrderID))
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+func (r *postgresOrderRepo) RecordCapturedPayment(orderID, paymentID string) (string, bool, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	defer tx.Rollback()
 
-	if newCoupon != nil {
-		_, err = tx.Exec(`INSERT INTO coupons (code, type, value, min_order, usage_limit, times_used, expiry_date, is_active)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			newCoupon.Code, newCoupon.Type, newCoupon.Value, newCoupon.MinOrder, newCoupon.UsageLimit, 0, newCoupon.ExpiryDate, newCoupon.IsActive)
-		if err != nil {
-			return fmt.Errorf("failed to insert coupon in transaction: %w", err)
+	var status, existingPayment, method string
+	err = tx.QueryRow(`SELECT status, COALESCE(razorpay_payment_id, ''), COALESCE(payment_method, 'online')
+		FROM orders WHERE id = $1 FOR UPDATE`, orderID).Scan(&status, &existingPayment, &method)
+	if err != nil {
+		return "", false, fmt.Errorf("lock order for payment: %w", err)
+	}
+	if method != "online" || paymentID == "" {
+		return "", false, fmt.Errorf("order is not payable online")
+	}
+	if existingPayment == paymentID {
+		return status, false, nil
+	}
+	if existingPayment != "" {
+		return "", false, fmt.Errorf("order has a different recorded payment")
+	}
+	switch status {
+	case "pending":
+		status = "paid"
+	case "cancelled":
+		// The cancellation already returned stock. Keep this out of fulfillment.
+		status = "payment_review"
+	default:
+		return "", false, fmt.Errorf("order cannot accept payment in state %s", status)
+	}
+	if _, err := tx.Exec(`UPDATE orders SET status = $1, razorpay_payment_id = $2 WHERE id = $3`,
+		status, paymentID, orderID); err != nil {
+		return "", false, fmt.Errorf("record captured payment: %w", err)
+	}
+	if status == "paid" {
+		if err := awardOrderSpinTicket(tx, orderID); err != nil {
+			return "", false, err
 		}
 	}
-
-	query := "UPDATE orders SET status = $1"
-	args := []interface{}{status}
-	argIdx := 2
-
-	if paymentID != "" {
-		query += fmt.Sprintf(", razorpay_payment_id = $%d", argIdx)
-		args = append(args, paymentID)
-		argIdx++
+	if err := tx.Commit(); err != nil {
+		return "", false, err
 	}
-	if unlockedGift != "" {
-		query += fmt.Sprintf(", unlocked_gift = $%d", argIdx)
-		args = append(args, unlockedGift)
-		argIdx++
-	}
+	return status, true, nil
+}
 
-	query += fmt.Sprintf(" WHERE id = $%d", argIdx)
-	args = append(args, orderID)
-
-	_, err = tx.Exec(query, args...)
+func awardOrderSpinTicket(tx *sql.Tx, orderID string) error {
+	_, err := tx.Exec(`WITH eligible_order AS (
+		SELECT customer_email FROM orders WHERE id = $1 AND spin_tickets_awarded = 0
+	), credited AS (
+		UPDATE profiles SET available_spins = COALESCE(available_spins, 0) + 1
+		WHERE user_id = (SELECT p.user_id FROM profiles p JOIN eligible_order o ON LOWER(p.email) = LOWER(o.customer_email)
+			WHERE p.email <> '' ORDER BY p.user_id LIMIT 1) RETURNING user_id
+	)
+	UPDATE orders SET spin_tickets_awarded = 1 WHERE id = $1 AND EXISTS (SELECT 1 FROM credited)`, orderID)
 	if err != nil {
-		return fmt.Errorf("failed to update order status in transaction: %w", err)
+		return fmt.Errorf("award spin ticket for order: %w", err)
 	}
+	return nil
+}
 
-	return tx.Commit()
+func (r *postgresOrderRepo) SaveOrderGift(orderID, gift string, coupon *models.Coupon) (string, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var existingGift string
+	if err := tx.QueryRow(`SELECT COALESCE(unlocked_gift, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID).
+		Scan(&existingGift); err != nil {
+		return "", fmt.Errorf("lock order for reward: %w", err)
+	}
+	if existingGift != "" {
+		return existingGift, nil
+	}
+	if coupon != nil {
+		if _, err := tx.Exec(`INSERT INTO coupons (id, code, type, value, min_order, usage_limit, used_count, expiry_date, is_active)
+			VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8)`,
+			coupon.ID, coupon.Code, coupon.Type, coupon.Value, coupon.MinOrder, coupon.UsageLimit, coupon.ExpiryDate, coupon.IsActive); err != nil {
+			return "", fmt.Errorf("insert order reward coupon: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`UPDATE orders SET unlocked_gift = $1 WHERE id = $2`, gift, orderID); err != nil {
+		return "", fmt.Errorf("save order reward: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return gift, nil
 }
 
 func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
@@ -395,22 +552,20 @@ func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 	}
 	defer tx.Rollback()
 
-	// 1. Get the order and check if it's pending
-	var status, couponCode, checkoutType, paymentMethod string
-	err = tx.QueryRow(`SELECT status, COALESCE(coupon_code, ''), COALESCE(checkout_type, ''), COALESCE(payment_method, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID).
-		Scan(&status, &couponCode, &checkoutType, &paymentMethod)
+	var status, couponCode, checkoutType, paymentMethod, fulfilmentType string
+	err = tx.QueryRow(`SELECT status, COALESCE(coupon_code, ''), COALESCE(checkout_type, ''), COALESCE(payment_method, ''), COALESCE(fulfilment_type, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID).
+		Scan(&status, &couponCode, &checkoutType, &paymentMethod, &fulfilmentType)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil // Order doesn't exist
+			return nil
 		}
 		return err
 	}
 
 	if status != "pending" && status != "pending_payment" {
-		return nil // Not pending, so we don't cancel it here
+		return nil
 	}
 
-	// 2. Fetch items to return stock
 	rows, err := tx.Query(`SELECT product_id, quantity, COALESCE(size, '') FROM order_items WHERE order_id = $1`, orderID)
 	if err != nil {
 		return err
@@ -431,15 +586,16 @@ func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 	}
 	rows.Close()
 
-	// 3. Revert stock (unless it was a pending store pickup which didn't deduct stock)
 	isPendingPickup := checkoutType == "pickup" && paymentMethod == "offline_qr"
-	if !isPendingPickup {
+	isPreorder := fulfilmentType == models.FulfilmentTypePreorderStorePickup || fulfilmentType == models.FulfilmentTypePreorderHomeDelivery
+	if !isPendingPickup && !isPreorder {
 		for _, item := range items {
 			var totalStock int
 			var sizesStockStr string
-			err := tx.QueryRow("SELECT stock, COALESCE(sizes_stock, '{}') FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
-				Scan(&totalStock, &sizesStockStr)
-			if err == nil {
+			var isProdPreorder bool
+			err := tx.QueryRow("SELECT stock, COALESCE(sizes_stock, '{}'), COALESCE(is_preorder, FALSE) FROM products WHERE id = $1 FOR UPDATE", item.ProductID).
+				Scan(&totalStock, &sizesStockStr, &isProdPreorder)
+			if err == nil && !isProdPreorder {
 				var sizesStock map[string]int
 				json.Unmarshal([]byte(sizesStockStr), &sizesStock)
 				if sizesStock == nil {
@@ -458,13 +614,11 @@ func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 		}
 	}
 
-	// 4. Revert coupon usage
 	if couponCode != "" {
 		trimmedCode := strings.TrimSpace(couponCode)
 		tx.Exec("UPDATE coupons SET used_count = GREATEST(0, used_count - 1) WHERE UPPER(TRIM(code)) = UPPER(TRIM($1))", trimmedCode)
 	}
 
-	// 5. Mark as cancelled
 	_, err = tx.Exec("UPDATE orders SET status = 'cancelled' WHERE id = $1", orderID)
 	if err != nil {
 		return err
@@ -474,31 +628,399 @@ func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
 }
 
 func (r *postgresOrderRepo) GetPendingDeliveryOrders() ([]models.Order, error) {
-	rows, err := r.db.Query(`
-		SELECT id, customer_email, total_amount, discount_amt, coupon_code, status, created_at, 
-		COALESCE(razorpay_order_id, ''), COALESCE(razorpay_payment_id, ''), 
-		COALESCE(tracking_number, ''), COALESCE(shipped_at, ''), COALESCE(unlocked_gift, ''),
-		COALESCE(shipping_name, ''), COALESCE(shipping_phone, ''), COALESCE(shipping_address, ''),
-		COALESCE(shipping_city, ''), COALESCE(shipping_state, ''), COALESCE(shipping_zip_code, ''),
-		COALESCE(checkout_type, 'delivery'), COALESCE(payment_method, 'online') 
-		FROM orders WHERE status = 'paid' AND (checkout_type = 'delivery' OR checkout_type = 'hyderabad_instant')`)
+	dbRows, err := r.db.Query(`SELECT ` + orderColumns + `
+		FROM orders WHERE status = 'paid'
+		AND (checkout_type = 'delivery' OR checkout_type = 'hyderabad_instant')
+		AND (fulfilment_type IS NULL OR fulfilment_type = '')`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer dbRows.Close()
 
 	var orders []models.Order
-	for rows.Next() {
-		var o models.Order
-		if err := rows.Scan(&o.ID, &o.CustomerEmail, &o.TotalAmount, &o.DiscountAmt, &o.CouponCode, &o.Status, &o.CreatedAt,
-			&o.RazorpayOrderID, &o.RazorpayPaymentID, &o.TrackingNumber, &o.ShippedAt, &o.UnlockedGift,
-			&o.ShippingName, &o.ShippingPhone, &o.ShippingAddress, &o.ShippingCity, &o.ShippingState, &o.ShippingZIPCode,
-			&o.CheckoutType, &o.PaymentMethod); err == nil {
-			
-			items, _ := r.getOrderItems(o.ID)
+	for dbRows.Next() {
+		o, err := scanOrder(dbRows)
+		if err == nil {
+			items, _ := r.getOrderItems(o)
 			o.Items = items
 			orders = append(orders, o)
 		}
 	}
 	return orders, nil
+}
+
+func (r *postgresOrderRepo) ClaimPendingDeliveryOrders(limit int, orderID string) ([]models.Order, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `
+		UPDATE orders
+		SET status = 'dispatching', dispatch_started_at = NOW(), dispatch_error = NULL
+		WHERE id IN (
+			SELECT id FROM orders
+			WHERE status = 'paid'
+			  AND (checkout_type = 'delivery' OR checkout_type = 'hyderabad_instant')
+			  AND (tracking_number IS NULL OR tracking_number = '' OR tracking_number = 'Pending checkout / paid dispatch')
+			  AND EXISTS (SELECT 1 FROM order_items WHERE order_items.order_id = orders.id)
+			  AND (($2 = '' AND COALESCE(fulfilment_type, '') = '')
+			       OR ($2 <> '' AND id = $2 AND COALESCE(fulfilment_type, '') IN ('', 'PREORDER_HOME_DELIVERY')))
+			ORDER BY created_at ASC
+			LIMIT $1
+			FOR UPDATE SKIP LOCKED
+		)
+		RETURNING ` + orderColumns
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	dbRows, err := tx.Query(query, limit, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to claim pending delivery orders: %w", err)
+	}
+	defer dbRows.Close()
+
+	var orders []models.Order
+	for dbRows.Next() {
+		o, err := scanOrder(dbRows)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	if err := dbRows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range orders {
+		items, err := readOrderItems(tx, orders[i])
+		if err != nil {
+			return nil, fmt.Errorf("load shipment items for %s: %w", orders[i].ID, err)
+		}
+		if len(items) == 0 {
+			return nil, fmt.Errorf("claim shipment for %s: order contains no items", orders[i].ID)
+		}
+		orders[i].Items = items
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+func (r *postgresOrderRepo) FinishDeliveryDispatch(orderID string, startedAt *time.Time, status, tracking, reason string) error {
+	err := shipmentUpdateResult(r.db.Exec(`UPDATE orders SET status = $3, dispatch_started_at = NULL,
+		dispatch_error = NULLIF($5, ''), tracking_number = COALESCE(NULLIF($4, ''), tracking_number),
+		shipped_at = CASE WHEN $3 = 'shipped' THEN $6 ELSE shipped_at END
+		WHERE id = $1 AND status = 'dispatching' AND dispatch_started_at = $2`,
+		orderID, startedAt, status, tracking, reason, time.Now().UTC().Format(time.RFC3339)))
+	if err == ErrInvalidShipmentTransition && status == "shipped" && tracking != "" {
+		// A carrier callback may arrive before the booking response is written.
+		return shipmentUpdateResult(r.db.Exec(`UPDATE orders SET tracking_number = $2 WHERE id = $1
+			AND status IN ('shipped', 'delivered') AND (COALESCE(tracking_number, '') = '' OR tracking_number = $2)`, orderID, tracking))
+	}
+	return err
+}
+
+func (r *postgresOrderRepo) ResolveDeliveryDispatch(orderID, tracking string) error {
+	return shipmentUpdateResult(r.db.Exec(`UPDATE orders SET status = CASE WHEN $2 = '' THEN 'paid' ELSE 'shipped' END,
+		dispatch_started_at = NULL, dispatch_error = NULL, tracking_number = NULLIF($2, ''),
+		shipped_at = CASE WHEN $2 = '' THEN shipped_at ELSE $3 END
+		WHERE id = $1 AND checkout_type IN ('delivery', 'hyderabad_instant')
+		AND (status = 'dispatch_review' OR (status = 'dispatching' AND
+			(dispatch_started_at IS NULL OR dispatch_started_at <= NOW() - INTERVAL '2 minutes')))`,
+		orderID, tracking, time.Now().UTC().Format(time.RFC3339)))
+}
+
+func (r *postgresOrderRepo) ApplyCarrierTrackingUpdate(orderID, status, tracking, eventTime string) error {
+	return shipmentUpdateResult(r.db.Exec(`UPDATE orders SET status = $2,
+		tracking_number = COALESCE(NULLIF($3, ''), tracking_number),
+		shipped_at = COALESCE(NULLIF(shipped_at, ''), $4), dispatch_started_at = NULL, dispatch_error = NULL
+		WHERE id = $1 AND checkout_type IN ('delivery', 'hyderabad_instant')
+		AND COALESCE(fulfilment_type, '') <> 'PREORDER_STORE_PICKUP'
+		AND (status IN ('paid', 'dispatching', 'dispatch_review', 'shipped') OR (status = 'delivered' AND $2 = 'delivered'))`,
+		orderID, status, tracking, eventTime))
+}
+
+func (r *postgresOrderRepo) RecordShipmentEvent(orderID, tracking string, event models.ShipmentEvent) error {
+	var matched bool
+	err := r.db.QueryRow(`WITH matching_order AS (
+		SELECT id FROM orders WHERE id = $1 AND tracking_number = $2 AND checkout_type = 'delivery'
+		AND COALESCE(fulfilment_type, '') <> 'PREORDER_STORE_PICKUP'
+	), recorded AS (
+		INSERT INTO order_tracking_events (order_id, status, occurred_at, location)
+		SELECT id, $3, $4, $5 FROM matching_order ON CONFLICT DO NOTHING RETURNING order_id
+	) SELECT EXISTS(SELECT 1 FROM matching_order)`, orderID, tracking, event.Status, event.OccurredAt, event.Location).Scan(&matched)
+	if err != nil {
+		return err
+	}
+	if !matched {
+		return ErrInvalidShipmentTransition
+	}
+	return nil
+}
+
+func (r *postgresOrderRepo) ClaimTrackingOrders() ([]models.Order, error) {
+	rows, err := r.db.Query(`UPDATE orders SET tracking_checked_at = NOW() WHERE id IN (
+		SELECT id FROM orders WHERE checkout_type = 'delivery' AND status IN ('shipped', 'delivered')
+		AND COALESCE(tracking_number, '') NOT IN ('', 'DUMMY_TRACKING', 'DLV_UPDATE', 'DELHIVERY_DISPATCHED', 'Pending checkout / paid dispatch')
+		AND (tracking_checked_at IS NULL OR tracking_checked_at < NOW() - INTERVAL '30 minutes')
+		AND COALESCE((SELECT e.status FROM order_tracking_events e WHERE e.order_id = orders.id
+			ORDER BY e.occurred_at DESC, e.status DESC LIMIT 1), '') NOT IN ('delivered', 'returned')
+		ORDER BY tracking_checked_at NULLS FIRST, id LIMIT 50 FOR UPDATE SKIP LOCKED
+	) RETURNING id, tracking_number`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var orders []models.Order
+	for rows.Next() {
+		var order models.Order
+		if err := rows.Scan(&order.ID, &order.TrackingNumber); err != nil {
+			return nil, err
+		}
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
+}
+
+func shipmentUpdateResult(result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrInvalidShipmentTransition
+	}
+	return nil
+}
+
+// ConfirmPreorderPickup marks a preorder store pickup order as COLLECTED.
+// Idempotent: returns ErrAlreadyCollected if already collected (caller treats as success).
+func (r *postgresOrderRepo) ConfirmPreorderPickup(orderID, adminEmail, notes string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var status, fulfilmentType string
+	err = tx.QueryRow(
+		`SELECT status, COALESCE(fulfilment_type, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID,
+	).Scan(&status, &fulfilmentType)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("order not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	if fulfilmentType != models.FulfilmentTypePreorderStorePickup {
+		return fmt.Errorf("order is not a preorder store pickup order")
+	}
+
+	if status == models.PreorderStatusCollected {
+		return ErrAlreadyCollected
+	}
+
+	if status != models.PreorderStatusReadyForPickup && status != models.PreorderStatusAwaitingPickup {
+		return fmt.Errorf("order must be in READY_FOR_PICKUP status to confirm collection (current: %s)", status)
+	}
+
+	now := time.Now().Format(time.RFC3339)
+
+	_, err = tx.Exec(
+		`UPDATE orders SET status = $1, pickup_collected_at = $2, pickup_collected_by = $3 WHERE id = $4`,
+		models.PreorderStatusCollected, now, adminEmail, orderID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update order: %w", err)
+	}
+
+	_, err = tx.Exec(
+		`INSERT INTO preorder_pickup_audit (order_id, action, performed_by, performed_at, notes) VALUES ($1, $2, $3, $4, $5)`,
+		orderID, "COLLECTED", adminEmail, now, notes,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert audit entry: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// MarkPreorderPickupReady transitions a preorder store pickup order to READY_FOR_PICKUP.
+func (r *postgresOrderRepo) MarkPreorderPickupReady(orderID string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var status, fulfilmentType string
+	err = tx.QueryRow(
+		`SELECT status, COALESCE(fulfilment_type, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID,
+	).Scan(&status, &fulfilmentType)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("order not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	if fulfilmentType != models.FulfilmentTypePreorderStorePickup {
+		return fmt.Errorf("order is not a preorder store pickup order")
+	}
+
+	// Idempotent
+	if status == models.PreorderStatusReadyForPickup || status == models.PreorderStatusCollected {
+		return nil
+	}
+	switch status {
+	case "pending", "pending_payment", "payment_review", "cancelled", "payment_failed":
+		return ErrInvalidPreorderStatus
+	}
+
+	now := time.Now().Format(time.RFC3339)
+
+	_, err = tx.Exec(
+		`UPDATE orders SET status = $1 WHERE id = $2`,
+		models.PreorderStatusReadyForPickup, orderID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update order status: %w", err)
+	}
+
+	_, err = tx.Exec(
+		`INSERT INTO preorder_pickup_audit (order_id, action, performed_by, performed_at, notes) VALUES ($1, $2, $3, $4, $5)`,
+		orderID, "READY_FOR_PICKUP", "admin", now, "",
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert audit entry: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// MarkAllPreorderPickupReady transitions all eligible store pickup preorder orders to READY_FOR_PICKUP.
+func (r *postgresOrderRepo) MarkAllPreorderPickupReady() (int, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`
+		SELECT id FROM orders 
+		WHERE fulfilment_type = 'PREORDER_STORE_PICKUP' 
+		  AND status IN ('paid', 'AWAITING_PICKUP')
+		FOR UPDATE
+	`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var orderIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err == nil {
+			orderIDs = append(orderIDs, id)
+		}
+	}
+	rows.Close()
+
+	if len(orderIDs) == 0 {
+		return 0, nil
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	for _, id := range orderIDs {
+		_, err = tx.Exec(`UPDATE orders SET status = $1 WHERE id = $2`, models.PreorderStatusReadyForPickup, id)
+		if err != nil {
+			return 0, fmt.Errorf("failed to update order %s: %w", id, err)
+		}
+		_, err = tx.Exec(
+			`INSERT INTO preorder_pickup_audit (order_id, action, performed_by, performed_at, notes) VALUES ($1, $2, $3, $4, $5)`,
+			id, "READY_FOR_PICKUP", "admin (bulk)", now, "Bulk marked ready for pickup",
+		)
+		if err != nil {
+			return 0, fmt.Errorf("failed to insert audit for %s: %w", id, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return len(orderIDs), nil
+}
+
+// MarkPickupNotificationSent atomically sets pickup_notification_sent = TRUE.
+func (r *postgresOrderRepo) MarkPickupNotificationSent(orderID string) error {
+	_, err := r.db.Exec(`UPDATE orders SET pickup_notification_sent = TRUE WHERE id = $1`, orderID)
+	return err
+}
+
+// GetPreorderPickupOrders returns preorder orders filtered by fulfilment type or pickup status.
+func (r *postgresOrderRepo) GetPreorderPickupOrders(filter string) ([]models.Order, error) {
+	baseQuery := `SELECT ` + orderColumns + `
+		FROM orders WHERE fulfilment_type IN ('PREORDER_HOME_DELIVERY', 'PREORDER_STORE_PICKUP')`
+
+	switch filter {
+	case "store_pickup":
+		baseQuery += " AND fulfilment_type = 'PREORDER_STORE_PICKUP'"
+	case "home_delivery":
+		baseQuery += " AND fulfilment_type = 'PREORDER_HOME_DELIVERY'"
+	case "awaiting_pickup":
+		baseQuery += " AND fulfilment_type = 'PREORDER_STORE_PICKUP' AND status IN ('paid', 'AWAITING_PICKUP', 'preorder_production', 'preorder_quality_check')"
+	case "ready_for_pickup":
+		baseQuery += " AND fulfilment_type = 'PREORDER_STORE_PICKUP' AND status = 'READY_FOR_PICKUP'"
+	}
+	baseQuery += " ORDER BY created_at DESC"
+
+	dbRows, err := r.db.Query(baseQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer dbRows.Close()
+
+	var orders []models.Order
+	for dbRows.Next() {
+		o, err := scanOrder(dbRows)
+		if err == nil {
+			orders = append(orders, o)
+		}
+	}
+	dbRows.Close()
+
+	for i := range orders {
+		items, _ := r.getOrderItems(orders[i])
+		orders[i].Items = items
+	}
+
+	return orders, nil
+}
+
+// GetPreorderPickupAudit returns the audit trail for a preorder pickup order.
+func (r *postgresOrderRepo) GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error) {
+	dbRows, err := r.db.Query(
+		`SELECT id, order_id, action, performed_by, performed_at, COALESCE(notes, '')
+		 FROM preorder_pickup_audit WHERE order_id = $1 ORDER BY performed_at ASC`, orderID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer dbRows.Close()
+
+	var entries []models.PreorderPickupAuditEntry
+	for dbRows.Next() {
+		var e models.PreorderPickupAuditEntry
+		if err := dbRows.Scan(&e.ID, &e.OrderID, &e.Action, &e.PerformedBy, &e.PerformedAt, &e.Notes); err == nil {
+			entries = append(entries, e)
+		}
+	}
+	return entries, nil
 }

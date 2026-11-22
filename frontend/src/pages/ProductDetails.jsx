@@ -10,6 +10,7 @@ import SizeGuide from '../components/SizeGuide';
 import ZoomableImage from '../components/ZoomableImage';
 import useSEO from '../utils/useSEO';
 import { createProductSlug } from '../utils/slugHelper';
+import { saleProduct, useSale } from '../context/SaleContext';
 
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
@@ -20,7 +21,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     const [isFetchingDelta, setIsFetchingDelta] = useState(true);
     const [notFound, setNotFound] = useState(false);
 
-    const product = localProduct || globalProduct;
+    const { sale } = useSale();
+    const product = useMemo(() => saleProduct(localProduct || globalProduct, sale), [localProduct, globalProduct, sale]);
 
     useSEO({
         title: product ? `${product.name} | The Ethnic Touch` : 'Jaipur Kurti | The Ethnic Touch',
@@ -340,12 +342,12 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
             setShowSizeModal(true);
             return;
         }
-        addToCart({ ...product, size: selectedSize, quantity: quantity });
+        addToCart({ ...product, size: selectedSize, quantity: quantity, isPreorder: Boolean(product?.isPreorder) });
     };
 
     const handleModalAddToCart = () => {
         if (modalSelectedSize) {
-            addToCart({ ...product, size: modalSelectedSize, quantity: quantity });
+            addToCart({ ...product, size: modalSelectedSize, quantity: quantity, isPreorder: Boolean(product?.isPreorder) });
             setSelectedSize(modalSelectedSize);
             setShowSizeModal(false);
         }
@@ -507,7 +509,9 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     </div>
 
                     <div style={{fontSize: '1.8rem', fontWeight: '600', marginBottom: '1.5rem', color: 'var(--color-primary)'}}>
-                        ₹{product.price.toLocaleString('en-IN')} <span style={{fontSize: '0.8rem', color: '#888', fontWeight: '400'}}>(Inclusive of all taxes)</span>
+                        ₹{product.price.toLocaleString('en-IN')} {product.originalPrice > product.price && (
+                            <del style={{fontSize: '0.9rem', color: '#888'}}>₹{product.originalPrice.toLocaleString('en-IN')}</del>
+                        )} <span style={{fontSize: '0.8rem', color: '#888', fontWeight: '400'}}>(Inclusive of all taxes)</span>
                     </div>
                     
                     {/* Size Selector */}
@@ -595,13 +599,19 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     </div>
 
                     <div className="desktop-only-cta" style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                        {product && product.isPreorder && (
+                            <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem', width: '100%' }}>
+                                <span style={{ background: '#7c3aed', color: '#fff', fontSize: '0.72rem', fontWeight: '700', padding: '2px 8px', borderRadius: '12px' }}>PREORDER</span>
+                                <span style={{ fontSize: '0.85rem', color: '#5b21b6', fontWeight: '500' }}>This item is available for preorder. Dispatches or ready for Hyderabad store pickup once handcrafted.</span>
+                            </div>
+                        )}
                         <button 
                             className="btn btn-primary" 
                             onClick={handleAddToCart}
                             disabled={isOutOfStock}
                             style={{ fontSize: '0.92rem', padding: '0 1.25rem', flex: 1, minWidth: '180px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >
-                            {isOutOfStock ? 'Out of Stock' : (selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - Size ${selectedSize}` : `Add to Cart ${quantity > 1 ? `(${quantity})` : ''}`)}
+                            {isOutOfStock ? 'Out of Stock' : ((product && product.isPreorder) ? `Preorder Now ${quantity > 1 ? `(${quantity})` : ''}${selectedSize ? ` - Size ${selectedSize}` : ''}` : (selectedSize ? `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - Size ${selectedSize}` : `Add to Cart ${quantity > 1 ? `(${quantity})` : ''}`))}
                         </button>
 
                         <button 
@@ -865,7 +875,7 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     onClick={handleAddToCart}
                     disabled={isOutOfStock}
                 >
-                    {isOutOfStock ? 'Out of Stock' : `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - ₹${(product.price * quantity).toLocaleString('en-IN')}`}
+                    {isOutOfStock ? 'Out of Stock' : ((product && product.isPreorder) ? `Preorder Now - ₹${(product.price * quantity).toLocaleString('en-IN')}` : `Add to Cart ${quantity > 1 ? `(${quantity})` : ''} - ₹${(product.price * quantity).toLocaleString('en-IN')}`)}
                 </button>
             </div>
 

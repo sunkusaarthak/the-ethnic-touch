@@ -18,11 +18,12 @@ export default defineConfig(({ mode }) => {
         name: 'sync-admin-env',
         closeBundle() {
           const adminDir = path.resolve(__dirname, 'dist/admin')
-          if (fs.existsSync(adminDir)) {
-            const envContent = `// Injected from Render Environment Variables during build\nwindow.__ENV__ = {\n  VITE_API_BASE_URL: ${JSON.stringify(apiUrl)}\n};\n`
-            fs.writeFileSync(path.join(adminDir, 'env.js'), envContent, 'utf8')
-            console.log(`[Vite Plugin] Generated dist/admin/env.js with VITE_API_BASE_URL: "${apiUrl}"`)
+          if (!fs.existsSync(adminDir)) {
+            fs.mkdirSync(adminDir, { recursive: true })
           }
+          const envContent = `// Injected from Render Environment Variables during build\nwindow.__ENV__ = {\n  VITE_API_BASE_URL: ${JSON.stringify(apiUrl)}\n};\n`
+          fs.writeFileSync(path.join(adminDir, 'env.js'), envContent, 'utf8')
+          console.log(`[Vite Plugin] Generated dist/admin/env.js with VITE_API_BASE_URL: "${apiUrl}"`)
         }
       }
     ],

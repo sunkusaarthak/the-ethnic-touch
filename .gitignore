@@ -5,54 +5,119 @@
 *.so
 *.dylib
 main
+server
+ethnictouch
+build_test
+tmp
+vendor/
 
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool
+# Output of the go coverage & profiling tools
 *.out
+*.prof
+*.coverage
 coverage.out
 coverage.html
+coverage/
+frontend/coverage/
 
-# Dependency directories
-node_modules
-dist
+# Dependency and build directories
+node_modules/
+dist/
+dist-ssr/
+.vite/
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+.eslintcache
 
-# Environment files
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment files and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+*.local
+!.env.example
+!frontend/.env.example
+secret-replace.*
+*.pem
+*.key
+*.cert
+*.crt
 
-# Databases
+# Databases & SQLite temporary files
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
+*.sqlite3
+*.sqlite-journal
 
-# IDEs
+# IDEs & Editors
 .idea/
 .vscode/
 *.swp
 *.swo
+*.sw?
+*~
+*.sublime-project
+*.sublime-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
-
-# Secrets & Replacement temporary files
-secret-replace.*
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
 
 # Playwright & E2E Test Results
-playwright-report
-test-results
-.playwright
-blob-report
-frontend/playwright-report
-frontend/test-results
-frontend/.playwright
-frontend/blob-report
+playwright-report/
+test-results/
+.playwright/
+blob-report/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.playwright/
+frontend/blob-report/
 
-# MD files
+# Python cache (from helper scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local media assets, previews, product feeds, and cover exports
+kurthi-images/
+frontend/kurthi-images/
+cover-photos/
+email_previews/
+product-feed/
+
+# Temporary and scratch files
+tmp/
+temp/
+scratch/
+*.tmp
+*.bak
+
+# Markdown documentation (except README)
 *.md
 !README.md
-# Local image assets
-frontend/kurthi-images/
-kurthi-images/
+!frontend/README.md

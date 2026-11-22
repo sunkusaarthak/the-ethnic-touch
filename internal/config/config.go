@@ -19,6 +19,19 @@ type Config struct {
 	RazorpayKeyID     string
 	RazorpayKeySecret string
 	ShippingProvider  string
+
+	// Logistics / Delhivery Configuration
+	DelhiveryWebhookSecret string
+	DelhiveryAPIKey        string
+
+	// Email / SMTP Configuration
+	GmailUser        string
+	GmailAppPassword string
+	EmailFromName    string
+	EmailFromAddress string
+	EmailReplyTo     string
+	SMTPHost         string
+	SMTPPort         string
 }
 
 func LoadConfig() *Config {
@@ -50,10 +63,16 @@ func LoadConfig() *Config {
 		sslmode = "disable"
 	}
 
+	isProduction := os.Getenv("APP_ENV") == "production" || os.Getenv("ENV") == "production" || os.Getenv("NODE_ENV") == "production" || os.Getenv("RENDER") == "true"
 	superAdminEmail := os.Getenv("SUPER_ADMIN_EMAIL")
 	if superAdminEmail == "" {
-		superAdminEmail = "admin@ethnictouch.com"
-		log.Println("WARNING [SECURITY]: SUPER_ADMIN_EMAIL environment variable is not set! Using default: admin@ethnictouch.com")
+		if isProduction {
+			log.Println("WARNING [SECURITY]: SUPER_ADMIN_EMAIL environment variable is not set in production! Super-admin fallback disabled.")
+			superAdminEmail = ""
+		} else {
+			superAdminEmail = "admin@ethnictouch.com"
+			log.Println("WARNING [SECURITY]: SUPER_ADMIN_EMAIL environment variable is not set! Using default: admin@ethnictouch.com")
+		}
 	}
 
 	paymentProvider := os.Getenv("PAYMENT_PROVIDER")
@@ -62,8 +81,40 @@ func LoadConfig() *Config {
 	}
 
 	shippingProvider := os.Getenv("SHIPPING_PROVIDER")
-	if shippingProvider == "" {
-		shippingProvider = "mock"
+	if shippingProvider == "" || (isProduction && shippingProvider == "mock") {
+		shippingProvider = "delhivery"
+	}
+
+	gmailUser := os.Getenv("GMAIL_USER")
+	gmailAppPassword := os.Getenv("GMAIL_APP_PASSWORD")
+
+	emailFromName := os.Getenv("EMAIL_FROM_NAME")
+	if emailFromName == "" {
+		emailFromName = "The Ethnic Touch"
+	}
+
+	emailFromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
+	if emailFromAddress == "" {
+		if gmailUser != "" {
+			emailFromAddress = gmailUser
+		} else {
+			emailFromAddress = "orders@theethnictouch.com"
+		}
+	}
+
+	emailReplyTo := os.Getenv("EMAIL_REPLY_TO")
+	if emailReplyTo == "" {
+		emailReplyTo = "theethnictouchsupport@gmail.com"
+	}
+
+	smtpHost := os.Getenv("SMTP_HOST")
+	if smtpHost == "" {
+		smtpHost = "smtp.gmail.com"
+	}
+
+	smtpPort := os.Getenv("SMTP_PORT")
+	if smtpPort == "" {
+		smtpPort = "465"
 	}
 
 	return &Config{
@@ -77,6 +128,15 @@ func LoadConfig() *Config {
 		PaymentProvider:   paymentProvider,
 		RazorpayKeyID:     os.Getenv("RAZORPAY_KEY_ID"),
 		RazorpayKeySecret: os.Getenv("RAZORPAY_KEY_SECRET"),
-		ShippingProvider:  shippingProvider,
+		ShippingProvider:       shippingProvider,
+		DelhiveryWebhookSecret: os.Getenv("DELHIVERY_WEBHOOK_SECRET"),
+		DelhiveryAPIKey:        os.Getenv("DELHIVERY_API_KEY"),
+		GmailUser:              gmailUser,
+		GmailAppPassword:  gmailAppPassword,
+		EmailFromName:     emailFromName,
+		EmailFromAddress:  emailFromAddress,
+		EmailReplyTo:      emailReplyTo,
+		SMTPHost:          smtpHost,
+		SMTPPort:          smtpPort,
 	}
 }

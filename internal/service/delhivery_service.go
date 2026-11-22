@@ -1,43 +1,66 @@
 package service
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"ethnictouch/internal/models"
 )
 
+type ShipmentBookingResult struct {
+	Success        bool   `json:"success"`
+	Rejected       bool   `json:"rejected"`
+	TrackingNumber string `json:"trackingNumber"`
+	Remarks        string `json:"remarks"`
+}
+
 type DelhiveryService interface {
 	CheckServiceability(pincode string, weightGrams int) (bool, float64, error)
-	BatchPickup(orders []models.Order) error
+	BatchPickup(orders []models.Order) (map[string]ShipmentBookingResult, error)
 	ValidateWebhookSignature(payload []byte, signature string) bool
+	ValidateWebhookToken(token string) bool
+	FetchTracking(ctx context.Context, waybills []string) (map[string][]models.ShipmentEvent, error)
 }
 
 type liveDelhiveryService struct {
 	webhookSecret string
 	apiKey        string
+	mock          bool
 }
 
-func NewDelhiveryService(secret string) DelhiveryService {
+var ErrCarrierNotConfigured = errors.New("delivery carrier credentials are missing")
+var ErrDeliveryNotServiceable = errors.New("delivery is unavailable for this address")
+
+func NewDelhiveryService(secret, apiKey, provider string) DelhiveryService {
 	return &liveDelhiveryService{
 		webhookSecret: secret,
-		apiKey:        os.Getenv("DELHIVERY_API_KEY"),
+		apiKey:        strings.TrimSpace(apiKey),
+		mock:          provider == "mock",
 	}
 }
 
-
 func (s *liveDelhiveryService) CheckServiceability(pincode string, weightGrams int) (bool, float64, error) {
+	if s.mock {
+		if pincode == "999999" || pincode == "000000" {
+			return false, 0, nil
+		}
+		if pincode == "999998" {
+			return false, 0, fmt.Errorf("carrier timeout connecting to Delhivery API")
+		}
+		return true, 59.0, nil
+	}
 	if s.apiKey == "" {
-		return false, 0, fmt.Errorf("DELHIVERY_API_KEY not set")
+		return false, 0, ErrCarrierNotConfigured
 	}
 
 	url := fmt.Sprintf("https://track.delhivery.com/c/api/pin-codes/json/?filter_codes=%s", pincode)
@@ -47,7 +70,7 @@ func (s *liveDelhiveryService) CheckServiceability(pincode string, weightGrams i
 	}
 	req.Header.Set("Authorization", "Token "+s.apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return false, 0, err
@@ -79,12 +102,12 @@ func (s *liveDelhiveryService) CheckServiceability(pincode string, weightGrams i
 		fReq, _ := http.NewRequest("GET", freightURL, nil)
 		fReq.Header.Set("Authorization", "Token "+s.apiKey)
 		fReq.Header.Set("Content-Type", "application/json")
-		
+
 		fResp, fErr := client.Do(fReq)
 		if fErr == nil {
 			defer fResp.Body.Close()
 			fBody, _ := io.ReadAll(fResp.Body)
-			
+
 			var freightRes []struct {
 				TotalAmount float64 `json:"total_amount"`
 			}
@@ -99,13 +122,34 @@ func (s *liveDelhiveryService) CheckServiceability(pincode string, weightGrams i
 	return false, 0, nil
 }
 
-func (s *liveDelhiveryService) BatchPickup(orders []models.Order) error {
-	if s.apiKey == "" {
-		return fmt.Errorf("DELHIVERY_API_KEY not set")
-	}
-	
+func (s *liveDelhiveryService) BatchPickup(orders []models.Order) (map[string]ShipmentBookingResult, error) {
 	if len(orders) == 0 {
-		return nil
+		return map[string]ShipmentBookingResult{}, nil
+	}
+
+	if s.mock {
+		results := make(map[string]ShipmentBookingResult)
+		for _, o := range orders {
+			if o.ShippingZIPCode == "999999" || strings.HasPrefix(o.ID, "ORD_FAIL_") {
+				results[o.ID] = ShipmentBookingResult{
+					Rejected: true,
+					Remarks:  "Pincode not serviceable by carrier",
+				}
+			} else {
+				suffix := o.ID
+				if len(suffix) > 8 {
+					suffix = suffix[len(suffix)-8:]
+				}
+				results[o.ID] = ShipmentBookingResult{
+					Success:        true,
+					TrackingNumber: "DEL" + suffix + "IN",
+				}
+			}
+		}
+		return results, nil
+	}
+	if s.apiKey == "" {
+		return nil, ErrCarrierNotConfigured
 	}
 
 	type Shipment struct {
@@ -182,7 +226,7 @@ func (s *liveDelhiveryService) BatchPickup(orders []models.Order) error {
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	data := url.Values{}
@@ -191,24 +235,53 @@ func (s *liveDelhiveryService) BatchPickup(orders []models.Order) error {
 
 	req, err := http.NewRequest("POST", "https://track.delhivery.com/api/cmu/create.json", strings.NewReader(data.Encode()))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Token "+s.apiKey)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read carrier batch response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to create delhivery batch pickup, status: %d, res: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("carrier booking returned HTTP %d", resp.StatusCode)
 	}
 
-	return nil
+	var dlvResp struct {
+		Success  bool `json:"success"`
+		Packages []struct {
+			Status  string   `json:"status"`
+			Waybill string   `json:"waybill"`
+			Refnum  string   `json:"refnum"`
+			Remarks []string `json:"remarks"`
+		} `json:"packages"`
+		Rmk string `json:"rmk"`
+	}
+
+	if err := json.Unmarshal(body, &dlvResp); err != nil {
+		return nil, fmt.Errorf("decode carrier batch response: %w", err)
+	}
+
+	results := make(map[string]ShipmentBookingResult)
+	for _, pkg := range dlvResp.Packages {
+		isSuccess := strings.EqualFold(pkg.Status, "Success")
+		results[pkg.Refnum] = ShipmentBookingResult{
+			Success:        isSuccess,
+			Rejected:       strings.EqualFold(pkg.Status, "Fail") && strings.TrimSpace(pkg.Waybill) == "",
+			TrackingNumber: pkg.Waybill,
+			Remarks:        strings.Join(pkg.Remarks, ", "),
+		}
+	}
+
+	return results, nil
 }
 
 // ValidateWebhookSignature validates the HMAC signature from Delhivery
@@ -223,4 +296,8 @@ func (s *liveDelhiveryService) ValidateWebhookSignature(payload []byte, signatur
 	expectedMAC := hex.EncodeToString(mac.Sum(nil))
 
 	return hmac.Equal([]byte(signature), []byte(expectedMAC))
+}
+
+func (s *liveDelhiveryService) ValidateWebhookToken(token string) bool {
+	return s.webhookSecret != "" && hmac.Equal([]byte(token), []byte(s.webhookSecret))
 }

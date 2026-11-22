@@ -12,22 +12,10 @@ const logicalSegments = [
     { label: 'Better Luck Next Time', color: '#FEFAE0' }, // index 3
 ];
 
-// We display 6 segments to make "Free Kurthi" look very likely
-const visualSegments = [
-    { label: 'Free Kurthi', color: '#D4A373' },           // Visual 0 -> Logical 0
-    { label: '5% OFF', color: '#FAEDCD' },               // Visual 1 -> Logical 1
-    { label: 'Free Kurthi', color: '#D4A373' },           // Visual 2 -> Logical 0
-    { label: '10% OFF', color: '#E9EDC9' },              // Visual 3 -> Logical 2
-    { label: 'Free Kurthi', color: '#D4A373' },           // Visual 4 -> Logical 0
-    { label: 'Better Luck Next Time', color: '#FEFAE0' },// Visual 5 -> Logical 3
-];
-
-const logicalToVisual = {
-    0: [0, 2, 4],
-    1: [1],
-    2: [3],
-    3: [5]
-};
+const segmentWidth = 360 / logicalSegments.length;
+const wheelColors = logicalSegments.map(({ color }, index) =>
+    color + ' ' + index * segmentWidth + 'deg ' + (index + 1) * segmentWidth + 'deg'
+).join(', ');
 
 const SpinWheel = () => {
     const navigate = useNavigate();
@@ -106,18 +94,13 @@ const SpinWheel = () => {
             }
 
             const data = await res.json();
-            const logicalSegmentIndex = data.segmentIndex;
-            
-            // Map logical outcome to a visual segment
-            const possibleVisuals = logicalToVisual[logicalSegmentIndex];
-            const targetSegment = possibleVisuals[Math.floor(Math.random() * possibleVisuals.length)];
-
-            // Calculate rotation
-            // Segment is 60 degrees. Center of segment 0 is at 30 degrees.
-            const targetAngle = 360 - (targetSegment * 60 + 30);
-            
-            // Randomize slightly within the segment (+/- 25 degrees) to prevent landing on borders
-            const randomOffset = Math.floor(Math.random() * 50) - 25;
+            const targetSegment = data.segmentIndex;
+            if (!Number.isInteger(targetSegment) || !logicalSegments[targetSegment]) {
+                throw new Error('The spin result could not be displayed.');
+            }
+            const targetAngle = 360 - ((targetSegment + 0.5) * segmentWidth);
+            // Keep the pointer away from the edge of the winning slice.
+            const randomOffset = (Math.random() - 0.5) * (segmentWidth - 10);
             
             // Calculate absolute rotation so subsequent spins work correctly
             const currentSpins = Math.floor(rotation / 360);
@@ -183,7 +166,7 @@ const SpinWheel = () => {
             ) : (
                 <>
                     <p style={{color: 'var(--color-text-light)', textAlign: 'center', marginBottom: '1rem', maxWidth: '500px'}}>
-                        Try your luck today. You could win a free Kurthi or an exclusive discount coupon on your next order!
+                        Spin for a free Kurthi or a discount on your next order. The slices show possible outcomes and do not represent the odds.
                     </p>
                     
                     {profile && (
@@ -231,11 +214,11 @@ const SpinWheel = () => {
                         transform: `rotate(${rotation}deg)`,
                         boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
                         border: '5px solid white',
-                        background: `conic-gradient(${visualSegments[0].color} 0deg 60deg, ${visualSegments[1].color} 60deg 120deg, ${visualSegments[2].color} 120deg 180deg, ${visualSegments[3].color} 180deg 240deg, ${visualSegments[4].color} 240deg 300deg, ${visualSegments[5].color} 300deg 360deg)`
+                        background: 'conic-gradient(' + wheelColors + ')'
                     }}
                 >
-                    {visualSegments.map((segment, index) => {
-                        const angle = index * 60 + 30;
+                    {logicalSegments.map((segment, index) => {
+                        const angle = (index + 0.5) * segmentWidth;
                         return (
                             <div key={index} style={{
                                 position: 'absolute',

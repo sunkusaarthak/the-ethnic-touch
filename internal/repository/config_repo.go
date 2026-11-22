@@ -18,6 +18,8 @@ type ConfigRepository interface {
 	UpdateCheckoutConfig(config *models.CheckoutConfig) error
 	GetHomepageConfig() (*models.HomepageConfig, error)
 	UpdateHomepageConfig(config *models.HomepageConfig) error
+	GetPreorderPickupConfig() (*models.PreorderPickupConfig, error)
+	UpdatePreorderPickupConfig(config *models.PreorderPickupConfig) error
 }
 
 type configRepository struct {
@@ -220,6 +222,34 @@ func (r *configRepository) UpdateHomepageConfig(config *models.HomepageConfig) e
 
 	_, err = r.db.Exec(`
 		INSERT INTO system_config (key, value) VALUES ('homepage_config', $1)
+		ON CONFLICT (key) DO UPDATE SET value = $1
+	`, string(data))
+	return err
+}
+
+func (r *configRepository) GetPreorderPickupConfig() (*models.PreorderPickupConfig, error) {
+	var val string
+	err := r.db.QueryRow("SELECT value FROM system_config WHERE key = 'preorder_pickup_config'").Scan(&val)
+	if err == sql.ErrNoRows {
+		return &models.PreorderPickupConfig{Enabled: false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var config models.PreorderPickupConfig
+	if err := json.Unmarshal([]byte(val), &config); err != nil {
+		return &models.PreorderPickupConfig{Enabled: false}, nil
+	}
+	return &config, nil
+}
+
+func (r *configRepository) UpdatePreorderPickupConfig(config *models.PreorderPickupConfig) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(`
+		INSERT INTO system_config (key, value) VALUES ('preorder_pickup_config', $1)
 		ON CONFLICT (key) DO UPDATE SET value = $1
 	`, string(data))
 	return err

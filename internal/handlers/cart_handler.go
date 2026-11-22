@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/service"
 	"ethnictouch/internal/utils"
 )
@@ -17,15 +18,13 @@ func NewCartHandler(svc service.CartService) *CartHandler {
 }
 
 func (h *CartHandler) HandleCart(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-Id")
-	if userID == "" {
-		userID = r.URL.Query().Get("userId")
-	}
+	identity := middleware.CustomerFromContext(r.Context())
+	userID := identity.UID
 
 	if userID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"Missing user identification header"}`))
+		w.Write([]byte(`{"error":"Authentication required"}`))
 		return
 	}
 
@@ -67,10 +66,10 @@ func (h *CartHandler) HandleCart(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "Cart updated"})
 	} else if r.Method == http.MethodDelete {
-		if r.URL.Query().Get("clearAll") == "true" {
+		productID := r.URL.Query().Get("productId")
+		if r.URL.Query().Get("clearAll") == "true" || productID == "" {
 			h.svc.ClearCart(userID)
 		} else {
-			productID := r.URL.Query().Get("productId")
 			size := r.URL.Query().Get("size")
 			h.svc.RemoveFromCart(userID, productID, size)
 		}
@@ -82,15 +81,13 @@ func (h *CartHandler) HandleCart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) HandleWishlist(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-Id")
-	if userID == "" {
-		userID = r.URL.Query().Get("userId")
-	}
+	identity := middleware.CustomerFromContext(r.Context())
+	userID := identity.UID
 
 	if userID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"Missing user identification header"}`))
+		w.Write([]byte(`{"error":"Authentication required"}`))
 		return
 	}
 

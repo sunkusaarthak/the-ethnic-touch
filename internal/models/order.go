@@ -1,5 +1,9 @@
 package models
 
+import "time"
+
+const OrderGiftCouponIDPrefix = "cp_gift_"
+
 // OrderItem represents an item details bought in an order
 type OrderItem struct {
 	ProductID   string  `json:"productId"`
@@ -7,6 +11,8 @@ type OrderItem struct {
 	PriceAtQty  float64 `json:"priceAtQty"`
 	ProductName string  `json:"productName,omitempty"`
 	Size        string  `json:"size,omitempty"`
+	IsPreorder  bool    `json:"isPreorder"`
+	ImageURL    string  `json:"imageUrl,omitempty"`
 }
 
 // CartItemInfo represents the minimal item data sent by the frontend for coupon validation
@@ -19,43 +25,64 @@ type CartItemInfo struct {
 
 // Order represents a customer purchase
 type Order struct {
-	ID                string      `json:"id"`
-	CustomerEmail     string      `json:"customerEmail"`
-	TotalAmount       float64     `json:"totalAmount"`
-	DiscountAmt       float64     `json:"discountAmt"`
-	CouponCode        string      `json:"couponCode"`
-	Status            string      `json:"status"` // "pending", "paid", "shipped", "cancelled", "ready_for_pickup", "dispatched_instant"
-	CreatedAt         string      `json:"createdAt"`
-	RazorpayOrderID   string      `json:"razorpayOrderId"`
-	RazorpayPaymentID string      `json:"razorpayPaymentId"`
-	TrackingNumber    string      `json:"trackingNumber"`
-	ShippedAt         string      `json:"shippedAt"`
-	Items             []OrderItem `json:"items"`
-	UnlockedGift      string      `json:"unlockedGift"`
-	ShippingName      string      `json:"shippingName"`
-	ShippingPhone     string      `json:"shippingPhone"`
-	ShippingAddress   string      `json:"shippingAddress"`
-	ShippingCity      string      `json:"shippingCity"`
-	ShippingState     string      `json:"shippingState"`
-	ShippingZIPCode   string      `json:"shippingZipCode"`
-	CheckoutType      string      `json:"checkoutType"`
-	PaymentMethod     string      `json:"paymentMethod"`
+	ID                     string          `json:"id"`
+	CustomerEmail          string          `json:"customerEmail"`
+	TotalAmount            float64         `json:"totalAmount"`
+	DiscountAmt            float64         `json:"discountAmt"`
+	CouponCode             string          `json:"couponCode"`
+	Status                 string          `json:"status"` // "pending", "paid", "shipped", "cancelled", "ready_for_pickup", "dispatched_instant"
+	CreatedAt              string          `json:"createdAt"`
+	RazorpayOrderID        string          `json:"razorpayOrderId"`
+	RazorpayPaymentID      string          `json:"razorpayPaymentId"`
+	TrackingNumber         string          `json:"trackingNumber"`
+	TrackingStatus         string          `json:"trackingStatus,omitempty"`
+	TrackingEvents         []ShipmentEvent `json:"trackingEvents,omitempty"`
+	SpinTicketsAwarded     int             `json:"spinTicketsAwarded,omitempty"`
+	EarnedCoupon           string          `json:"earnedCoupon,omitempty"`
+	ShippedAt              string          `json:"shippedAt"`
+	DispatchStartedAt      *time.Time      `json:"dispatchStartedAt,omitempty"`
+	DispatchError          string          `json:"dispatchError,omitempty"`
+	Items                  []OrderItem     `json:"items"`
+	UnlockedGift           string          `json:"unlockedGift"`
+	ShippingName           string          `json:"shippingName"`
+	ShippingPhone          string          `json:"shippingPhone"`
+	ShippingAddress        string          `json:"shippingAddress"`
+	ShippingCity           string          `json:"shippingCity"`
+	ShippingState          string          `json:"shippingState"`
+	ShippingZIPCode        string          `json:"shippingZipCode"`
+	CheckoutType           string          `json:"checkoutType"`
+	PaymentMethod          string          `json:"paymentMethod"`
+	FulfilmentType         string          `json:"fulfilmentType,omitempty"`
+	IsPreorder             bool            `json:"isPreorder"`
+	PickupLocationSnapshot string          `json:"pickupLocationSnapshot,omitempty"`
+	PickupCollectedAt      string          `json:"pickupCollectedAt,omitempty"`
+	PickupCollectedBy      string          `json:"pickupCollectedBy,omitempty"`
+	PickupNotificationSent bool            `json:"pickupNotificationSent,omitempty"`
+}
+
+type ShipmentEvent struct {
+	Status     string    `json:"status"`
+	OccurredAt time.Time `json:"occurredAt"`
+	Location   string    `json:"location,omitempty"`
 }
 
 // OrderCreateRequest represents storefront payload to initiate booking
 type OrderCreateRequest struct {
-	CustomerEmail   string `json:"customerEmail"`
-	UserID          string `json:"userId"`
-	CouponCode      string `json:"couponCode"`
-	ShippingName    string `json:"shippingName"`
-	ShippingPhone   string `json:"shippingPhone"`
-	ShippingAddress string `json:"shippingAddress"`
-	ShippingCity    string `json:"shippingCity"`
-	ShippingState   string `json:"shippingState"`
-	ShippingZIPCode string `json:"shippingZipCode"`
-	CheckoutType    string `json:"checkoutType"`
-	PaymentMethod   string `json:"paymentMethod"`
-	Items           []struct {
+	ExpectedTotalPaise *int64 `json:"expectedTotalPaise,omitempty"`
+	CustomerEmail      string `json:"customerEmail"`
+	UserID             string `json:"userId"`
+	CouponCode         string `json:"couponCode"`
+	ShippingName       string `json:"shippingName"`
+	ShippingPhone      string `json:"shippingPhone"`
+	ShippingAddress    string `json:"shippingAddress"`
+	ShippingCity       string `json:"shippingCity"`
+	ShippingState      string `json:"shippingState"`
+	ShippingZIPCode    string `json:"shippingZipCode"`
+	CheckoutType       string `json:"checkoutType"`
+	PaymentMethod      string `json:"paymentMethod"`
+	FulfilmentType     string `json:"fulfilmentType"`
+	IsPreorder         bool   `json:"isPreorder"`
+	Items              []struct {
 		ProductID string `json:"productId"`
 		Quantity  int    `json:"quantity"`
 		Size      string `json:"size"`
@@ -73,9 +100,16 @@ type OrderVerifyRequest struct {
 
 // OrderVerifyResponse represents the response containing unlocked gift info
 type OrderVerifyResponse struct {
-	Message        string `json:"message"`
-	UnlockedGift   string `json:"unlockedGift,omitempty"`
-	GiftType       string `json:"giftType,omitempty"`
-	GiftCode       string `json:"giftCode,omitempty"`
-	GiftExpiryDate string `json:"giftExpiryDate,omitempty"`
+	Message                string  `json:"message"`
+	Status                 string  `json:"status"`
+	UnlockedGift           string  `json:"unlockedGift,omitempty"`
+	GiftType               string  `json:"giftType,omitempty"`
+	GiftCode               string  `json:"giftCode,omitempty"`
+	GiftExpiryDate         string  `json:"giftExpiryDate,omitempty"`
+	TrackingNumber         string  `json:"trackingNumber,omitempty"`
+	CheckoutType           string  `json:"checkoutType,omitempty"`
+	FulfilmentType         string  `json:"fulfilmentType,omitempty"`
+	IsPreorder             bool    `json:"isPreorder,omitempty"`
+	PickupLocationSnapshot string  `json:"pickupLocationSnapshot,omitempty"`
+	Amount                 float64 `json:"amount,omitempty"`
 }

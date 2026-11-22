@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
 )
@@ -36,7 +37,7 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.Header.Get("X-User-Id")
+	userID := middleware.CustomerFromContext(r.Context()).UID
 	if userID == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -54,7 +55,7 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if profile.AvailableSpins <= 0 {
+	if err := h.profileSvc.ConsumeSpinTicket(userID); err != nil {
 		http.Error(w, "No spins available. Place an order to earn more spins!", http.StatusForbidden)
 		return
 	}
@@ -63,7 +64,7 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 	stats, _ := h.configSvc.GetSpinWheelStats()
 
 	segmentIndex := -1
-	
+
 	// Check triggers for Free Kurthi
 	triggeredFreeKurthi := false
 	if stats.NewUsersSinceLastKurthi >= config.NewUserKurthiThreshold && config.NewUserKurthiThreshold > 0 {
@@ -84,10 +85,9 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 		} else {
 			probs = config.ReturningProbs
 		}
-		
+
 		probabilities := []int{0, probs.Prob5Off, probs.Prob10Off, probs.ProbBetterLuck}
-		
-		rand.Seed(time.Now().UnixNano())
+
 		roll := rand.Intn(100)
 		sum := 0
 		for i, p := range probabilities {
@@ -97,7 +97,7 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		
+
 		if segmentIndex == -1 {
 			segmentIndex = 3 // Fallback to Better Luck
 		}
@@ -158,9 +158,6 @@ func (h *SpinHandler) HandleSpin(w http.ResponseWriter, r *http.Request) {
 			generatedCoupon = c
 		}
 	}
-
-	// Consume ticket and increment spin count
-	h.profileSvc.ConsumeSpinTicket(userID)
 
 	resp := SpinResponse{
 		SegmentIndex: segmentIndex,

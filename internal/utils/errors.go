@@ -50,3 +50,49 @@ func FormatAuthError(msg string) string {
 	}
 	return msg
 }
+
+// MaskEmail masks email like "j***h@gmail.com"
+func MaskEmail(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return "***"
+	}
+	name, domain := parts[0], parts[1]
+	if len(name) <= 2 {
+		return name[:1] + "***@" + domain
+	}
+	return string(name[0]) + "***" + string(name[len(name)-1]) + "@" + domain
+}
+
+// MaskPhone masks phone number like "******5289"
+func MaskPhone(phone string) string {
+	if len(phone) < 4 {
+		return "****"
+	}
+	return strings.Repeat("*", len(phone)-4) + phone[len(phone)-4:]
+}
+
+// MaskName masks name like "G**** J********"
+func MaskName(name string) string {
+	words := strings.Fields(name)
+	if len(words) == 0 {
+		return "***"
+	}
+	var masked []string
+	for _, w := range words {
+		if len(w) <= 1 {
+			masked = append(masked, w)
+		} else {
+			masked = append(masked, string(w[0])+strings.Repeat("*", len(w)-1))
+		}
+	}
+	return strings.Join(masked, " ")
+}
+
+// MaskAddress masks address line like "ESCI road, Kajaguda lake..."
+func MaskAddress(addr string) string {
+	if len(addr) <= 15 {
+		return "***"
+	}
+	return addr[:12] + "..."
+}

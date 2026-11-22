@@ -2,6 +2,7 @@ package service
 
 import (
 	"ethnictouch/internal/models"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +21,15 @@ func newMockProfileRepo() *mockProfileRepo {
 func (m *mockProfileRepo) GetProfile(userID string) (*models.Profile, error) {
 	if p, ok := m.profiles[userID]; ok {
 		return p, nil
+	}
+	return nil, models.ErrNotFound
+}
+
+func (m *mockProfileRepo) GetProfileByEmail(email string) (*models.Profile, error) {
+	for _, p := range m.profiles {
+		if strings.EqualFold(p.Email, email) {
+			return p, nil
+		}
 	}
 	return nil, models.ErrNotFound
 }

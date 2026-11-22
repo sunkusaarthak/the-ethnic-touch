@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Gift } from 'lucide-react';
 import { API_BASE_URL } from '../data/config';
 import { useCart } from '../context/CartContext';
+import { saleProduct, useSale } from '../context/SaleContext';
 import './Home.css';
 
 // Subcomponents for the modern e-commerce experience
@@ -52,67 +53,33 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist, addToCart }) => {
             });
     }, []);
 
-    // Dynamic Flash Loom Drop product resolution
-    const flashConfig = homepageConfig?.flash_drop;
-    let flashFeaturedProduct = null;
-
-    if (productsGlobal && productsGlobal.length > 0) {
-        // 1. If product_id is specified in flash_drop, find that exact product
-        if (flashConfig?.product_id) {
-            flashFeaturedProduct = productsGlobal.find(p => String(p.id) === String(flashConfig.product_id));
-        }
-        // 2. If highlight matches a product name in the catalog (case-insensitive)
-        if (!flashFeaturedProduct && flashConfig?.highlight) {
-            const cleanHl = flashConfig.highlight.trim().toLowerCase();
-            flashFeaturedProduct = productsGlobal.find(p => p.name && p.name.trim().toLowerCase() === cleanHl);
-        }
-        // 3. Otherwise, if not matched or rotating, use deterministic rotation
-        if (!flashFeaturedProduct) {
-            const inStockKurtis = productsGlobal.filter(p => {
-                const cat = (p.category || '').toLowerCase();
-                const name = (p.name || '').toLowerCase();
-                const isKurti = cat.includes('kurti') || cat.includes('tunic') || cat.includes('straight') || cat.includes('line') || name.includes('kurti');
-                return (p.stock || 0) > 0 && isKurti;
-            });
-            const pool = inStockKurtis.length > 0 ? inStockKurtis : (productsGlobal.filter(p => (p.stock || 0) > 0).length > 0 ? productsGlobal.filter(p => (p.stock || 0) > 0) : productsGlobal);
-            const durHours = flashConfig?.duration_hours !== undefined ? flashConfig.duration_hours : 6;
-            const durMins = flashConfig?.duration_mins !== undefined ? flashConfig.duration_mins : 0;
-            const totalCycleMins = (durHours * 60) + durMins;
-            const cycleMs = (totalCycleMins > 0 ? totalCycleMins : 360) * 60 * 1000;
-            const cycleStart = flashConfig?.cycle_started_at 
-                ? new Date(flashConfig.cycle_started_at).getTime() 
-                : 0;
-            const elapsedMs = Math.max(0, Date.now() - cycleStart);
-            const cycleBlock = Math.floor(elapsedMs / cycleMs);
-            const index = Math.abs(cycleBlock) % pool.length;
-            flashFeaturedProduct = pool[index];
-        }
-    }
-
-    const handleFlashExpire = () => {
-        // When configured countdown timer expires:
-        // Automatically switch back to random rotation mode
-        setHomepageConfig(prev => {
-            if (!prev) return prev;
-            const durHours = prev.flash_drop?.duration_hours !== undefined ? prev.flash_drop.duration_hours : 6;
-            const durMins = prev.flash_drop?.duration_mins !== undefined ? prev.flash_drop.duration_mins : 0;
-            return {
-                ...prev,
-                flash_drop: {
-                    ...prev.flash_drop,
-                    mode: 'random',
-                    hours_left: durHours,
-                    minutes_left: durMins,
-                    seconds_left: 0
-                }
-            };
-        });
-        // Sync with backend
-        fetch(`${API_BASE_URL}/api/config/homepage`)
-            .then(res => res.ok ? res.json() : null)
-            .then(data => { if (data) setHomepageConfig(data); })
+    const publishedFlash = homepageConfig?.flash_drop;
+    const flashConfig = publishedFlash?.next_change_at ? publishedFlash
+        : window.resolveLegacySpotlight?.(publishedFlash, productsGlobal);
+    const { sale } = useSale();
+    const [spotlightProduct, setSpotlightProduct] = useState(null);
+    const featuredID = flashConfig?.featured_product_id;
+    useEffect(() => {
+        if (!featuredID || flashConfig?.featured_product) return;
+        const controller = new AbortController();
+        fetch(`${API_BASE_URL}/api/products/${encodeURIComponent(featuredID)}`, {
+            signal: controller.signal, cache: 'no-store'
+        }).then(response => response.ok ? response.json() : null)
+            .then(product => { if (product) setSpotlightProduct(product); })
             .catch(() => {});
-    };
+        return () => controller.abort();
+    }, [featuredID, flashConfig?.next_change_at, flashConfig?.featured_product]);
+    const matchingProduct = flashConfig?.featured_product ??
+        (spotlightProduct && String(spotlightProduct.id) === String(featuredID) ? spotlightProduct :
+            productsGlobal?.find(product => String(product.id) === String(featuredID)));
+    const inStock = matchingProduct && !matchingProduct.isPreorder && (Number(matchingProduct.stock) > 0 ||
+        Object.values(matchingProduct.sizesStock || {}).some(qty => Number(qty) > 0));
+    const flashFeaturedProduct = inStock ? saleProduct(matchingProduct, sale) : null;
+    const handleFlashExpire = useCallback(async () => {
+        const response = await fetch(`${API_BASE_URL}/api/config/homepage`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Could not refresh Spotlight');
+        setHomepageConfig(await response.json());
+    }, []);
 
     return (
         <main className="modern-ecommerce-homepage" role="main">
@@ -134,7 +101,7 @@ const Home = ({ productsGlobal, wishlist, toggleWishlist, addToCart }) => {
 
             {/* 5. Flash Loom Drop - Limited Edition Urgency Banner (Data from Backend) */}
             <FlashLoomDrop 
-                flashConfig={homepageConfig?.flash_drop}
+                flashConfig={flashConfig || {}}
                 featuredProduct={flashFeaturedProduct}
                 onExpire={handleFlashExpire}
             />

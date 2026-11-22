@@ -25,6 +25,7 @@ type Product struct {
 	IsNewArrival  bool           `json:"isNewArrival"`
 	IsBestSeller  bool           `json:"isBestSeller"`
 	IsFeatured    bool           `json:"isFeatured"`
+	IsPreorder    bool           `json:"isPreorder"`
 	CreatedAt     string         `json:"createdAt"`
 	AvgRating     float64        `json:"avgRating"`
 	ReviewCount   int            `json:"reviewCount"`

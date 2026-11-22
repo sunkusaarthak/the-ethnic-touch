@@ -6,13 +6,14 @@ import (
 	"strconv"
 	"time"
 
+	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
 	"ethnictouch/internal/utils"
 )
 
 type ProfileHandler struct {
-	svc service.ProfileService
+	svc       service.ProfileService
 	configSvc service.ConfigService
 }
 
@@ -21,7 +22,7 @@ func NewProfileHandler(svc service.ProfileService, configSvc service.ConfigServi
 }
 
 func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-Id")
+	userID := middleware.CustomerFromContext(r.Context()).UID
 	if userID == "" {
 		userID = r.URL.Query().Get("userId")
 	}
@@ -66,9 +67,9 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.svc.UpsertProfile(&p); err != nil {
-			if err == models.ErrEmailAlreadyRegistered || 
-			   err == models.ErrMobileAlreadyRegistered || 
-			   err == models.ErrIdentityConflict {
+			if err == models.ErrEmailAlreadyRegistered ||
+				err == models.ErrMobileAlreadyRegistered ||
+				err == models.ErrIdentityConflict {
 				http.Error(w, utils.FormatError(err), http.StatusConflict)
 				return
 			}
@@ -90,7 +91,7 @@ func (h *ProfileHandler) HandleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProfileHandler) HandleAddresses(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-Id")
+	userID := middleware.CustomerFromContext(r.Context()).UID
 	if userID == "" {
 		userID = r.URL.Query().Get("userId")
 	}

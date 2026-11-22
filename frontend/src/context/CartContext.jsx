@@ -30,7 +30,8 @@ const enrichCartItem = (item) => {
         name: item.name || item.title || (found ? found.name : 'Handcrafted Kurti'),
         imageUrl: getOptimizedImageUrl(item.imageUrl || item.image_url || (found ? found.imageUrl : '/images/kurthi_peach.png')),
         description: item.description || (found ? found.description : ''),
-        price: safePrice
+        price: safePrice,
+        isPreorder: Boolean(item.isPreorder || item.is_preorder || (found && (found.isPreorder || found.is_preorder)))
     };
 };
 
@@ -84,6 +85,9 @@ export const CartProvider = ({ children }) => {
             if (cart && cart.length > 0) {
                 localStorage.setItem('tet_cart_active', JSON.stringify(cart));
                 localStorage.setItem('tet_guest_cart', JSON.stringify(cart));
+            } else if (Array.isArray(cart) && cart.length === 0) {
+                localStorage.removeItem('tet_cart_active');
+                localStorage.removeItem('tet_guest_cart');
             }
         } catch (e) {
             console.error("[CartContext] Local storage write error:", e);
@@ -95,6 +99,9 @@ export const CartProvider = ({ children }) => {
             if (wishlist && wishlist.length > 0) {
                 localStorage.setItem('tet_wishlist_active', JSON.stringify(wishlist));
                 localStorage.setItem('tet_guest_wishlist', JSON.stringify(wishlist));
+            } else if (Array.isArray(wishlist) && wishlist.length === 0) {
+                localStorage.removeItem('tet_wishlist_active');
+                localStorage.removeItem('tet_guest_wishlist');
             }
         } catch (e) {
             console.error("[CartContext] Wishlist storage write error:", e);
@@ -207,7 +214,7 @@ export const CartProvider = ({ children }) => {
 
     const addToCart = useCallback((product) => {
         if (!product || !product.id) return;
-        const enriched = enrichCartItem(product);
+        const enriched = enrichCartItem(product.regularPrice == null ? product : { ...product, price: product.regularPrice });
         const prodQty = enriched.quantity || 1;
         const targetSize = enriched.size || '';
 
@@ -365,7 +372,7 @@ export const CartProvider = ({ children }) => {
         localStorage.removeItem('tet_cart_active');
         localStorage.removeItem('tet_guest_cart');
         if (authUser) {
-            apiClient.delete('/api/cart').catch(e => console.error("[CartContext] Clear cart error:", e));
+            apiClient.delete('/api/cart?clearAll=true').catch(e => console.error("[CartContext] Clear cart error:", e));
         }
     }, [authUser]);
 

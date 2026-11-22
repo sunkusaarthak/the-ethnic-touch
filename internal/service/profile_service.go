@@ -9,6 +9,7 @@ import (
 
 type ProfileService interface {
 	GetProfile(userID string) (*models.Profile, error)
+	GetProfileByEmail(email string) (*models.Profile, error)
 	GetAllProfiles() ([]models.Profile, error)
 	UpsertProfile(p *models.Profile) error
 	GetAddresses(userID string) ([]models.Address, error)
@@ -31,6 +32,10 @@ func NewProfileService(repo repository.ProfileRepository) ProfileService {
 
 func (s *profileService) GetProfile(userID string) (*models.Profile, error) {
 	return s.repo.GetProfile(userID)
+}
+
+func (s *profileService) GetProfileByEmail(email string) (*models.Profile, error) {
+	return s.repo.GetProfileByEmail(email)
 }
 
 func (s *profileService) GetAllProfiles() ([]models.Profile, error) {

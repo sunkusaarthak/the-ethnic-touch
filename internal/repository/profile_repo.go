@@ -2,11 +2,14 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
+
 	"ethnictouch/internal/models"
 )
 
 type ProfileRepository interface {
 	GetProfile(userID string) (*models.Profile, error)
+	GetProfileByEmail(email string) (*models.Profile, error)
 	GetAllProfiles() ([]models.Profile, error)
 	UpsertProfile(p *models.Profile) error
 	GetAddresses(userID string) ([]models.Address, error)
@@ -33,6 +36,20 @@ func (r *postgresProfileRepo) GetProfile(userID string) (*models.Profile, error)
 		SELECT user_id, COALESCE(email, ''), full_name, phone, address, city, state, zip_code, 
 		COALESCE(preferred_size, ''), COALESCE(style_notes, ''), spin_count, available_spins, created_at, updated_at
 		FROM profiles WHERE user_id = $1`, userID).
+		Scan(&p.UserID, &p.Email, &p.FullName, &p.Phone, &p.Address, &p.City, &p.State, &p.ZIPCode,
+			&p.PreferredSize, &p.StyleNotes, &p.SpinCount, &p.AvailableSpins, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (r *postgresProfileRepo) GetProfileByEmail(email string) (*models.Profile, error) {
+	var p models.Profile
+	err := r.db.QueryRow(`
+		SELECT user_id, COALESCE(email, ''), full_name, phone, address, city, state, zip_code, 
+		COALESCE(preferred_size, ''), COALESCE(style_notes, ''), spin_count, available_spins, created_at, updated_at
+		FROM profiles WHERE LOWER(email) = LOWER($1) LIMIT 1`, email).
 		Scan(&p.UserID, &p.Email, &p.FullName, &p.Phone, &p.Address, &p.City, &p.State, &p.ZIPCode,
 			&p.PreferredSize, &p.StyleNotes, &p.SpinCount, &p.AvailableSpins, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
@@ -205,8 +222,18 @@ func (r *postgresProfileRepo) AddSpinTicket(userID string, count int) error {
 }
 
 func (r *postgresProfileRepo) ConsumeSpinTicket(userID string) error {
-	_, err := r.db.Exec(`UPDATE profiles SET available_spins = available_spins - 1, spin_count = spin_count + 1 WHERE user_id = $1 AND available_spins > 0`, userID)
-	return err
+	res, err := r.db.Exec(`UPDATE profiles SET available_spins = available_spins - 1, spin_count = spin_count + 1 WHERE user_id = $1 AND available_spins > 0`, userID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("no spins available")
+	}
+	return nil
 }
 
 func (r *postgresProfileRepo) DeleteProfile(userID string) error {
