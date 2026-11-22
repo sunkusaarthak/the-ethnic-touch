@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"ethnictouch/internal/models"
+	"ethnictouch/internal/repository"
 	"io"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 )
 
 type mockOrderRepoForService struct {
+	repository.OrderRepository
 	orders map[string]*models.Order
 }
 
@@ -148,7 +150,7 @@ func TestOrderService_VerifyPayment_HMACValidation(t *testing.T) {
 	}
 
 	configSvc := &mockConfigServiceForCheckout{}
-	delhiverySvc := NewDelhiveryService("dummy")
+	delhiverySvc := NewDelhiveryService("dummy", "", "mock")
 	couponSvc := &mockCouponServiceForOrder{}
 	svc := NewOrderService(repo, couponSvc, nil, configSvc, delhiverySvc)
 	secret := "test_razorpay_secret_key"

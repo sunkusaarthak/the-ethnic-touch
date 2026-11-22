@@ -214,17 +214,17 @@ const CheckoutSuccess = () => {
                 </div>
             ) : (
                 <div style={{
-                    width: '76px',
-                    height: '76px',
+                    width: '68px',
+                    height: '68px',
                     borderRadius: '50%',
                     background: '#E8F5E9',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    margin: '0 auto 1rem',
+                    margin: '0 auto 1.25rem',
                     boxShadow: '0 8px 20px rgba(46,125,50,0.12)'
                 }}>
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', margin: 'auto' }}>
                         <polyline points="20 6 9 17 4 12" />
                     </svg>
                 </div>
@@ -240,7 +240,7 @@ const CheckoutSuccess = () => {
             }}>
                 {isOffline ? "In-Store Order Reserved!" : "Order Placed Successfully!"}
             </h1>
-            <p style={{ fontSize: '0.88rem', color: '#6C6863', marginBottom: '1.5rem', padding: '0 0.5rem' }}>Thank you for choosing luxury, custom Indo-Western aesthetics.</p>
+            <p style={{ fontSize: '0.88rem', color: '#6C6863', marginBottom: '1.5rem', padding: '0 0.5rem' }}>Thank you for choosing authentic, handcrafted Jaipur kurtis.</p>
 
             <div style={{
                 padding: '1.75rem 1rem 1.5rem',
@@ -293,13 +293,13 @@ const CheckoutSuccess = () => {
                     <span style={{ color: '#D4A373', opacity: 0.6, display: 'inline-block' }}>|</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                         <strong style={{ fontSize: 'clamp(0.85rem, 3.8vw, 1.05rem)', fontFamily: 'monospace', color: '#2D2A26', letterSpacing: '0.03em', wordBreak: 'break-all' }}>#{orderId}</strong>
-                        <CopyButton text={orderId} iconOnly={true} style={{ padding: '4px 6px', borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF', flexShrink: 0 }} />
+                        <CopyButton text={orderId} iconOnly={true} style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} />
                     </span>
                 </div>
 
                 <p style={{ fontSize: '0.92rem', color: '#5C5854', lineHeight: '1.6', margin: '0 0 1.5rem', padding: '0 0.25rem' }}>
                     {isOffline
-                        ? `Please present the verification pass QR code below at the reception counter to finalize payments of ₹${(amount || 0).toLocaleString('en-IN')} and collect your bespoke kurthi garments.`
+                        ? `Please present the verification pass QR code below at the reception counter to finalize payments of ₹${(amount || 0).toLocaleString('en-IN')} and collect your authentic Jaipuri kurtis.`
                         : isStorePickup
                             ? "Your store collection order is placed and confirmed. Keep the verification pass QR code below handy for scanning when collecting your order at our store."
                             : tracking && (tracking.startsWith('RAPIDO-INSTANT-') || tracking.startsWith('UBER-INSTANT-'))
@@ -415,7 +415,7 @@ const CheckoutSuccess = () => {
                                     }}>
                                         #{orderId}
                                     </strong>
-                                    <CopyButton text={orderId} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', flexShrink: 0 }} />
+                                    <CopyButton text={orderId} iconOnly={true} style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', border: '1px solid #E6D8C8', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} />
                                 </span>
                             </div>
                         </div>
@@ -441,7 +441,7 @@ const CheckoutSuccess = () => {
                     <span style={{ fontSize: '0.8rem', color: '#6C6863', fontWeight: '500', whiteSpace: 'nowrap' }}>Carrier Waybill ID:</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                         <strong style={{ fontSize: 'clamp(0.85rem, 3.8vw, 1.05rem)', color: '#8F5E36', fontFamily: 'monospace', letterSpacing: '0.04em', wordBreak: 'break-all' }}>{tracking}</strong>
-                        <CopyButton text={tracking} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF', flexShrink: 0 }} />
+                        <CopyButton text={tracking} iconOnly={true} style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', border: '1px solid #E6D8C8', backgroundColor: '#FFF', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} />
                     </span>
                 </div>
                 )}
@@ -497,7 +497,7 @@ const CheckoutSuccess = () => {
                                     flexWrap: 'wrap'
                                 }}>
                                     <strong style={{ fontSize: '0.95rem', fontFamily: 'monospace', color: '#8F5E36', letterSpacing: '0.06em', wordBreak: 'break-all' }}>{displayGift}</strong>
-                                    <CopyButton text={displayGift} iconOnly={true} style={{ padding: '4px 7px', borderRadius: '50%', border: '1px solid #E6D8C8', flexShrink: 0 }} />
+                                    <CopyButton text={displayGift} iconOnly={true} style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', border: '1px solid #E6D8C8', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} />
                                 </div>
                                 {giftExpiryDate && (
                                     <div style={{ marginTop: '0.75rem' }}>

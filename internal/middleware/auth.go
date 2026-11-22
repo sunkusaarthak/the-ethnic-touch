@@ -16,6 +16,8 @@ type contextKey string
 const RoleKey contextKey = "role"
 const EmailKey contextKey = "email"
 
+var authHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
 func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserRepository, allowedRoles ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,8 +41,7 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 				apiKey = "AIzaSyDSrS3zywg8ao1lvK9NWmy1RDR33Nim2h8"
 			}
 			reqBody := `{"idToken":"` + token + `"}`
-			client := &http.Client{Timeout: 10 * time.Second}
-			resp, err := client.Post("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="+apiKey, "application/json", strings.NewReader(reqBody))
+			resp, err := authHTTPClient.Post("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="+apiKey, "application/json", strings.NewReader(reqBody))
 			if resp != nil {
 				defer resp.Body.Close()
 			}
@@ -54,13 +55,22 @@ func AdminAuthMiddleware(superAdminEmail string, adminRepo repository.AdminUserR
 
 			var tokenInfo struct {
 				Users []struct {
-					Email string `json:"email"`
+					Email         string `json:"email"`
+					EmailVerified bool   `json:"emailVerified"`
 				} `json:"users"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil || len(tokenInfo.Users) == 0 || tokenInfo.Users[0].Email == "" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Unauthorized: failed to parse Firebase token response")})
+				return
+			}
+
+			// Require verified identity before privileged authorization
+			if !tokenInfo.Users[0].EmailVerified {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatAuthError("Forbidden: email address must be verified")})
 				return
 			}
 

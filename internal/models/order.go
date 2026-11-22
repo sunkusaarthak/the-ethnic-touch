@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 const OrderGiftCouponIDPrefix = "cp_gift_"
 
 // OrderItem represents an item details bought in an order
@@ -23,33 +25,45 @@ type CartItemInfo struct {
 
 // Order represents a customer purchase
 type Order struct {
-	ID                     string      `json:"id"`
-	CustomerEmail          string      `json:"customerEmail"`
-	TotalAmount            float64     `json:"totalAmount"`
-	DiscountAmt            float64     `json:"discountAmt"`
-	CouponCode             string      `json:"couponCode"`
-	Status                 string      `json:"status"` // "pending", "paid", "shipped", "cancelled", "ready_for_pickup", "dispatched_instant"
-	CreatedAt              string      `json:"createdAt"`
-	RazorpayOrderID        string      `json:"razorpayOrderId"`
-	RazorpayPaymentID      string      `json:"razorpayPaymentId"`
-	TrackingNumber         string      `json:"trackingNumber"`
-	ShippedAt              string      `json:"shippedAt"`
-	Items                  []OrderItem `json:"items"`
-	UnlockedGift           string      `json:"unlockedGift"`
-	ShippingName           string      `json:"shippingName"`
-	ShippingPhone          string      `json:"shippingPhone"`
-	ShippingAddress        string      `json:"shippingAddress"`
-	ShippingCity           string      `json:"shippingCity"`
-	ShippingState          string      `json:"shippingState"`
-	ShippingZIPCode        string      `json:"shippingZipCode"`
-	CheckoutType           string      `json:"checkoutType"`
-	PaymentMethod          string      `json:"paymentMethod"`
-	FulfilmentType         string      `json:"fulfilmentType,omitempty"`
-	IsPreorder             bool        `json:"isPreorder"`
-	PickupLocationSnapshot string      `json:"pickupLocationSnapshot,omitempty"`
-	PickupCollectedAt      string      `json:"pickupCollectedAt,omitempty"`
-	PickupCollectedBy      string      `json:"pickupCollectedBy,omitempty"`
-	PickupNotificationSent bool        `json:"pickupNotificationSent,omitempty"`
+	ID                     string          `json:"id"`
+	CustomerEmail          string          `json:"customerEmail"`
+	TotalAmount            float64         `json:"totalAmount"`
+	DiscountAmt            float64         `json:"discountAmt"`
+	CouponCode             string          `json:"couponCode"`
+	Status                 string          `json:"status"` // "pending", "paid", "shipped", "cancelled", "ready_for_pickup", "dispatched_instant"
+	CreatedAt              string          `json:"createdAt"`
+	RazorpayOrderID        string          `json:"razorpayOrderId"`
+	RazorpayPaymentID      string          `json:"razorpayPaymentId"`
+	TrackingNumber         string          `json:"trackingNumber"`
+	TrackingStatus         string          `json:"trackingStatus,omitempty"`
+	TrackingEvents         []ShipmentEvent `json:"trackingEvents,omitempty"`
+	SpinTicketsAwarded     int             `json:"spinTicketsAwarded,omitempty"`
+	EarnedCoupon           string          `json:"earnedCoupon,omitempty"`
+	ShippedAt              string          `json:"shippedAt"`
+	DispatchStartedAt      *time.Time      `json:"dispatchStartedAt,omitempty"`
+	DispatchError          string          `json:"dispatchError,omitempty"`
+	Items                  []OrderItem     `json:"items"`
+	UnlockedGift           string          `json:"unlockedGift"`
+	ShippingName           string          `json:"shippingName"`
+	ShippingPhone          string          `json:"shippingPhone"`
+	ShippingAddress        string          `json:"shippingAddress"`
+	ShippingCity           string          `json:"shippingCity"`
+	ShippingState          string          `json:"shippingState"`
+	ShippingZIPCode        string          `json:"shippingZipCode"`
+	CheckoutType           string          `json:"checkoutType"`
+	PaymentMethod          string          `json:"paymentMethod"`
+	FulfilmentType         string          `json:"fulfilmentType,omitempty"`
+	IsPreorder             bool            `json:"isPreorder"`
+	PickupLocationSnapshot string          `json:"pickupLocationSnapshot,omitempty"`
+	PickupCollectedAt      string          `json:"pickupCollectedAt,omitempty"`
+	PickupCollectedBy      string          `json:"pickupCollectedBy,omitempty"`
+	PickupNotificationSent bool            `json:"pickupNotificationSent,omitempty"`
+}
+
+type ShipmentEvent struct {
+	Status     string    `json:"status"`
+	OccurredAt time.Time `json:"occurredAt"`
+	Location   string    `json:"location,omitempty"`
 }
 
 // OrderCreateRequest represents storefront payload to initiate booking

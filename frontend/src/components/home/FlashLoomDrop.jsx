@@ -58,6 +58,11 @@ const FlashLoomDrop = ({ flashConfig, featuredProduct, onExpire }) => {
     const displayProductId = product.id;
     const sizeQuantities = Object.values(product.sizesStock || {}).map(Number);
     const remainingStock = sizeQuantities.length ? sizeQuantities.reduce((sum, qty) => sum + Math.max(0, qty), 0) : Number(product.stock);
+    const showStock = Number.isSafeInteger(remainingStock) && remainingStock > 0;
+    const stockLabel = remainingStock <= lowStockLimit
+        ? `Only ${remainingStock} ${remainingStock === 1 ? 'piece' : 'pieces'} remaining`
+        : `In stock · ${remainingStock} pieces`;
+    const stockFill = Math.min(100, remainingStock / lowStockLimit * 100);
     const timeLeft = { hours: Math.floor(remaining / 3600), minutes: Math.floor(remaining / 60) % 60, seconds: remaining % 60 };
 
     return (
@@ -93,13 +98,13 @@ const FlashLoomDrop = ({ flashConfig, featuredProduct, onExpire }) => {
                         </div>
                     </div>}
 
-                    {remainingStock > 0 && remainingStock <= lowStockLimit && <div className="flash-stock-meter">
+                    {showStock && <div className="flash-stock-meter">
                         <div className="flash-stock-info">
                             <span>Stock Availability</span>
-                            <strong>Only {remainingStock} Pieces Remaining</strong>
+                            <strong>{stockLabel}</strong>
                         </div>
                         <div className="flash-stock-bar" aria-hidden="true">
-                            <div className="flash-stock-fill" style={{ width: (remainingStock / lowStockLimit * 100) + '%' }} />
+                            <div className="flash-stock-fill" style={{ width: `${stockFill}%` }} />
                         </div>
                     </div>}
 

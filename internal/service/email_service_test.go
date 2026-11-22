@@ -290,6 +290,17 @@ func TestEmailService_CustomerGreeting(t *testing.T) {
 	}
 }
 
+func TestEmailDeliveryMethodTakesPrecedenceOverAddress(t *testing.T) {
+	order := &models.Order{
+		CheckoutType:    "delivery",
+		PaymentMethod:   "online",
+		ShippingAddress: "Lake Road, Financial District",
+	}
+	if isStorePickup(order) {
+		t.Fatal("an explicit delivery order should use delivery emails even when its street name resembles the store address")
+	}
+}
+
 func TestEmailService_LiveSMTPVerification(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping live SMTP test in short mode")

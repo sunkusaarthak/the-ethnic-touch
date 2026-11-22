@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Truck, Sparkles, MapPin, Tag, ShieldCheck } from 'lucide-react';
 
 import { API_BASE_URL } from '../../data/config';
@@ -19,7 +20,11 @@ const defaultAnnouncements = [
     { icon: 'shield', text: 'Direct from Jaipur Artisans to your Doorstep' }
 ];
 
-const AnnouncementTicker = ({ announcements }) => {
+const saleEndFormatter = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short'
+});
+
+const AnnouncementTicker = ({ announcements, sale }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [fetchedItems, setFetchedItems] = useState(null);
 
@@ -42,12 +47,15 @@ const AnnouncementTicker = ({ announcements }) => {
             ? fetchedItems 
             : defaultAnnouncements;
 
+    const hasSale = Boolean(sale);
+
     useEffect(() => {
+        if (hasSale) return;
         const interval = setInterval(() => {
             setCurrentIndex(prev => (prev + 1) % items.length);
         }, 4000);
         return () => clearInterval(interval);
-    }, [items.length]);
+    }, [hasSale, items.length]);
 
     const activeItem = items[currentIndex] || items[0];
     const IconComponent = (activeItem && ICON_MAP[activeItem.icon]) || Sparkles;
@@ -55,10 +63,19 @@ const AnnouncementTicker = ({ announcements }) => {
     return (
         <div className="announcement-ticker" role="region" aria-label="Announcement">
             <div className="ticker-track">
-                <div className="ticker-item" key={currentIndex}>
-                    <IconComponent size={14} />
-                    <span>{activeItem.text}</span>
-                </div>
+                {sale ? (
+                    <Link className="ticker-item ticker-sale" to="/shop">
+                        <Tag size={14} aria-hidden="true" />
+                        <span>
+                            {sale.name} · {sale.percent}% off eligible styles · Ends {saleEndFormatter.format(new Date(sale.endsAt))} IST · <span className="ticker-sale-cta">Shop now</span>
+                        </span>
+                    </Link>
+                ) : (
+                    <div className="ticker-item" key={currentIndex}>
+                        <IconComponent size={14} />
+                        <span>{activeItem.text}</span>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -5,6 +5,7 @@ import { signOut } from 'firebase/auth';
 import { auth, API_BASE_URL } from '../data/config';
 import apiClient from '../utils/apiClient';
 import { formatError } from '../utils/errors';
+import { isStorePickupOrder } from '../utils/orderFulfilment';
 
 const ProfilePage = ({ authUser, setProfileIncomplete }) => {
     const navigate = useNavigate();
@@ -258,6 +259,8 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
         if (params.get('action') === 'add_address') {
             setActiveTab('addresses');
             setShowAddressForm(true);
+        } else if (params.get('tab') === 'orders') {
+            setActiveTab('orders');
         }
     }, [location.search]);
 
@@ -777,8 +780,9 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.8rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem', marginBottom: '1rem' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                     <span style={{ fontSize: 'var(--font-size-sm)', color: '#888' }}>Order ID:</span>
-                                                    <span style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: 'var(--font-size-input)' }}>{order.id}</span>
+                                                    <Link className="order-history-link" to={`/profile/orders/${encodeURIComponent(order.id)}`}>{order.id}</Link>
                                                     <CopyButton text={order.id} label="Copy ID" />
+                                                    <Link className="order-history-link" to={`/profile/orders/${encodeURIComponent(order.id)}`} aria-label={`View order ${order.id}`}>View order</Link>
                                                 </div>
                                                 <div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -806,7 +810,7 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                             fontWeight: '600', 
                                                             textTransform: 'uppercase' 
                                                         }}>
-                                                            {order.status === 'READY_FOR_PICKUP' ? 'Ready for Pickup 🎉' : order.status === 'COLLECTED' ? 'Collected ✓' : order.status}
+                                                            {order.trackingStatus ? order.trackingStatus.replaceAll('_', ' ') : order.status === 'READY_FOR_PICKUP' ? 'Ready for Pickup 🎉' : order.status === 'COLLECTED' ? 'Collected ✓' : order.status}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -855,7 +859,7 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                         <span style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: '500' }}>{new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
                                                     </div>
                                                     <div>
-                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#888' }}>Total Amount Paid:</span>
+                                                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#888' }}>Order total:</span>
                                                         <span style={{ display: 'block', fontSize: 'var(--font-size-h3)', color: '#b97a66', fontWeight: '600' }}>₹{order.totalAmount.toLocaleString('en-IN')}</span>
                                                     </div>
                                                 </div>
@@ -870,20 +874,23 @@ const ProfilePage = ({ authUser, setProfileIncomplete }) => {
                                                 </div>
                                             )}
 
-                                            {order.unlockedGift && (
+                                            {(order.unlockedGift || order.spinTicketsAwarded > 0) && (
                                                 <div style={{ marginTop: '0.8rem', background: '#fff9e6', padding: '0.75rem 1rem', border: '1px dashed #fcd34d', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                     <span style={{ fontSize: 'var(--font-size-sm)', color: '#854d0e' }}>
-                                                        Reward Unlocked: <strong>{order.unlockedGift}</strong>
+                                                        Rewards earned: <strong>{[
+                                                            order.spinTicketsAwarded > 0 && `${order.spinTicketsAwarded} ${order.spinTicketsAwarded === 1 ? 'spin ticket' : 'spin tickets'}`,
+                                                            order.unlockedGift
+                                                        ].filter(Boolean).join(' · ')}</strong>
                                                     </span>
-                                                    <CopyButton text={order.unlockedGift} label="Copy Code" />
+                                                    {order.unlockedGift && <CopyButton text={order.unlockedGift} label="Copy reward" />}
                                                 </div>
                                             )}
 
-                                            {(order.fulfilmentType === 'PREORDER_STORE_PICKUP' || order.checkoutType === 'pickup') && (() => {
+                                            {isStorePickupOrder(order) && (() => {
                                                 let snap = {};
                                                 if (order.pickupLocationSnapshot) {
                                                     try {
-                                                        snap = JSON.parse(order.pickupLocationSnapshot);
+                                                        snap = JSON.parse(order.pickupLocationSnapshot) || {};
                                                     } catch (_) {}
                                                 }
                                                 const locName = snap.locationName || 'The Ethnic Touch Store';

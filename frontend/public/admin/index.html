@@ -6,7 +6,7 @@
     <base href="/admin/">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Portal | The Ethnic Touch</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=12">
+    <link rel="stylesheet" href="/admin/admin.css?v=13">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -151,7 +151,15 @@
                     </svg>
                     <span class="nav-label">Products & Inventory</span>
                 </li>
-                <li data-tab="sales" data-title="Sitewide Sale" class="admin-only"><span class="nav-label">Sitewide Sale</span></li>
+                <li data-tab="sales" data-title="Sitewide Sale" class="admin-only">
+                    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M5 19 19 5" />
+                        <circle cx="7.5" cy="7.5" r="2.5" />
+                        <circle cx="16.5" cy="16.5" r="2.5" />
+                    </svg>
+                    <span class="nav-label">Sitewide Sale</span>
+                </li>
                 <li data-tab="flashdrop" data-title="Flash Spotlight Drop" class="admin-only">
                     <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2">
@@ -360,6 +368,22 @@
                     </div>
                     <span class="qa-arrow">&rsaquo;</span>
                 </div>
+                <button type="button" class="quick-action-card admin-only" style="text-align: left; font: inherit;"
+                    onclick="document.querySelector('nav li[data-tab=\'sales\']')?.click()">
+                    <span class="qa-icon bronze-glow" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round">
+                            <path d="M5 19 19 5" />
+                            <circle cx="7.5" cy="7.5" r="2.5" />
+                            <circle cx="16.5" cy="16.5" r="2.5" />
+                        </svg>
+                    </span>
+                    <span class="qa-info">
+                        <strong>Sitewide Sale</strong>
+                        <span>Schedule and manage store discounts</span>
+                    </span>
+                    <span class="qa-arrow" aria-hidden="true">&rsaquo;</span>
+                </button>
                 <div class="quick-action-card admin-only"
                     onclick="const t = document.querySelector('nav li[data-tab=\'flashdrop\']'); if(t) t.click();">
                     <div class="qa-icon bronze-glow">
@@ -421,6 +445,7 @@
                         onchange="renderOrders()">
                         <option value="actual">Actual Orders (Confirmed/Paid)</option>
                         <option value="payment_review">Payments Needing Review</option>
+                        <option value="dispatch_review">Shipments Needing Attention</option>
                         <option value="all">All Orders (Including Pending/Abandoned)</option>
                     </select>
                 </div>
@@ -666,27 +691,62 @@
             </div>
         </div>
 
-        <!-- Flash Spotlight Drop Tab -->
+        <!-- Sitewide Sale Tab -->
         <div id="tab-sales" class="tab-content">
-            <div class="section-card">
-                <h2>Sitewide Sale</h2>
-                <form id="siteSaleForm" style="display:grid;gap:1rem;max-width:36rem">
-                    <label><input name="enabled" type="checkbox"> Enable or schedule sale</label>
-                    <label>Campaign name <input name="name" type="text" maxlength="100"></label>
-                    <label>Discount (%) <input name="percent" type="number" min="1" max="90" step="1"></label>
-                    <label>Collections <input name="collections" type="text" placeholder="All collections if left blank"></label>
-                    <small>Separate collection names with commas. Preorders and already discounted products are excluded.</small>
-                    <label>Starts (IST) <input name="startsAt" type="datetime-local"></label>
-                    <label>Ends (IST) <input name="endsAt" type="datetime-local"></label>
-                    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+            <section class="sale-settings-card" aria-labelledby="siteSaleHeading">
+                <form id="siteSaleForm">
+                    <header class="sale-settings-header">
+                        <h2 id="siteSaleHeading">Sitewide Sale</h2>
+                        <label class="sale-settings-toggle">
+                            <span class="modern-toggle-switch">
+                                <input name="enabled" type="checkbox">
+                                <span class="modern-toggle-slider" aria-hidden="true"></span>
+                            </span>
+                            Enable sale
+                        </label>
+                    </header>
+                    <fieldset class="sale-settings-group">
+                        <legend>Campaign details</legend>
+                        <div class="sale-settings-grid">
+                            <div>
+                                <label for="siteSaleName">Campaign name</label>
+                                <input id="siteSaleName" name="name" type="text" maxlength="100">
+                            </div>
+                            <div>
+                                <label for="siteSalePercent">Discount (%)</label>
+                                <input id="siteSalePercent" name="percent" type="number" min="1" max="90" step="1">
+                            </div>
+                            <div class="sale-settings-wide-field">
+                                <label for="siteSaleCollections">Collections</label>
+                                <input id="siteSaleCollections" name="collections" type="text"
+                                    placeholder="All eligible collections if blank" aria-describedby="siteSaleCollectionsHelp">
+                                <small id="siteSaleCollectionsHelp">Separate collection names with commas. Preorders and already discounted products are excluded.</small>
+                            </div>
+                        </div>
+                    </fieldset>
+                    <fieldset class="sale-settings-group">
+                        <legend>Schedule</legend>
+                        <div class="sale-settings-grid">
+                            <div>
+                                <label for="siteSaleStart">Starts (IST)</label>
+                                <input id="siteSaleStart" name="startsAt" type="datetime-local">
+                            </div>
+                            <div>
+                                <label for="siteSaleEnd">Ends (IST)</label>
+                                <input id="siteSaleEnd" name="endsAt" type="datetime-local">
+                            </div>
+                        </div>
+                    </fieldset>
+                    <p id="siteSaleStatus" class="sale-settings-status" role="status"></p>
+                    <div class="form-actions sale-settings-actions">
+                        <button type="button" id="endSiteSale" class="btn-secondary">End now</button>
                         <button type="button" id="previewSiteSale" class="btn-secondary">Preview</button>
                         <button type="submit" class="btn-primary">Save sale</button>
-                        <button type="button" id="endSiteSale" class="btn-secondary">End now</button>
                     </div>
-                    <p id="siteSaleStatus" role="status"></p>
                 </form>
-            </div>
+            </section>
         </div>
+        <!-- Flash Spotlight Drop Tab -->
         <div id="tab-flashdrop" class="tab-content">
             <div
                 style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
@@ -1040,8 +1100,7 @@
                             <div id="pv_stock_line"
                                 style="display: none; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.4rem;">
                                 <span style="color: #9E968D;">Stock Availability</span>
-                                <strong style="color: #FFF;">Only <span id="pv_remaining"></span> Pieces
-                                    Remaining</strong>
+                                <strong id="pv_remaining" style="color: #FFF;"></strong>
                             </div>
                             <div aria-hidden="true"
                                 style="display: none; width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 10px; overflow: hidden;">
@@ -2286,7 +2345,7 @@
 
     <script src="/admin/env.js"></script>
     <script src="/spotlight-compat.js"></script>
-    <script src="/admin/admin.js?v=15"></script>
+    <script src="/admin/admin.js?v=17"></script>
 </body>
 
 </html>

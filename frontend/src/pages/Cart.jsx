@@ -6,6 +6,7 @@ import ShippingTimeline from '../components/ShippingTimeline';
 import { API_BASE_URL } from '../data/config';
 import { cartSaleSavings, useSale } from '../context/SaleContext';
 import { fetchWithAuth } from '../utils/apiClient';
+import { createProductSlug } from '../utils/slugHelper';
 
 const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser, wishlist = [], toggleWishlist, profileIncomplete }) => {
     const navigate = useNavigate();
@@ -149,12 +150,16 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                             {cart.map((item, idx) => {
                                 const itemQty = item.quantity || 1;
                                 const itemTotal = item.price * itemQty;
+                                const slug = createProductSlug(item.name);
+                                const productPath = `/product/${encodeURIComponent(item.id)}${slug ? `/${slug}` : ''}`;
                                 return (
-                                    <div key={idx} className="cart-item-row" style={{display:'flex', alignItems:'center', gap:'0.85rem', marginBottom: idx === cart.length - 1 ? 0 : '0.85rem', borderBottom: idx === cart.length - 1 ? 'none' : '1px solid #eee', paddingBottom: idx === cart.length - 1 ? 0 : '0.85rem', flexWrap:'wrap'}}>
-                                        <img src={item.imageUrl} alt={item.name} style={{width:'56px', height:'56px', borderRadius:'8px', objectFit:'cover'}} />
+                                    <div key={JSON.stringify([item.id, item.size || '', Boolean(item.isPreorder)])} className="cart-item-row" style={{display:'flex', alignItems:'center', gap:'0.85rem', marginBottom: idx === cart.length - 1 ? 0 : '0.85rem', borderBottom: idx === cart.length - 1 ? 'none' : '1px solid #eee', paddingBottom: idx === cart.length - 1 ? 0 : '0.85rem', flexWrap:'wrap'}}>
+                                        <Link to={productPath} aria-label={`View ${item.name}`}>
+                                            <img src={item.imageUrl} alt="" style={{width:'56px', height:'56px', borderRadius:'8px', objectFit:'cover'}} />
+                                        </Link>
                                         <div style={{flex: 1, minWidth: '140px'}}>
                                             <h3 style={{fontFamily:'var(--font-body)', fontWeight:'500', fontSize:'0.88rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap'}}>
-                                                {item.name}
+                                                <Link to={productPath} className="cart-product-link">{item.name}</Link>
                                                 {item.isPreorder && (
                                                     <span style={{ fontSize: '0.65rem', background: '#f3e8ff', color: '#7e22ce', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', letterSpacing: '0.5px' }}>
                                                         PREORDER

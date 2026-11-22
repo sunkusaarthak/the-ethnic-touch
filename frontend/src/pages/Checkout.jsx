@@ -39,11 +39,9 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [pendingPaymentOrder, setPendingPaymentOrder] = useState(null);
     const [verifyingPayment, setVerifyingPayment] = useState(false);
-    const [shippingCost, setShippingCost] = useState(0);
-    const [shippingLoading, setShippingLoading] = useState(false);
-    const [isServiceable, setIsServiceable] = useState(true);
+    const [shippingQuote, setShippingQuote] = useState(null);
+    const [quoteAttempt, setQuoteAttempt] = useState(0);
     const [shippingTimeline, setShippingTimeline] = useState(null);
-    const [debouncedZipCode, setDebouncedZipCode] = useState(null);
     const navigate = useNavigate();
     const paymentCompleteRef = useRef(false);
 
@@ -132,13 +130,26 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
     const saleAmount = cartSaleSavings(cart, catalog, sale);
     const couponAmount = discount?.amt || 0;
     const saleWins = saleAmount > 0 && saleAmount >= couponAmount;
-    let finalTotal = subtotal - Math.max(saleAmount, couponAmount);
-    const reviewKey = JSON.stringify([cart, discount?.code, selectedAddressID, checkoutType,
-        paymentMethod, preorderFulfilment, sale?.endsAt]);
+    const netPaise = Math.round((subtotal - Math.max(saleAmount, couponAmount)) * 100);
+    const activeAddr = authUser && addresses.length > 0 ? addresses.find(a => a.id === selectedAddressID) : null;
+    const deliveryType = isPreorder ? (preorderFulfilment === 'HOME_DELIVERY' ? 'delivery' : 'pickup') : checkoutType;
+    const needsQuote = deliveryType !== 'pickup';
+    const pin = (activeAddr?.zipCode || '').trim();
+    const city = (activeAddr?.city || '').trim().toLowerCase();
+    const isInstantDeliveryBlocked = deliveryType === 'hyderabad_instant' && activeAddr &&
+        (!(city === 'hyderabad' || city === 'secunderabad') || !/^500\d{3}$/.test(pin));
+    const cartSize = (cart || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
+    const quoteQuery = needsQuote && activeAddr && !isInstantDeliveryBlocked && cartSize > 0
+        ? new URLSearchParams({ checkout_type: deliveryType, pincode: pin, city, cart_size: cartSize, net_paise: netPaise }).toString()
+        : '';
+    const activeQuote = quoteQuery && shippingQuote?.query === quoteQuery ? shippingQuote : null;
+    const shippingLoading = Boolean(quoteQuery && !activeQuote);
+    const applicableShipping = activeQuote?.status === 'ready' ? activeQuote.chargePaise / 100 : 0;
+    const finalTotal = netPaise / 100 + applicableShipping;
+    const reviewKey = JSON.stringify([cart, discount?.code, selectedAddressID, deliveryType,
+        paymentMethod, preorderFulfilment, sale?.endsAt, quoteQuery, applicableShipping]);
     const [reviewedPrice, setReviewedPrice] = useState(null);
     const reviewedTotal = reviewedPrice?.key === reviewKey ? reviewedPrice.totalPaise / 100 : null;
-
-    const activeAddr = authUser && addresses.length > 0 ? addresses.find(a => a.id === selectedAddressID) : null;
 
     useEffect(() => {
         fetch(`${API_BASE_URL}/api/checkout/shipping-timeline`)
@@ -150,44 +161,25 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
     }, []);
 
     useEffect(() => {
-        const handler = setTimeout(() => {
-            setDebouncedZipCode(activeAddr?.zipCode);
-        }, 500);
-        return () => clearTimeout(handler);
-    }, [activeAddr?.zipCode]);
-
-    useEffect(() => {
-        if (checkoutType === 'delivery' && debouncedZipCode) {
-            setShippingLoading(true);
-            const cartSize = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
-            fetch(`${API_BASE_URL}/api/checkout/shipping-estimate?pincode=${debouncedZipCode}&cart_size=${cartSize}`)
-                .then(res => res.ok ? res.json() : null)
-                .then(data => {
-                    if (data) {
-                        setIsServiceable(data.serviceable);
-                        setShippingCost(data.charge || 0);
-                    }
+        if (!quoteQuery) return;
+        const controller = new AbortController();
+        const timer = setTimeout(() => {
+            fetch(`${API_BASE_URL}/api/checkout/shipping-estimate?${quoteQuery}`, { signal: controller.signal, cache: 'no-store' })
+                .then(res => {
+                    if (!res.ok) throw new Error('Delivery quote unavailable');
+                    return res.json();
                 })
-                .catch(err => console.error("Failed to fetch estimate", err))
-                .finally(() => setShippingLoading(false));
-        } else {
-            setIsServiceable(true);
-            setShippingCost(0);
-            setShippingLoading(false);
-        }
-    }, [checkoutType, debouncedZipCode]);
-
-    const threshold = checkoutConfig.free_shipping_threshold || 1449.0;
-    let applicableShipping = 0;
-    if (checkoutType === 'delivery' && finalTotal < threshold && isServiceable) {
-        applicableShipping = shippingCost;
-    }
-    finalTotal += applicableShipping;
-    const isCityHyderabad = activeAddr && (
-        activeAddr.city.toLowerCase().trim() === 'hyderabad' ||
-        activeAddr.city.toLowerCase().trim() === 'secunderabad'
-    );
-    const isInstantDeliveryBlocked = checkoutType === 'hyderabad_instant' && activeAddr && !isCityHyderabad;
+                .then(data => {
+                    if (controller.signal.aborted) return;
+                    if (data.serviceable && (!Number.isSafeInteger(data.chargePaise) || data.chargePaise < 0)) throw new Error('Invalid delivery quote');
+                    setShippingQuote({ query: quoteQuery, status: data.serviceable ? 'ready' : 'unavailable', chargePaise: data.chargePaise });
+                })
+                .catch(() => {
+                    if (!controller.signal.aborted) setShippingQuote({ query: quoteQuery, status: 'error' });
+                });
+        }, 350);
+        return () => { clearTimeout(timer); controller.abort(); };
+    }, [quoteQuery, quoteAttempt]);
 
     useEffect(() => {
         if (authUser) {
@@ -256,6 +248,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
         if (!email || !authUser.emailVerified) {
             return showAlert('Verify your account email before placing an order.', 'Verified email required', 'warning');
         }
+        if (needsQuote && activeQuote?.status !== 'ready') return;
 
         let order = {};
         if (isPreorder) {
@@ -1111,22 +1104,15 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         {saleWins && <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2E7D32' }}>
                             <span>{sale.name} savings</span><span>-₹{saleAmount.toLocaleString('en-IN')}</span>
                         </div>}
-                        {(checkoutType === 'delivery' || checkoutType === 'pickup') && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6C6863' }}>
-                                <span>Shipping:</span>
-                                <span style={{ fontWeight: '500', color: (checkoutType === 'delivery' && applicableShipping > 0) ? '#2D2A26' : '#2E7D32', display: 'flex', alignItems: 'center' }}>
-                                    {checkoutType === 'pickup' ? 'FREE' : (
-                                        shippingLoading ? (
-                                            <Loader2 size={16} color="#8F5E36" style={{ animation: 'spin-checkout 1s linear infinite' }} />
-                                        ) : (
-                                            applicableShipping > 0 ? `₹${applicableShipping.toLocaleString('en-IN')}` : 'FREE'
-                                        )
-                                    )}
-                                </span>
-                            </div>
-                        )}
-                        {checkoutType !== 'pickup' && <ShippingTimeline cutoffHour={checkoutConfig.shipping_cutoff_hour || 16} />}
-                        {checkoutType === 'pickup' && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6C6863' }}>
+                            <span>Shipping:</span>
+                            <span aria-live="polite">
+                                {!needsQuote ? 'FREE' : shippingLoading ? 'Calculating…' : activeQuote?.status === 'ready'
+                                    ? (applicableShipping > 0 ? `₹${applicableShipping.toLocaleString('en-IN')}` : 'FREE') : '—'}
+                            </span>
+                        </div>
+                        {needsQuote && <ShippingTimeline cutoffHour={checkoutConfig.shipping_cutoff_hour || 16} />}
+                        {!needsQuote && (
                             <div style={{ marginTop: '0.3rem', padding: '0.5rem', backgroundColor: '#F5F9F1', borderRadius: '4px', fontSize: '0.75rem', color: '#2E7D32', border: '1px solid rgba(46, 125, 50, 0.2)' }}>
                                 <strong>Pickup Timeline:</strong> {paymentMethod === 'offline_qr' ? `You can pick up within ${checkoutConfig.pickup_hold_hours || 48} hours once placed` : 'You can pick up anytime once placed'}
                             </div>
@@ -1139,11 +1125,13 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(212, 163, 115, 0.35)', paddingTop: '0.65rem', marginTop: '0.3rem' }}>
                             <span style={{ fontWeight: 600, color: '#2D2A26', fontSize: '0.92rem' }}>Total Amount:</span>
-                            <strong style={{ fontSize: '1.1rem', color: '#8F5E36', fontFamily: 'var(--font-body)' }}>₹{(reviewedTotal ?? finalTotal).toLocaleString('en-IN')}</strong>
+                            <strong style={{ fontSize: '1.1rem', color: '#8F5E36', fontFamily: 'var(--font-body)' }}>
+                                {needsQuote && activeQuote?.status !== 'ready' ? '—' : `₹${(reviewedTotal ?? finalTotal).toLocaleString('en-IN')}`}
+                            </strong>
                         </div>
                     </div>
 
-                    {checkoutType !== 'pickup' && addresses.length === 0 && (
+                    {needsQuote && addresses.length === 0 && (
                         <div style={{
                             marginTop: '1rem',
                             padding: '0.65rem 0.85rem',
@@ -1165,7 +1153,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         </div>
                     )}
 
-                    {checkoutType === 'delivery' && activeAddr?.zipCode && !isServiceable && (
+                    {needsQuote && activeQuote?.status === 'unavailable' && (
                         <div style={{
                             marginTop: '1rem',
                             padding: '0.65rem 0.85rem',
@@ -1181,24 +1169,27 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                             <span>Delivery is not serviceable at this pincode ({activeAddr.zipCode}).</span>
                         </div>
                     )}
+                    {activeQuote?.status === 'error' && (
+                        <p role="alert">Could not get a delivery quote. <button type="button" onClick={() => {
+                            setShippingQuote(null);
+                            setQuoteAttempt(attempt => attempt + 1);
+                        }}>Retry quote</button></p>
+                    )}
 
                     <style>{`
                         @keyframes spin-checkout { 100% { transform: rotate(360deg); } }
                     `}</style>
                     <button
                         onClick={() => {
-                            if (checkoutType !== 'pickup' && addresses.length === 0) {
+                            if (needsQuote && addresses.length === 0) {
                                 navigate('/profile?action=add_address&redirect=/checkout');
                                 return;
                             }
-                            if (checkoutType === 'delivery' && !isServiceable) return;
                             placeOrder();
                         }}
                         disabled={
-                            ordering ||
-                            (checkoutType !== 'pickup' && addresses.length === 0) ||
-                            (checkoutType === 'hyderabad_instant' && isInstantDeliveryBlocked) ||
-                            (checkoutType === 'delivery' && !isServiceable)
+                            ordering || verifyingPayment ||
+                            (needsQuote && addresses.length > 0 && activeQuote?.status !== 'ready')
                         }
                         style={{
                             marginTop: '0.9rem',
@@ -1220,12 +1211,11 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                             boxShadow: '0 4px 15px rgba(212, 163, 115, 0.25)',
                             transition: 'all 0.3s ease'
                         }}
-                        disabled={ordering || verifyingPayment || isInstantDeliveryBlocked}
                     >
                         {(ordering || verifyingPayment) && <Loader2 size={16} color="#FFF" style={{ animation: 'spin-checkout 1s linear infinite' }} />}
                         {verifyingPayment ? "Processing Payment..." :
                             ordering ? "Verifying Stock..." :
-                                (checkoutType !== 'pickup' && addresses.length === 0) ? "Add Delivery Address" :
+                                (needsQuote && addresses.length === 0) ? "Add Delivery Address" :
                                     checkoutType === 'pickup' && paymentMethod === 'offline_qr' ? "Book Store Pickup Pass" :
                                         "Secure Checkout & Prepay"}
                     </button>

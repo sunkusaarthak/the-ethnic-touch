@@ -280,9 +280,15 @@ func isStorePickup(order *models.Order) bool {
 	if strings.EqualFold(order.TrackingNumber, "STORE-PICKUP") {
 		return true
 	}
+	if order.FulfilmentType == models.FulfilmentTypePreorderHomeDelivery || ct == "delivery" || ct == "hyderabad_instant" {
+		return false
+	}
 	addr := strings.ToLower(order.ShippingAddress)
 	name := strings.ToLower(order.ShippingName)
-	if strings.Contains(addr, "pickup") || strings.Contains(addr, "boutique") || strings.Contains(addr, "khajaguda") || strings.Contains(name, "store pickup") || strings.Contains(name, "pickup customer") {
+	if strings.Contains(addr, "pickup") || strings.Contains(addr, "store") || strings.Contains(addr, "khajaguda") || strings.Contains(addr, "lake") || strings.Contains(addr, "financial district") || strings.Contains(name, "store pickup") || strings.Contains(name, "pickup customer") {
+		return true
+	}
+	if order.ShippingPhone == "0000000000" && (strings.Contains(addr, "hyderabad") || strings.Contains(addr, "telangana")) {
 		return true
 	}
 	return false
@@ -309,16 +315,24 @@ const defaultProductImage = "https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev
 // Helper: resolve product image URL to absolute URL
 func resolveProductImageURL(rawURL string) string {
 	rawURL = strings.TrimSpace(rawURL)
-	if rawURL == "" || strings.EqualFold(rawURL, "test") || !strings.Contains(rawURL, "/") {
+	if rawURL == "" || strings.EqualFold(rawURL, "test") {
 		return defaultProductImage
 	}
 	if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
 		return rawURL
 	}
-	if strings.HasPrefix(rawURL, "/") {
-		return "https://www.theethnictouch.com" + rawURL
+	clean := strings.TrimPrefix(rawURL, "./")
+	clean = strings.TrimPrefix(clean, "/")
+	if strings.HasPrefix(clean, "images/") {
+		return "https://www.theethnictouch.com/" + clean
 	}
-	return "https://www.theethnictouch.com/" + rawURL
+	if strings.HasPrefix(clean, "products/") {
+		return "https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/" + clean
+	}
+	if strings.Contains(clean, ".png") || strings.Contains(clean, ".jpg") || strings.Contains(clean, ".jpeg") || strings.Contains(clean, ".webp") {
+		return "https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/products/" + clean
+	}
+	return defaultProductImage
 }
 
 // SendOrderConfirmation handles sending confirmation emails based on context:
@@ -505,11 +519,22 @@ func (s *emailService) GeneratePreview(previewType string) (string, string, erro
 // -------------------------------------------------------------------------
 
 const (
-	footerBrandLogoHTML = `<a href="https://www.theethnictouch.com" style="text-decoration:none; display:inline-block;"><img src="https://www.theethnictouch.com/navbar-logo.png" alt="The Ethnic Touch" width="46" height="35" style="display:block; margin:0 auto 8px auto; max-height:35px; width:auto; object-fit:contain; border:0;" /></a>`
+	footerBrandLogoHTML = `<a href="https://www.theethnictouch.com" style="text-decoration:none; display:inline-block; margin-bottom:8px;">
+		<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto; border-collapse:collapse;">
+			<tr>
+				<td style="vertical-align:middle; padding-right:10px;">
+					<img src="https://www.theethnictouch.com/navbar-logo.png" alt="The Ethnic Touch" width="38" height="29" style="display:block; max-height:29px; width:auto; border:0;" />
+				</td>
+				<td style="border-left:1.5px solid #D4A373; height:22px; padding-left:10px; vertical-align:middle;">
+					<span style="font-family:'Playfair Display',Georgia,serif; font-size:18px; font-style:italic; font-weight:600; color:#1E1A17; letter-spacing:0.3px; display:block; line-height:1;">The Ethnic Touch</span>
+				</td>
+			</tr>
+		</table>
+	</a>`
 	iconBoxSVG     = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:text-bottom; margin-right:4px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`
 	iconPinSVG     = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:text-bottom; margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`
 	iconClockSVG   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:text-bottom; margin-right:4px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`
-	iconTruckSVG   = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:text-bottom; margin-right:4px;"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`
+	iconTruckSVG   = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:text-bottom; margin-right:4px;"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`
 	iconShieldSVG  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:text-bottom; margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`
 	iconPhoneSVG   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:3px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>`
 	iconMailSVG    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8C5835" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:3px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`
@@ -556,7 +581,7 @@ func renderOrderItemsTable(items []models.OrderItem) string {
 	sb.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-top: 12px; width: 100%;">`)
 	for _, it := range items {
 		name := it.ProductName
-		if name == "" {
+		if name == "" || strings.EqualFold(name, "test") {
 			name = "Jaipur Pure Cotton Kurti"
 		}
 		itemTotal := it.PriceAtQty * float64(it.Quantity)
@@ -571,7 +596,7 @@ func renderOrderItemsTable(items []models.OrderItem) string {
 		}
 
 		resolvedImg := resolveProductImageURL(it.ImageURL)
-		imgTag := fmt.Sprintf(`<a href="%s" target="_blank" style="text-decoration:none; display:block;"><img src="%s" alt="%s" width="56" height="70" style="display:block; width:56px; height:70px; object-fit:cover; border-radius:6px; border:1px solid #D4A373; box-shadow:0 2px 6px rgba(140,88,53,0.1);" /></a>`, prodLink, resolvedImg, name)
+		imgTag := fmt.Sprintf(`<a href="%s" target="_blank" style="text-decoration:none; display:block;"><img src="%s" alt="%s" width="56" height="70" style="display:block; width:56px; height:70px; object-fit:cover; border-radius:6px; border:1px solid #D4A373; background:#FAF6F0; box-shadow:0 2px 6px rgba(140,88,53,0.1);" /></a>`, prodLink, resolvedImg, name)
 
 		sb.WriteString(fmt.Sprintf(`
 		<tr>
@@ -910,10 +935,9 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 
 		<!-- Footer -->
 		<tr>
-			<td class="footer-cell" style="background: linear-gradient(180deg, #FAF7F2 0%%, #F5EDE2 100%%); border-top: 1.5px solid #D4A373; padding: 22px 20px; text-align: center; font-size: 11px; color: #7A726A; line-height: 1.7;">
-				<div style="margin-bottom: 6px;">%s</div>
-				<strong style="color: #1E1A17; font-size: 12px; letter-spacing: 1px;">THE ETHNIC TOUCH</strong><br/>
-				Near Khajaguda Lake, Financial District, Hyderabad, India<br/>
+			<td class="footer-cell" style="background: linear-gradient(180deg, #FAF7F2 0%%, #F5EDE2 100%%); border-top: 1.5px solid #D4A373; padding: 22px 20px; text-align: center; font-size: 11.5px; color: #6C655E; line-height: 1.7;">
+				<div style="margin-bottom: 8px;">%s</div>
+				Authentic Handcrafted Jaipuri Ethnic Wear &bull; Near Khajaguda Lake, Financial District, Hyderabad<br/>
 				Open Daily: 10:30 AM to 9:00 PM<br/>
 				<a href="https://www.theethnictouch.com" style="color: #8C5835; text-decoration: none; font-weight: 600;">www.theethnictouch.com</a> &nbsp;|&nbsp; 
 				<a href="https://share.google/eSxLvWitpLTqdQkn3" style="color: #8C5835; text-decoration: none; font-weight: 600;">Hyderabad Store Location</a>
@@ -1133,10 +1157,10 @@ func renderOrderShippedHTML(order *models.Order, trackingNumber string) string {
 
 		<!-- Footer -->
 		<tr>
-			<td class="footer-cell" style="background: linear-gradient(180deg, #FAF7F2 0%%, #F5EDE2 100%%); border-top: 1.5px solid #D4A373; padding: 22px 20px; text-align: center; font-size: 11px; color: #7A726A; line-height: 1.7;">
-				<div style="margin-bottom: 6px;">%s</div>
-				<strong style="color: #1E1A17; font-size: 12px; letter-spacing: 1px;">THE ETHNIC TOUCH</strong><br/>
-				Authentic Handcrafted Jaipuri Kurtis &bull; Near Khajaguda Lake, Hyderabad, India<br/>
+			<td class="footer-cell" style="background: linear-gradient(180deg, #FAF7F2 0%%, #F5EDE2 100%%); border-top: 1.5px solid #D4A373; padding: 22px 20px; text-align: center; font-size: 11.5px; color: #6C655E; line-height: 1.7;">
+				<div style="margin-bottom: 8px;">%s</div>
+				Authentic Handcrafted Jaipuri Ethnic Wear &bull; Near Khajaguda Lake, Financial District, Hyderabad<br/>
+				Open Daily: 10:30 AM to 9:00 PM<br/>
 				<a href="https://www.theethnictouch.com" style="color: #8C5835; text-decoration: none; font-weight: 600;">www.theethnictouch.com</a> &nbsp;|&nbsp; 
 				<a href="https://share.google/eSxLvWitpLTqdQkn3" style="color: #8C5835; text-decoration: none; font-weight: 600;">Hyderabad Store Location</a>
 			</td>
@@ -1296,10 +1320,9 @@ func renderOrderPickedUpHTML(order *models.Order) string {
 
 		<!-- Footer -->
 		<tr>
-			<td class="footer-cell" style="background: linear-gradient(180deg, #FAF7F2 0%%, #F5EDE2 100%%); border-top: 1.5px solid #D4A373; padding: 22px 20px; text-align: center; font-size: 11px; color: #7A726A; line-height: 1.7;">
-				<div style="margin-bottom: 6px;">%s</div>
-				<strong style="color: #1E1A17; font-size: 12px; letter-spacing: 1px;">THE ETHNIC TOUCH</strong><br/>
-				Near Khajaguda Lake, Financial District, Hyderabad, India<br/>
+			<td class="footer-cell" style="background: linear-gradient(180deg, #FAF7F2 0%%, #F5EDE2 100%%); border-top: 1.5px solid #D4A373; padding: 22px 20px; text-align: center; font-size: 11.5px; color: #6C655E; line-height: 1.7;">
+				<div style="margin-bottom: 8px;">%s</div>
+				Authentic Handcrafted Jaipuri Ethnic Wear &bull; Near Khajaguda Lake, Financial District, Hyderabad<br/>
 				Open Daily: 10:30 AM to 9:00 PM<br/>
 				<a href="https://www.theethnictouch.com" style="color: #8C5835; text-decoration: none; font-weight: 600;">www.theethnictouch.com</a> &nbsp;|&nbsp; 
 				<a href="https://share.google/eSxLvWitpLTqdQkn3" style="color: #8C5835; text-decoration: none; font-weight: 600;">Hyderabad Store Location</a>

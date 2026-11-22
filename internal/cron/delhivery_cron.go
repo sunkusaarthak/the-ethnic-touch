@@ -5,11 +5,10 @@ import (
 	"log"
 	"time"
 
-	"ethnictouch/internal/repository"
 	"ethnictouch/internal/service"
 )
 
-func StartDelhiveryCron(ctx context.Context, orderRepo repository.OrderRepository, delhiverySvc service.DelhiveryService) {
+func StartDelhiveryCron(ctx context.Context, orderSvc service.OrderService) {
 	go func() {
 		istLocation := time.FixedZone("IST", 5*3600+30*60)
 		for {
@@ -34,45 +33,11 @@ func StartDelhiveryCron(ctx context.Context, orderRepo repository.OrderRepositor
 
 			// Run task
 			log.Println("[Cron] Starting Delhivery batch pickup...")
-			
-			orders, err := orderRepo.GetPendingDeliveryOrders()
+			dispatched, failed, err := orderSvc.DispatchPendingOrders("")
 			if err != nil {
-				log.Printf("[Cron] Error fetching pending delivery orders: %v", err)
-				continue
-			}
-
-			if len(orders) == 0 {
-				log.Println("[Cron] No pending orders for Delhivery batch pickup.")
-				continue
-			}
-
-			// Implement exponential backoff for the batch pickup
-			maxRetries := 3
-			for i := 0; i < maxRetries; i++ {
-				err = delhiverySvc.BatchPickup(orders)
-				if err == nil {
-					log.Printf("[Cron] Successfully completed batch pickup for %d orders.", len(orders))
-					
-					// Mark orders as picked up internally
-					for _, o := range orders {
-						orderRepo.UpdateOrderStatus(o.ID, "shipped", o.RazorpayPaymentID, "DUMMY_TRACKING", time.Now().Format(time.RFC3339), o.UnlockedGift)
-					}
-					break
-				}
-				
-				log.Printf("[Cron] Batch pickup failed (attempt %d/%d): %v", i+1, maxRetries, err)
-				backoffTimer := time.NewTimer(time.Duration(2<<i) * time.Minute)
-				select {
-				case <-ctx.Done():
-					backoffTimer.Stop()
-					return
-				case <-backoffTimer.C:
-				}
-			}
-
-			if err != nil {
-				log.Printf("[ADMIN ALERT] CRITICAL: Delhivery batch pickup completely failed after retries! Pushing to tomorrow.")
-				// We do nothing here; the orders remain "paid" and will be picked up tomorrow.
+				log.Printf("[Cron] Delhivery batch dispatch: %d shipped, %d need attention: %v", dispatched, failed, err)
+			} else {
+				log.Printf("[Cron] Delhivery batch dispatch complete: %d dispatched, %d failed/reverted", dispatched, failed)
 			}
 		}
 	}()

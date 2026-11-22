@@ -18,6 +18,7 @@ import (
 
 	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/models"
+	"ethnictouch/internal/repository"
 	"ethnictouch/internal/service"
 	"ethnictouch/internal/utils"
 )
@@ -70,6 +71,10 @@ func (h *OrderHandler) HandleCheckout(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]any{"error": changed.Error(), "totalPaise": changed.TotalPaise})
+			return
+		}
+		if errors.Is(err, service.ErrCarrierNotConfigured) {
+			writeOrderError(w, http.StatusServiceUnavailable, "Delivery quotes are temporarily unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -223,6 +228,13 @@ func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if orderID != "" {
 		if order, ok := h.getAuthorizedOrder(w, r, orderID, isStaff); ok {
+			if r.URL.Query().Get("details") == "1" {
+				if err := h.svc.LoadOrderDetails(order); err != nil {
+					log.Printf("Could not load order details: %v", err)
+					writeOrderError(w, http.StatusInternalServerError, "Could not load order details")
+					return
+				}
+			}
 			json.NewEncoder(w).Encode(order)
 		}
 		return
@@ -306,11 +318,6 @@ func (h *OrderHandler) HandleConfirmPickup(w http.ResponseWriter, r *http.Reques
 	}
 
 	if order.PaymentMethod == "offline_qr" {
-		if h.profileSvc != nil {
-			if p, err := h.profileSvc.GetProfileByEmail(order.CustomerEmail); err == nil && p != nil && p.UserID != "" {
-				h.profileSvc.AddSpinTicket(p.UserID, 1)
-			}
-		}
 		h.configSvc.IncrementOrderKurthiCounter()
 	}
 
@@ -324,45 +331,44 @@ func (h *OrderHandler) HandleShippingEstimate(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	pincode := r.URL.Query().Get("pincode")
-	if pincode == "" {
-		http.Error(w, "Pincode is required", http.StatusBadRequest)
-		return
+	params := r.URL.Query()
+	checkoutType := params.Get("checkout_type")
+	if checkoutType == "" {
+		checkoutType = "delivery"
 	}
-
-	cartSizeStr := r.URL.Query().Get("cart_size")
-	cartSize := 1
-	if cartSizeStr != "" {
-		parsed, err := strconv.Atoi(cartSizeStr)
-		if err == nil && parsed > 0 {
-			cartSize = parsed
+	quantity := 1
+	var netPaise int64
+	var err error
+	if params.Has("cart_size") {
+		quantity, err = strconv.Atoi(params.Get("cart_size"))
+		if err != nil {
+			writeOrderError(w, http.StatusBadRequest, "Invalid cart quantity")
+			return
 		}
 	}
-	weightGrams := cartSize * 500
-
-	serviceable, estCost, err := h.delhiverySvc.CheckServiceability(pincode, weightGrams)
-	if err != nil {
-		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
+	if params.Has("net_paise") {
+		netPaise, err = strconv.ParseInt(params.Get("net_paise"), 10, 64)
+		if err != nil {
+			writeOrderError(w, http.StatusBadRequest, "Invalid quote amount")
+			return
+		}
+	}
+	chargePaise, err := h.svc.QuoteDelivery(checkoutType, params.Get("city"), strings.TrimSpace(params.Get("pincode")), quantity, netPaise)
+	if errors.Is(err, service.ErrInvalidDeliveryQuote) {
+		writeOrderError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	if !serviceable {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"serviceable": false,
-		})
+	if err != nil && !errors.Is(err, service.ErrDeliveryNotServiceable) {
+		log.Printf("Delivery quote failed: %v", err)
+		writeOrderError(w, http.StatusServiceUnavailable, "Delivery quotes are temporarily unavailable")
 		return
 	}
-
-	charge := estCost
-	if charge < 59.0 {
-		charge = 59.0
-	}
-
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"serviceable": true,
-		"charge":      charge,
+		"serviceable": err == nil,
+		"charge":      float64(chargePaise) / 100,
+		"chargePaise": chargePaise,
 	})
 }
 
@@ -399,7 +405,7 @@ func (h *OrderHandler) HandleDelhiveryWebhook(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	payload, err := io.ReadAll(r.Body)
+	payload, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
@@ -407,45 +413,80 @@ func (h *OrderHandler) HandleDelhiveryWebhook(w http.ResponseWriter, r *http.Req
 	defer r.Body.Close()
 
 	signature := r.Header.Get("X-Delhivery-Signature")
-	if !h.delhiverySvc.ValidateWebhookSignature(payload, signature) {
-		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+	signed := signature != "" && h.delhiverySvc.ValidateWebhookSignature(payload, signature)
+	if !signed && !h.delhiverySvc.ValidateWebhookToken(r.Header.Get("X-Delhivery-Token")) {
+		http.Error(w, "Invalid or missing webhook credentials", http.StatusUnauthorized)
 		return
 	}
 
-	var data map[string]interface{}
+	var data struct {
+		Shipment       *service.DelhiveryShipment `json:"Shipment"`
+		OrderID        string                     `json:"order_id"`
+		Status         string                     `json:"status"`
+		TrackingNumber string                     `json:"tracking_number"`
+		UpdatedAt      string                     `json:"updated_at"`
+	}
 	if err := json.Unmarshal(payload, &data); err != nil {
 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}
+	if data.Shipment != nil {
+		h.handleDelhiveryScan(w, data.Shipment)
+		return
+	}
+	if !signed {
+		http.Error(w, "Missing signature for legacy webhook", http.StatusUnauthorized)
+		return
+	}
 
-	orderID, ok := data["order_id"].(string)
-	if !ok {
+	if data.OrderID == "" {
 		http.Error(w, "Missing order_id", http.StatusBadRequest)
 		return
 	}
 
-	status, ok := data["status"].(string)
-	if !ok {
+	if data.Status == "" {
 		http.Error(w, "Missing status", http.StatusBadRequest)
 		return
 	}
 
-	internalStatus := "pending"
-	switch status {
-	case "In Transit", "Dispatched", "Picked Up":
-		internalStatus = "shipped"
-	case "Delivered":
-		internalStatus = "delivered"
-	default:
-		internalStatus = "pending"
-	}
-
-	err = h.svc.UpdateOrderStatus(orderID, internalStatus, "", "DLV_UPDATE", time.Now().Format(time.RFC3339), "")
+	err = h.svc.ApplyCarrierTrackingUpdate(data.OrderID, data.Status, data.TrackingNumber, data.UpdatedAt)
 	if err != nil {
-		http.Error(w, "Failed to update order status", http.StatusInternalServerError)
+		if errors.Is(err, service.ErrUnknownCarrierStatus) || errors.Is(err, repository.ErrInvalidShipmentTransition) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		log.Printf("Could not persist Delhivery callback: %v", err)
+		http.Error(w, "Could not apply carrier update", http.StatusServiceUnavailable)
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *OrderHandler) handleDelhiveryScan(w http.ResponseWriter, shipment *service.DelhiveryShipment) {
+	orderID, waybill := strings.TrimSpace(shipment.Reference), strings.TrimSpace(shipment.Waybill)
+	if orderID == "" || len(orderID) > 100 || waybill == "" || len(waybill) > 64 {
+		http.Error(w, "A valid order reference and waybill are required", http.StatusBadRequest)
+		return
+	}
+	event, err := shipment.Status.Event()
+	if errors.Is(err, service.ErrUnknownScan) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if err != nil {
+		http.Error(w, "Invalid carrier timestamp", http.StatusBadRequest)
+		return
+	}
+	if err := h.svc.RecordShipmentEvent(orderID, waybill, event); err != nil {
+		if errors.Is(err, repository.ErrInvalidShipmentTransition) {
+			http.Error(w, "Shipment has not been matched to an order", http.StatusConflict)
+			return
+		}
+		log.Printf("Could not save carrier scan: %v", err)
+		http.Error(w, "Could not save carrier scan", http.StatusServiceUnavailable)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -455,47 +496,55 @@ func (h *OrderHandler) HandleTriggerDelhiveryBatch(w http.ResponseWriter, r *htt
 		return
 	}
 
-	orders, err := h.svc.GetAllOrders("")
-	if err != nil {
-		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
-		return
-	}
-
-	var paidDeliveryOrders []models.Order
-	for _, o := range orders {
-		if o.Status == "paid" && (o.CheckoutType == "delivery" || o.CheckoutType == "hyderabad_instant") && (o.TrackingNumber == "" || o.TrackingNumber == "Pending checkout / paid dispatch") {
-			paidDeliveryOrders = append(paidDeliveryOrders, o)
-		}
-	}
-
-	if len(paidDeliveryOrders) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message": "No pending paid delivery orders to dispatch",
-			"count":   0,
-		})
-		return
-	}
-
-	err = h.delhiverySvc.BatchPickup(paidDeliveryOrders)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": fmt.Sprintf("Failed to execute batch pickup: %v", err),
-		})
-		return
-	}
-
-	for _, o := range paidDeliveryOrders {
-		_ = h.svc.UpdateOrderStatus(o.ID, "shipped", o.RazorpayPaymentID, "DELHIVERY_DISPATCHED", time.Now().Format(time.RFC3339), o.UnlockedGift)
-	}
-
+	orderID := strings.TrimSpace(r.URL.Query().Get("orderId"))
+	dispatched, failed, err := h.svc.DispatchPendingOrders(orderID)
 	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		log.Printf("Delhivery dispatch: %v", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Dispatch could not complete. Check the order status before retrying.", "dispatched": dispatched, "failed": failed,
+		})
+		return
+	}
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Delhivery batch pickup executed successfully",
-		"count":   len(paidDeliveryOrders),
+		"dispatched": dispatched,
+		"failed":     failed,
+		"count":      dispatched,
 	})
+}
+
+func (h *OrderHandler) HandleResolveDelhiveryDispatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeOrderError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	var req struct {
+		OrderID            string `json:"orderId"`
+		Waybill            string `json:"waybill"`
+		ConfirmedNoBooking bool   `json:"confirmedNoBooking"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+		writeOrderError(w, http.StatusBadRequest, "Invalid dispatch review request")
+		return
+	}
+	req.OrderID, req.Waybill = strings.TrimSpace(req.OrderID), strings.TrimSpace(req.Waybill)
+	if req.OrderID == "" || (req.Waybill == "") != req.ConfirmedNoBooking || len(req.Waybill) > 64 || strings.Trim(req.Waybill, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-") != "" {
+		writeOrderError(w, http.StatusBadRequest, "Provide a valid waybill or confirm that the carrier has no booking")
+		return
+	}
+	if err := h.svc.ResolveDeliveryDispatch(req.OrderID, req.Waybill); err != nil {
+		if errors.Is(err, repository.ErrInvalidShipmentTransition) {
+			writeOrderError(w, http.StatusConflict, "This order is not ready for dispatch review")
+			return
+		}
+		log.Printf("Could not resolve dispatch for %s: %v", req.OrderID, err)
+		writeOrderError(w, http.StatusServiceUnavailable, "Could not save the dispatch review")
+		return
+	}
+	log.Printf("Dispatch reviewed for %s by %v (confirmed no booking=%t)", req.OrderID, r.Context().Value(middleware.EmailKey), req.ConfirmedNoBooking)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *OrderHandler) HandleGetPreorderOrders(w http.ResponseWriter, r *http.Request) {

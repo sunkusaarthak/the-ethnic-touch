@@ -13,6 +13,7 @@ import MockPayment from './pages/MockPayment';
 import Home from './pages/Home';
 import ProductDetails from './pages/ProductDetails';
 import ProfilePage from './pages/ProfilePage';
+import OrderDetails from './pages/OrderDetails';
 import CompleteProfile from './pages/CompleteProfile';
 import Shop from './pages/Shop';
 import About from './pages/About';
@@ -28,7 +29,7 @@ import apiClient from './utils/apiClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AlertProvider, useAlert } from './context/AlertContext';
 import { CartProvider, useCart } from './context/CartContext';
-import { SaleBanner, SaleContext, saleProduct, useStoreSale } from './context/SaleContext';
+import { SaleContext, saleProduct, useStoreSale } from './context/SaleContext';
 
 const AdminRedirect = () => {
     useEffect(() => {
@@ -114,8 +115,7 @@ const AppRoutesContent = () => {
         <SaleContext.Provider value={{ sale, catalog }}>
         <BrowserRouter>
             <ScrollToTop />
-            <SaleBanner sale={sale} />
-            <AnnouncementTicker />
+            <AnnouncementTicker sale={sale} />
             <Navbar 
                 products={products}
                 cartCount={cartCount} 
@@ -164,6 +164,7 @@ const AppRoutesContent = () => {
                 <Route path="/checkout-success" element={<CheckoutSuccess />} />
                 <Route path="/spin-and-win" element={<SpinWheel />} />
                 <Route path="/profile" element={<ProfilePage authUser={authUser} setProfileIncomplete={setProfileIncomplete} />} />
+                <Route path="/profile/orders/:orderId" element={<OrderDetails />} />
                 <Route path="/complete-profile" element={<CompleteProfile authUser={authUser} />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route 

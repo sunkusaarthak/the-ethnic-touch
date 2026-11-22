@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -24,12 +25,17 @@ import (
 
 type OrderService interface {
 	CreateOrder(req *models.OrderCreateRequest) (*models.Order, string, string, error)
+	QuoteDelivery(checkoutType, city, pin string, quantity int, netPaise int64) (int64, error)
 	VerifyPayment(req *models.OrderVerifyRequest) (*models.OrderVerifyResponse, error)
 	RecordRazorpayCapture(payment RazorpayPayment) error
 	GetOrder(orderID string) (*models.Order, error)
+	LoadOrderDetails(order *models.Order) error
 	GetAllOrders(email string) ([]models.Order, error)
 	ConfirmPickup(orderID string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
+	ApplyCarrierTrackingUpdate(orderID, carrierStatus, trackingNumber, eventTime string) error
+	RecordShipmentEvent(orderID, tracking string, event models.ShipmentEvent) error
+	RefreshShipmentTracking(ctx context.Context) error
 	CancelOrder(orderID string) error
 	CleanupAbandonedOrders(cutoff time.Duration) (int, error)
 	ConfirmPreorderPickup(orderID, adminEmail, notes string) error
@@ -38,6 +44,8 @@ type OrderService interface {
 	GetPreorderPickupOrders(filter string) ([]models.Order, error)
 	GetPreorderPickupAudit(orderID string) ([]models.PreorderPickupAuditEntry, error)
 	SendPickupReadyNotification(order *models.Order, pickupCfg *models.PreorderPickupConfig) error
+	DispatchPendingOrders(orderID string) (dispatchedCount int, failedCount int, err error)
+	ResolveDeliveryDispatch(orderID, tracking string) error
 }
 
 type orderService struct {
@@ -114,6 +122,54 @@ func createRazorpayOrder(amount float64, receipt string, keyID string, keySecret
 	return rzpResp.ID, nil
 }
 
+var ErrInvalidDeliveryQuote = errors.New("invalid delivery quote details")
+
+func (s *orderService) QuoteDelivery(checkoutType, city, pin string, quantity int, netPaise int64) (int64, error) {
+	if s.configSvc == nil {
+		return 0, errors.New("checkout configuration is unavailable")
+	}
+	cfg, err := s.configSvc.GetCheckoutConfig()
+	if err != nil {
+		return 0, fmt.Errorf("load checkout configuration: %w", err)
+	}
+	if cfg == nil {
+		return 0, errors.New("checkout configuration is unavailable")
+	}
+	return s.quoteDelivery(*cfg, checkoutType, city, pin, quantity, netPaise)
+}
+
+func (s *orderService) quoteDelivery(cfg models.CheckoutConfig, checkoutType, city, pin string, quantity int, netPaise int64) (int64, error) {
+	if (checkoutType != "delivery" && checkoutType != "hyderabad_instant") || len(pin) != 6 || strings.Trim(pin, "0123456789") != "" || quantity < 1 || quantity > math.MaxInt/500 || netPaise < 0 {
+		return 0, ErrInvalidDeliveryQuote
+	}
+	if checkoutType == "hyderabad_instant" {
+		city = strings.ToLower(strings.TrimSpace(city))
+		if !cfg.HyderabadInstantEnabled || (city != "hyderabad" && city != "secunderabad") || !strings.HasPrefix(pin, "500") {
+			return 0, ErrDeliveryNotServiceable
+		}
+	} else if !cfg.StandardDeliveryEnabled {
+		return 0, ErrDeliveryNotServiceable
+	}
+	if s.delhiverySvc == nil {
+		return 0, ErrCarrierNotConfigured
+	}
+	serviceable, charge, err := s.delhiverySvc.CheckServiceability(pin, quantity*500)
+	if err != nil {
+		return 0, fmt.Errorf("check carrier serviceability: %w", err)
+	}
+	if !serviceable {
+		return 0, ErrDeliveryNotServiceable
+	}
+	threshold := cfg.FreeShippingThreshold
+	if threshold == 0 {
+		threshold = 1449
+	}
+	if netPaise >= int64(math.Round(threshold*100)) {
+		return 0, nil
+	}
+	return int64(math.Round(math.Max(59, charge) * 100)), nil
+}
+
 func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Order, string, string, error) {
 	if len(req.Items) == 0 {
 		return nil, "", "", errors.New("no items in order")
@@ -130,11 +186,43 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 		return nil, "", "", errors.New("unsupported payment method")
 	}
 
-	// Validate preorder fulfilment type
-	if req.IsPreorder {
-		if req.FulfilmentType != models.FulfilmentTypePreorderHomeDelivery && req.FulfilmentType != models.FulfilmentTypePreorderStorePickup {
-			return nil, "", "", errors.New("invalid preorder fulfilment type: must be PREORDER_HOME_DELIVERY or PREORDER_STORE_PICKUP")
+	var checkoutConfig models.CheckoutConfig
+	if s.configSvc != nil {
+		if c, err := s.configSvc.GetCheckoutConfig(); err == nil && c != nil {
+			checkoutConfig = *c
 		}
+	} else {
+		checkoutConfig = models.CheckoutConfig{
+			StandardDeliveryEnabled:      true,
+			HyderabadInstantEnabled:      true,
+			StorePickupPrepayEnabled:     true,
+			StorePickupPayInStoreEnabled: true,
+			FreeShippingThreshold:        1449.0,
+		}
+	}
+
+	// Validate checkout method against server configuration
+	switch req.CheckoutType {
+	case "delivery":
+		if !checkoutConfig.StandardDeliveryEnabled {
+			return nil, "", "", errors.New("standard delivery checkout is currently disabled")
+		}
+	case "hyderabad_instant":
+		if !checkoutConfig.HyderabadInstantEnabled {
+			return nil, "", "", errors.New("hyderabad instant delivery is currently disabled")
+		}
+	case "pickup":
+		if req.PaymentMethod == "offline_qr" {
+			if !checkoutConfig.StorePickupPayInStoreEnabled {
+				return nil, "", "", errors.New("pay in store for pickup is currently disabled")
+			}
+		} else {
+			if !checkoutConfig.StorePickupPrepayEnabled {
+				return nil, "", "", errors.New("prepaid store pickup is currently disabled")
+			}
+		}
+	default:
+		return nil, "", "", fmt.Errorf("invalid or unsupported checkout type: %s", req.CheckoutType)
 	}
 
 	var subtotal float64
@@ -150,6 +238,9 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 			sale = configured
 		}
 	}
+
+	var hasPreorderItem bool
+	var hasRegularItem bool
 
 	for _, item := range req.Items {
 		if item.Quantity <= 0 {
@@ -167,6 +258,21 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 		}
 
 		p := products[0]
+
+		// Derive preorder eligibility strictly from the catalog
+		if p.IsPreorder {
+			hasPreorderItem = true
+		} else {
+			hasRegularItem = true
+		}
+
+		// Reject missing size for sized products
+		if len(p.Sizes) > 0 || len(p.SizesStock) > 0 {
+			if strings.TrimSpace(item.Size) == "" {
+				return nil, "", "", fmt.Errorf("size is required for sized product %s (%s)", p.Name, p.ID)
+			}
+		}
+
 		subtotal += p.Price * float64(item.Quantity)
 		saleSavings += sale.UnitSavings(p) * int64(item.Quantity)
 		orderItems = append(orderItems, models.OrderItem{
@@ -175,7 +281,26 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 			PriceAtQty:  p.Price,
 			Size:        item.Size,
 			ProductName: p.Name,
+			IsPreorder:  p.IsPreorder,
 		})
+	}
+
+	// Reject mixed carts (cannot mix preorder items and regular stock in the same order)
+	if hasPreorderItem && hasRegularItem {
+		return nil, "", "", errors.New("cannot mix preorder items and regular stock items in the same order")
+	}
+
+	// Validate requested fulfillment type against items
+	if hasPreorderItem {
+		if req.PaymentMethod != "online" || !((req.FulfilmentType == models.FulfilmentTypePreorderHomeDelivery && req.CheckoutType == "delivery") || (req.FulfilmentType == models.FulfilmentTypePreorderStorePickup && req.CheckoutType == "pickup")) {
+			return nil, "", "", errors.New("preorder fulfilment must match the selected delivery or prepaid pickup method")
+		}
+		req.IsPreorder = true
+	} else {
+		if req.FulfilmentType == models.FulfilmentTypePreorderHomeDelivery || req.FulfilmentType == models.FulfilmentTypePreorderStorePickup {
+			return nil, "", "", errors.New("preorder fulfilment type selected for non-preorder catalog items")
+		}
+		req.IsPreorder = false
 	}
 
 	var discountAmt float64
@@ -207,27 +332,38 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 
 	finalTotal := subtotal - discountAmt
 
-	cfg, _ := s.configSvc.GetCheckoutConfig()
-	threshold := cfg.FreeShippingThreshold
-	if threshold == 0 {
-		threshold = 1449.0
-	}
-
 	var shippingCost float64
-	if req.CheckoutType == "delivery" && req.FulfilmentType != models.FulfilmentTypePreorderStorePickup && finalTotal < threshold && req.ShippingZIPCode != "" {
+	isDelivery := req.CheckoutType == "delivery" || req.CheckoutType == "hyderabad_instant"
+	if isDelivery {
+		if strings.TrimSpace(req.ShippingName) == "" {
+			return nil, "", "", errors.New("shipping recipient name is required")
+		}
+		if strings.TrimSpace(req.ShippingPhone) == "" || strings.TrimSpace(req.ShippingPhone) == "0000000000" {
+			return nil, "", "", errors.New("valid contact phone number is required")
+		}
+		if strings.TrimSpace(req.ShippingAddress) == "" {
+			return nil, "", "", errors.New("shipping street address is required")
+		}
+		if strings.TrimSpace(req.ShippingCity) == "" {
+			return nil, "", "", errors.New("shipping city is required")
+		}
+		if strings.TrimSpace(req.ShippingState) == "" {
+			return nil, "", "", errors.New("shipping state is required")
+		}
+		cleanPin := strings.TrimSpace(req.ShippingZIPCode)
 		totalQuantity := 0
 		for _, item := range req.Items {
+			if item.Quantity > math.MaxInt/500-totalQuantity {
+				return nil, "", "", ErrInvalidDeliveryQuote
+			}
 			totalQuantity += item.Quantity
 		}
-		weightGrams := totalQuantity * 500
-
-		serviceable, estCost, err := s.delhiverySvc.CheckServiceability(req.ShippingZIPCode, weightGrams)
-		if err == nil && serviceable {
-			shippingCost = estCost
-			if shippingCost < 59.0 {
-				shippingCost = 59.0
-			}
+		feePaise, err := s.quoteDelivery(checkoutConfig, req.CheckoutType, req.ShippingCity, cleanPin, totalQuantity, int64(math.Round(finalTotal*100)))
+		if err != nil {
+			return nil, "", "", err
 		}
+		shippingCost = float64(feePaise) / 100
+		req.ShippingZIPCode = cleanPin
 	}
 	finalTotal += shippingCost
 
@@ -285,7 +421,11 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 	if req.ExpectedTotalPaise != nil && *req.ExpectedTotalPaise != int64(math.Round(finalTotal*100)) {
 		return nil, "", "", &PriceChangedError{TotalPaise: int64(math.Round(finalTotal * 100))}
 	}
-	orderID := "ORD_" + fmt.Sprint(time.Now().UnixNano()/1000000)
+	randBytes := make([]byte, 4)
+	if _, err := rand.Read(randBytes); err != nil {
+		randBytes = []byte{byte(time.Now().UnixNano()), byte(time.Now().UnixNano() >> 8), byte(time.Now().UnixNano() >> 16), byte(time.Now().UnixNano() >> 24)}
+	}
+	orderID := fmt.Sprintf("ORD_%d_%s", time.Now().Unix(), hex.EncodeToString(randBytes))
 
 	var providerOrderID string
 	var checkoutURL string
@@ -330,6 +470,7 @@ func (s *orderService) CreateOrder(req *models.OrderCreateRequest) (*models.Orde
 		PaymentMethod:          req.PaymentMethod,
 		Items:                  orderItems,
 		FulfilmentType:         req.FulfilmentType,
+		IsPreorder:             req.IsPreorder,
 		PickupLocationSnapshot: pickupLocationSnapshot,
 	}
 
@@ -542,6 +683,42 @@ func (s *orderService) GetOrder(orderID string) (*models.Order, error) {
 	return s.orderRepo.GetOrder(orderID)
 }
 
+func (s *orderService) LoadOrderDetails(order *models.Order) error {
+	return s.orderRepo.GetOrderDetails(order)
+}
+
+func (s *orderService) RecordShipmentEvent(orderID, tracking string, event models.ShipmentEvent) error {
+	return s.orderRepo.RecordShipmentEvent(orderID, tracking, event)
+}
+
+func (s *orderService) RefreshShipmentTracking(ctx context.Context) error {
+	if s.delhiverySvc == nil {
+		return ErrCarrierNotConfigured
+	}
+	orders, err := s.orderRepo.ClaimTrackingOrders()
+	if err != nil || len(orders) == 0 {
+		return err
+	}
+	waybills := make([]string, 0, len(orders))
+	for _, order := range orders {
+		waybills = append(waybills, order.TrackingNumber)
+	}
+	events, err := s.delhiverySvc.FetchTracking(ctx, waybills)
+	if err != nil {
+		return err
+	}
+	var saveErrors []error
+	for _, order := range orders {
+		for _, event := range events[order.TrackingNumber] {
+			if err := s.RecordShipmentEvent(order.ID, order.TrackingNumber, event); err != nil {
+				saveErrors = append(saveErrors, err)
+				break
+			}
+		}
+	}
+	return errors.Join(saveErrors...)
+}
+
 func (s *orderService) GetAllOrders(email string) ([]models.Order, error) {
 	return s.orderRepo.GetAllOrders(email)
 }
@@ -629,6 +806,25 @@ func (s *orderService) UpdateOrderStatus(orderID, status, paymentID, tracking, s
 	return s.orderRepo.UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift)
 }
 
+var ErrUnknownCarrierStatus = errors.New("unrecognized carrier status")
+
+func (s *orderService) ApplyCarrierTrackingUpdate(orderID, carrierStatus, trackingNumber, eventTime string) error {
+	var targetStatus string
+	switch carrierStatus {
+	case "In Transit", "Dispatched", "Picked Up":
+		targetStatus = "shipped"
+	case "Delivered":
+		targetStatus = "delivered"
+	default:
+		return ErrUnknownCarrierStatus
+	}
+	parsed, err := time.Parse(time.RFC3339, eventTime)
+	if err != nil {
+		parsed = time.Now()
+	}
+	return s.orderRepo.ApplyCarrierTrackingUpdate(orderID, targetStatus, strings.TrimSpace(trackingNumber), parsed.UTC().Format(time.RFC3339))
+}
+
 func (s *orderService) ConfirmPreorderPickup(orderID, adminEmail, notes string) error {
 	err := s.orderRepo.ConfirmPreorderPickup(orderID, adminEmail, notes)
 	if err != nil && err.Error() == "order already collected" {
@@ -691,4 +887,48 @@ func (s *orderService) SendPickupReadyNotification(order *models.Order, pickupCf
 		mapsInfo, snapshotCfg.Instructions, snapshotCfg.Availability,
 		snapshotCfg.ContactInfo, snapshotCfg.EstimatedPickupDate)
 	return s.orderRepo.MarkPickupNotificationSent(order.ID)
+}
+
+func (s *orderService) ResolveDeliveryDispatch(orderID, tracking string) error {
+	return s.orderRepo.ResolveDeliveryDispatch(orderID, tracking)
+}
+
+func (s *orderService) DispatchPendingOrders(orderID string) (dispatchedCount int, failedCount int, err error) {
+	if s.delhiverySvc == nil {
+		return 0, 0, errors.New("delhivery service is not configured")
+	}
+
+	claimedOrders, err := s.orderRepo.ClaimPendingDeliveryOrders(50, orderID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to claim pending delivery orders: %w", err)
+	}
+	if len(claimedOrders) == 0 {
+		return 0, 0, nil
+	}
+
+	results, batchErr := s.delhiverySvc.BatchPickup(claimedOrders)
+	var saveErrors []error
+	for _, o := range claimedOrders {
+		status, tracking, reason := "dispatch_review", "", "Verify the booking with the carrier before retrying"
+		res := results[o.ID]
+		switch {
+		case errors.Is(batchErr, ErrCarrierNotConfigured):
+			status, reason = "paid", "Delivery carrier credentials are missing"
+		case batchErr == nil && res.Success && strings.TrimSpace(res.TrackingNumber) != "":
+			status, tracking, reason = "shipped", strings.TrimSpace(res.TrackingNumber), ""
+		case batchErr == nil && res.Rejected && strings.TrimSpace(res.TrackingNumber) == "":
+			status, reason = "paid", "Carrier booking rejected"
+		}
+		if saveErr := s.orderRepo.FinishDeliveryDispatch(o.ID, o.DispatchStartedAt, status, tracking, reason); saveErr != nil {
+			saveErrors = append(saveErrors, fmt.Errorf("record dispatch for %s: %w", o.ID, saveErr))
+			failedCount++
+			continue
+		}
+		if status == "shipped" {
+			dispatchedCount++
+		} else {
+			failedCount++
+		}
+	}
+	return dispatchedCount, failedCount, errors.Join(batchErr, errors.Join(saveErrors...))
 }

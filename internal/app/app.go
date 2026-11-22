@@ -63,15 +63,14 @@ func (a *App) setupRoutes() {
 	configRepo := repository.NewConfigRepository(a.DB)
 	contactRepo := repository.NewContactRepository(a.DB)
 
-	delhiverySvc := service.NewDelhiveryService("dummy_secret")
-
-	cron.StartDelhiveryCron(a.jobsCtx, orderRepo, delhiverySvc)
+	delhiverySvc := service.NewDelhiveryService(a.Config.DelhiveryWebhookSecret, a.Config.DelhiveryAPIKey, a.Config.ShippingProvider)
 
 	// Services
 	configSvc := service.NewConfigService(configRepo)
 	productSvc := service.NewProductService(productRepo)
 	couponSvc := service.NewCouponService(couponRepo)
 	orderSvc := service.NewOrderService(orderRepo, couponSvc, productRepo, configSvc, delhiverySvc)
+	cron.StartDelhiveryCron(a.jobsCtx, orderSvc)
 	saleStore := repository.SaleStore{DB: a.DB}
 	orderSvc.SetSaleLoader(saleStore.Load)
 	profileSvc := service.NewProfileService(profileRepo)
@@ -79,9 +78,6 @@ func (a *App) setupRoutes() {
 	contactSvc := service.NewContactService(contactRepo)
 	emailSvc := service.NewEmailService(a.Config)
 	orderSvc.SetPaymentConfirmedHandler(func(order *models.Order) {
-		if profile, err := profileSvc.GetProfileByEmail(order.CustomerEmail); err == nil && profile != nil {
-			profileSvc.AddSpinTicket(profile.UserID, 1)
-		}
 		configSvc.IncrementOrderKurthiCounter()
 		if emailSvc != nil {
 			go func() {
@@ -193,6 +189,7 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/admin/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/orders/confirm-pickup", adminOrEmployee(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/delhivery/batch-pickup", adminOnly(http.HandlerFunc(orderHandler.HandleTriggerDelhiveryBatch)).ServeHTTP)
+	a.Router.Handle("/api/admin/delhivery/resolve-dispatch", adminOnly(http.HandlerFunc(orderHandler.HandleResolveDelhiveryDispatch)))
 
 	a.Router.HandleFunc("/api/admin/profiles", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfiles)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/profiles/edit", adminOnly(http.HandlerFunc(profileHandler.HandleAdminProfileEdit)).ServeHTTP)
@@ -280,12 +277,12 @@ func (a *App) setupRoutes() {
 	a.Router.Handle("/api/profile/addresses", customerAuth(http.HandlerFunc(profileHandler.HandleAddresses)))
 	a.Router.Handle("/api/profile/coupons", customerAuth(http.HandlerFunc(couponHandler.HandleUserCoupons)))
 
-	// Cart & Wishlist
-	a.Router.HandleFunc("/api/cart", cartHandler.HandleCart)
-	a.Router.HandleFunc("/api/cart/merge", cartHandler.HandleCart)
+	// Cart & Wishlist (Protected with CustomerAuthMiddleware against IDOR)
+	a.Router.Handle("/api/cart", customerAuth(http.HandlerFunc(cartHandler.HandleCart)))
+	a.Router.Handle("/api/cart/merge", customerAuth(http.HandlerFunc(cartHandler.HandleCart)))
 
-	a.Router.HandleFunc("/api/wishlist", cartHandler.HandleWishlist)
-	a.Router.HandleFunc("/api/wishlist/merge", cartHandler.HandleWishlist)
+	a.Router.Handle("/api/wishlist", customerAuth(http.HandlerFunc(cartHandler.HandleWishlist)))
+	a.Router.Handle("/api/wishlist/merge", customerAuth(http.HandlerFunc(cartHandler.HandleWishlist)))
 
 	// Health check endpoint
 	a.Router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -304,8 +301,16 @@ func (a *App) setupRoutes() {
 	a.Router.HandleFunc("/api/og-image/", ogHandler.HandleOgImage)
 
 	// Dev Email Preview Endpoint (For testing & mobile preview in browser)
-	a.Router.HandleFunc("/api/dev/email-preview", func(w http.ResponseWriter, r *http.Request) {
+	previewHandler := func(w http.ResponseWriter, r *http.Request) {
 		previewType := r.URL.Query().Get("type")
+		view := r.URL.Query().Get("view")
+		if view == "hub" || previewType == "hub" || (previewType == "" && !r.URL.Query().Has("type")) {
+			if hubBytes, err := os.ReadFile("email_previews/index.html"); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write(hubBytes)
+				return
+			}
+		}
 		if previewType == "" {
 			previewType = "prepaid_pickup"
 		}
@@ -316,7 +321,11 @@ func (a *App) setupRoutes() {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(html))
-	})
+	}
+
+	a.Router.HandleFunc("/api/dev/email-preview", previewHandler)
+	a.Router.HandleFunc("/dev/email-preview", previewHandler)
+	a.Router.HandleFunc("/email-preview", previewHandler)
 
 	// Static file server fallback for SPA & Admin Portal
 	frontendDist := "./frontend/dist"
@@ -502,6 +511,22 @@ func (a *App) Run(port string) error {
 }
 
 func (a *App) StartBackgroundJobs() {
+	if a.OrderService != nil && a.Config.DelhiveryAPIKey != "" && a.Config.ShippingProvider != "mock" {
+		go func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+			for {
+				if err := a.OrderService.RefreshShipmentTracking(a.jobsCtx); err != nil && a.jobsCtx.Err() == nil {
+					a.Logger.Warn("Could not refresh shipment tracking", "error", err)
+				}
+				select {
+				case <-a.jobsCtx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	}
 	go func() {
 		// Run initial cleanup immediately upon startup (useful when waking up from Render spin-down)
 		if a.OrderService != nil {

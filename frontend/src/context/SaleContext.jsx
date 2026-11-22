@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { apiClient } from '../utils/apiClient';
 
 export const SaleContext = createContext({ sale: null, catalog: [] });
@@ -49,18 +48,4 @@ export function cartSaleSavings(cart, catalog, sale) {
     const products = new Map(catalog.map(product => [String(product.id), product]));
     return (cart || []).reduce((amount, item) =>
         amount + saleSavings(products.get(String(item.id)), sale) * (item.quantity || 1), 0) / 100;
-}
-
-export function SaleBanner({ sale }) {
-    if (!sale) return null;
-    const end = new Intl.DateTimeFormat('en-IN', {
-        timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short'
-    }).format(new Date(sale.endsAt));
-    return (
-        <aside style={{ background: '#654334', color: '#fff', textAlign: 'center', padding: '0.5rem 1rem' }}>
-            <Link to="/shop" style={{ color: 'inherit' }}>
-                {sale.name} · {sale.percent}% off eligible styles · Ends {end} IST · Shop now
-            </Link>
-        </aside>
-    );
 }

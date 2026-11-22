@@ -886,6 +886,11 @@ async function loadOrders() {
     }
 }
 
+function dispatchNeedsReview(order) {
+    return order.status === 'dispatch_review' || (order.status === 'dispatching' &&
+        (!order.dispatchStartedAt || Date.now() - Date.parse(order.dispatchStartedAt) >= 120000));
+}
+
 function renderOrders() {
     const body = document.querySelector('#ordersTable tbody');
     body.innerHTML = '';
@@ -904,6 +909,7 @@ function renderOrders() {
     let ordersToDisplay = allAdminOrders.filter(o => {
         // 1. Status Filter
         if (filterValue === 'payment_review' && o.status !== 'payment_review') return false;
+        if (filterValue === 'dispatch_review' && !dispatchNeedsReview(o) && !o.dispatchError) return false;
         if (filterValue === 'actual') {
             if (o.status === 'pending' || o.status === 'pending_payment' || o.status === 'cancelled') {
                 return false;
@@ -934,15 +940,12 @@ function renderOrders() {
         const itemsStr = o.items ? o.items.map(it => `${it.productName || it.productId} (x${it.quantity})`).join(', ') : 'No Details';
 
         // Determine tracking badge
-        let trackingStr = o.trackingNumber
-            ? `<span style="font-family:monospace; color:#2e7d32">🚚 ${o.trackingNumber}</span>`
-            : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
+        let trackingStr = o.trackingNumber ? '' : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
 
         if (o.checkoutType === 'pickup') {
             trackingStr = `<span style="font-family:monospace; color:#6b4c35; font-weight:600">🏪 Store Pickup</span>` + (o.paymentMethod === 'offline_qr' ? ` <span style="font-size:0.75rem; background:#fff3cd; color:#856404; padding:2px 4px; border-radius:3px;">Offline QR</span>` : ' (Online)');
         } else if (o.checkoutType === 'hyderabad_instant') {
-            trackingStr = `<div style="font-family:monospace; color:#bf7c00; font-weight:600">⚡ Hyderabad Instant</div>` +
-                (o.trackingNumber ? `<span style="font-size:0.75rem; font-family:monospace; color:#555">${o.trackingNumber}</span>` : '');
+            trackingStr = `<div style="font-family:monospace; color:#bf7c00; font-weight:600">⚡ Hyderabad Instant</div>`;
         }
 
         // Status label style
@@ -967,7 +970,9 @@ function renderOrders() {
             badgeBg = '#ffebee';
             badgeColor = '#c62828';
         }
-        const statusLabel = o.status === 'payment_review' ? 'Payment received — review required' : o.status;
+        const needsDispatchReview = dispatchNeedsReview(o);
+        const statusLabel = needsDispatchReview ? 'Verify carrier booking' :
+            o.status === 'payment_review' ? 'Payment received — review required' : o.status;
 
         const tdId = document.createElement('td');
         tdId.style.fontWeight = '500';
@@ -997,6 +1002,30 @@ function renderOrders() {
 
         const tdTracking = document.createElement('td');
         tdTracking.innerHTML = trackingStr;
+        if (o.checkoutType !== 'pickup' && o.trackingNumber) {
+            const tracking = document.createElement('span');
+            tracking.textContent = o.trackingNumber;
+            tdTracking.appendChild(tracking);
+        }
+        if (o.dispatchError) {
+            const error = document.createElement('div');
+            error.textContent = o.dispatchError;
+            tdTracking.appendChild(error);
+        }
+        if (currentUserRole === 'admin' && needsDispatchReview) {
+            const review = document.createElement('button');
+            review.type = 'button';
+            review.textContent = 'Review dispatch';
+            review.addEventListener('click', () => resolveDelhiveryDispatch(o.id));
+            tdTracking.appendChild(review);
+        }
+        if (currentUserRole === 'admin' && o.status === 'paid' && o.fulfilmentType === 'PREORDER_HOME_DELIVERY' && !o.trackingNumber) {
+            const dispatch = document.createElement('button');
+            dispatch.type = 'button';
+            dispatch.textContent = 'Dispatch ready preorder';
+            dispatch.addEventListener('click', () => triggerDelhiveryBatchPickup(o.id, dispatch));
+            tdTracking.appendChild(dispatch);
+        }
         tr.appendChild(tdTracking);
 
         const tdDate = document.createElement('td');
@@ -1009,10 +1038,10 @@ function renderOrders() {
 
 window.renderOrders = renderOrders;
 
-window.triggerDelhiveryBatchPickup = async function () {
-    const btn = document.getElementById('btnDelhiveryBatch');
+async function triggerDelhiveryBatchPickup(orderId, rowButton) {
+    const btn = rowButton || document.getElementById('btnDelhiveryBatch');
     const originalText = btn ? btn.innerHTML : '🚚 Dispatch Delhivery Batch';
-    if (!confirm("Are you sure you want to trigger Delhivery batch pickup for all pending paid delivery orders?")) {
+    if (!confirm(orderId ? `Is preorder ${orderId} ready to ship?` : 'Dispatch the next batch of paid delivery orders?')) {
         return;
     }
     try {
@@ -1020,12 +1049,12 @@ window.triggerDelhiveryBatchPickup = async function () {
             btn.disabled = true;
             btn.innerHTML = '🚚 Dispatching...';
         }
-        const res = await fetchJsonSafe('/api/admin/delhivery/batch-pickup', {
+        const query = orderId ? `?orderId=${encodeURIComponent(orderId)}` : '';
+        const res = await fetchJsonSafe(`/api/admin/delhivery/batch-pickup${query}`, {
             method: 'POST',
             headers: getAuthHeader()
         });
-        alert(res.message || `Dispatched ${res.count || 0} order(s).`);
-        await loadOrders();
+        alert(`Dispatched ${res.dispatched || 0}. Need attention: ${res.failed || 0}.`);
     } catch (err) {
         alert("Failed to trigger Delhivery batch: " + (err.message || err));
     } finally {
@@ -1033,8 +1062,27 @@ window.triggerDelhiveryBatchPickup = async function () {
             btn.disabled = false;
             btn.innerHTML = originalText;
         }
+        await loadOrders();
     }
-};
+}
+window.triggerDelhiveryBatchPickup = triggerDelhiveryBatchPickup;
+
+async function resolveDelhiveryDispatch(orderId) {
+    const value = prompt(`Look up ${orderId} in Delhivery One. Enter its waybill if booked. Leave blank only if you verified that no booking exists.`);
+    if (value === null) return;
+    const waybill = value.trim();
+    if (!waybill && !confirm('Confirm you verified that Delhivery has no booking for this order. The order will be eligible to dispatch again.')) return;
+    try {
+        await fetchJsonSafe('/api/admin/delhivery/resolve-dispatch', {
+            method: 'POST',
+            headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId, waybill, confirmedNoBooking: !waybill })
+        });
+        await loadOrders();
+    } catch (err) {
+        alert(err.message || 'Could not save the dispatch review.');
+    }
+}
 
 
 function resetProductFormState() {
@@ -1779,7 +1827,7 @@ async function viewProfileDetails(userId) {
     modal.style.display = 'flex';
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/admin/profiles/details?userId=${userId}`, { headers: getAuthHeader() });
+        const res = await fetch(`${API_BASE_URL}/api/admin/profiles/details?userId=${encodeURIComponent(userId)}`, { headers: getAuthHeader() });
         if (!res.ok) throw new Error("HTTP Status " + res.status);
         const data = await res.json();
 
@@ -1787,6 +1835,7 @@ async function viewProfileDetails(userId) {
         const addrs = data.addresses || [];
         const orders = data.orders || [];
         const coupons = data.coupons || [];
+        const asText = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
         let ordersHtml = '';
         if (orders.length === 0) {
@@ -1807,12 +1856,12 @@ async function viewProfileDetails(userId) {
                     <tbody>
                         ${orders.map(o => `
                             <tr style="border-bottom: 1px dashed #f5f5f5;">
-                                <td style="padding: 0.5rem 0; font-weight: 500;">${o.id}</td>
+                                <td style="padding: 0.5rem 0; font-weight: 500;">${asText(o.id)}</td>
                                 <td style="padding: 0.5rem 0;">₹${o.totalAmount.toLocaleString('en-IN')}</td>
-                                <td style="padding: 0.5rem 0; font-family: monospace;">${o.couponCode || '-'}</td>
-                                <td style="padding: 0.5rem 0; color: #b97a66;">${o.unlockedGift || '-'}</td>
-                                <td style="padding: 0.5rem 0;"><span style="font-weight:500;">${o.status}</span></td>
-                                <td style="padding: 0.5rem 0; font-size:0.8rem; font-family: monospace;">${o.trackingNumber || '-'}</td>
+                                <td style="padding: 0.5rem 0; font-family: monospace;">${asText(o.couponCode || '-')}</td>
+                                <td style="padding: 0.5rem 0; color: #b97a66;">${asText(o.unlockedGift || '-')}</td>
+                                <td style="padding: 0.5rem 0;"><span style="font-weight:500;">${asText(o.status)}</span></td>
+                                <td style="padding: 0.5rem 0; font-size:0.8rem; font-family: monospace;">${asText(o.trackingNumber || '-')}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -1828,9 +1877,9 @@ async function viewProfileDetails(userId) {
                 <div style="display:flex; flex-wrap:wrap; gap: 0.8rem; margin-top: 0.5rem;">
                     ${coupons.map(c => `
                         <div style="border: 1px dashed #b97a66; padding: 0.6rem 1rem; border-radius: 6px; background:#fffcfc;">
-                            <strong style="color: #b97a66; font-family: monospace; font-size: 1rem;">${c.code}</strong>
+                            <strong style="color: #b97a66; font-family: monospace; font-size: 1rem;">${asText(c.code)}</strong>
                             <div style="font-size:0.85rem; color:#666; margin-top:0.25rem;">
-                                ${c.type === 'percentage' ? c.value + '%' : '₹' + c.value} off &bull; Uses: ${c.usedCount}/${c.usageLimit}
+                                ${asText(c.type === 'percentage' ? c.value + '%' : '₹' + c.value)} off &bull; Uses: ${asText(c.usedCount)}/${asText(c.usageLimit)}
                             </div>
                         </div>
                     `).join('')}
@@ -1847,10 +1896,10 @@ async function viewProfileDetails(userId) {
                     ${addrs.map(a => `
                         <div style="border: 1px solid #eee; padding: 1rem; border-radius: 6px; background: ${a.isDefault ? '#fffcf9' : '#fff'}; border-color: ${a.isDefault ? '#e4b39b' : '#eee'}; position:relative;">
                             ${a.isDefault ? '<span style="position:absolute; top:8px; right:8px; background:#e4b39b; color:#fff; font-size:0.65rem; padding: 1px 6px; border-radius:10px; font-weight:bold;">Default</span>' : ''}
-                            <h4 style="margin:0 0 0.4rem; font-size:0.9rem;">${a.fullName}</h4>
-                            <p style="font-size:0.8rem; color:#666; margin:0 0 0.2rem; line-height:1.3;">${a.addressLine}</p>
-                            <p style="font-size:0.8rem; color:#666; margin:0 0 0.2rem; line-height:1.3;">${a.city}, ${a.state} - ${a.zipCode}</p>
-                            <p style="font-size:0.8rem; color:#666; margin:0;">Phone: ${a.phone}</p>
+                            <h4 style="margin:0 0 0.4rem; font-size:0.9rem;">${asText(a.fullName)}</h4>
+                            <p style="font-size:0.8rem; color:#666; margin:0 0 0.2rem; line-height:1.3;">${asText(a.addressLine)}</p>
+                            <p style="font-size:0.8rem; color:#666; margin:0 0 0.2rem; line-height:1.3;">${asText(a.city)}, ${asText(a.state)} - ${asText(a.zipCode)}</p>
+                            <p style="font-size:0.8rem; color:#666; margin:0;">Phone: ${asText(a.phone)}</p>
                         </div>
                     `).join('')}
                 </div>
@@ -1858,32 +1907,32 @@ async function viewProfileDetails(userId) {
         }
 
         content.innerHTML = `
-            <form id="adminProfileEditForm" onsubmit="saveProfileFromAdmin(event, '${userId}')">
+            <form id="adminProfileEditForm">
                 <h3 style="margin-bottom:1rem; font-size: 1.1rem; border-bottom: 2px solid #ddd; padding-bottom: 0.4rem;">Customer Profile</h3>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
                     <div>
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Full Name *</label>
-                        <input type="text" id="ap_name" value="${p.fullName || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                        <input type="text" id="ap_name" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
                     </div>
                     <div>
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Phone Number *</label>
-                        <input type="text" id="ap_phone" value="${p.phone || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                        <input type="text" id="ap_phone" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
                     </div>
                     <div style="grid-column: span 2;">
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Primary Address *</label>
-                        <input type="text" id="ap_address" value="${p.address || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                        <input type="text" id="ap_address" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
                     </div>
                     <div>
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">City *</label>
-                        <input type="text" id="ap_city" value="${p.city || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                        <input type="text" id="ap_city" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
                     </div>
                     <div>
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">State *</label>
-                        <input type="text" id="ap_state" value="${p.state || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                        <input type="text" id="ap_state" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
                     </div>
                     <div>
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">ZIP / Postal Code *</label>
-                        <input type="text" id="ap_zip" value="${p.zipCode || ''}" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                        <input type="text" id="ap_zip" required style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
                     </div>
                     <div>
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Preferred Size</label>
@@ -1898,7 +1947,7 @@ async function viewProfileDetails(userId) {
                     </div>
                     <div style="grid-column: span 2;">
                         <label style="display:block; font-size:0.85rem; color:#666; margin-bottom: 4px;">Style Notes</label>
-                        <textarea id="ap_notes" rows="2" style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">${p.styleNotes || ''}</textarea>
+                        <textarea id="ap_notes" rows="2" style="width:100%; padding:0.6rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;"></textarea>
                     </div>
                 </div>
                 <button type="submit" class="btn-primary" style="margin-top:1rem; padding: 0.6rem 1.5rem; float:right; border-radius:4px;">Update Profile Details</button>
@@ -1914,8 +1963,14 @@ async function viewProfileDetails(userId) {
             <h3 style="margin: 2rem 0 1rem; font-size: 1.1rem; border-bottom: 2px solid #ddd; padding-bottom: 0.4rem;">Issued Loyalty Coupons</h3>
             ${couponsHtml}
         `;
+        const form = content.querySelector('#adminProfileEditForm');
+        form.addEventListener('submit', event => saveProfileFromAdmin(event, userId));
+        const fields = { name: p.fullName, phone: p.phone, address: p.address, city: p.city, state: p.state, zip: p.zipCode, notes: p.styleNotes };
+        for (const [name, value] of Object.entries(fields)) {
+            form.querySelector(`#ap_${name}`).value = value ?? '';
+        }
     } catch (err) {
-        content.innerHTML = `<p style="color:red">Failed to load details: ${err.message}</p>`;
+        content.textContent = `Failed to load details: ${err.message}`;
     }
 }
 
@@ -3578,8 +3633,11 @@ async function confirmStorePickup(orderId) {
                 const sizes = Object.values(product?.sizesStock || {}).map(Number);
                 const stock = sizes.length ? sizes.reduce((sum, qty) => sum + Math.max(0, qty), 0) : Number(product?.stock || 0);
                 const lowStockLimit = 5;
-                const showStock = stock > 0 && stock <= lowStockLimit;
-                text('pv_remaining', stock);
+                const showStock = Number.isSafeInteger(stock) && stock > 0;
+                const stockLabel = stock <= lowStockLimit
+                    ? `Only ${stock} ${stock === 1 ? 'piece' : 'pieces'} remaining`
+                    : `In stock · ${stock} pieces`;
+                text('pv_remaining', showStock ? stockLabel : '');
                 const stockMeter = document.getElementById('pv_stock_line');
                 if (stockMeter) stockMeter.style.display = showStock ? 'flex' : 'none';
                 if (!manual) {
@@ -3597,7 +3655,7 @@ async function confirmStorePickup(orderId) {
                 const bar = document.getElementById('pv_meter_bar');
                 if (bar) {
                     bar.parentElement.style.display = showStock ? 'block' : 'none';
-                    bar.style.width = showStock ? (stock / lowStockLimit * 100) + '%' : '0%';
+                    bar.style.width = showStock ? `${Math.min(100, stock / lowStockLimit * 100)}%` : '0%';
                 }
             }
 

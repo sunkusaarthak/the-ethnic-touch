@@ -235,7 +235,6 @@ func runMigrations(db *sql.DB) error {
 		`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS available_spins INT DEFAULT 0;`,
 		`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT '';`,
 		`UPDATE coupons SET id = 'cp_' || LOWER(code) WHERE id = '' OR id IS NULL;`,
-		`UPDATE coupons SET is_active = TRUE WHERE is_active IS NOT TRUE AND (used_count < usage_limit OR usage_limit = 0 OR usage_limit IS NULL);`,
 		`INSERT INTO coupons (id, code, type, value, min_order, usage_limit, is_active)
 		 VALUES ('cp_welcome5', 'WELCOME5', 'percentage', 5.0, 0, 100000, TRUE)
 		 ON CONFLICT (code) DO UPDATE SET is_active = TRUE, value = 5.0;`,
@@ -258,6 +257,19 @@ func runMigrations(db *sql.DB) error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_collected_at TEXT DEFAULT NULL;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_collected_by TEXT DEFAULT NULL;`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_notification_sent BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispatch_started_at TIMESTAMPTZ;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispatch_error TEXT;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS spin_tickets_awarded INT NOT NULL DEFAULT 0;`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_checked_at TIMESTAMPTZ;`,
+		`CREATE TABLE IF NOT EXISTS order_tracking_events (
+			order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+			status TEXT NOT NULL,
+			occurred_at TIMESTAMPTZ NOT NULL,
+			location TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (order_id, occurred_at, status)
+		);`,
+		`UPDATE orders SET dispatch_error = 'Carrier booking rejected', tracking_number = NULL
+		 WHERE status = 'paid' AND tracking_number LIKE 'Carrier booking rejected%';`,
 		`CREATE TABLE IF NOT EXISTS preorder_pickup_audit (
 			id SERIAL PRIMARY KEY,
 			order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
