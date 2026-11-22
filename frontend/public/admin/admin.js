@@ -42,6 +42,16 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+window.escapeHTML = function (str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+};
+
 let auth;
 
 function initAdminApp() {
@@ -707,7 +717,67 @@ function updateHeaderActions(tab) {
     }
 }
 
+
+async function loadSiteSale() {
+    const form = document.getElementById('siteSaleForm');
+    const fields = form.elements;
+    const status = document.getElementById('siteSaleStatus');
+    const formatIST = value => !value || value.startsWith('0001-') ? '' :
+        new Date(Date.parse(value) + 330 * 60000).toISOString().slice(0, 16);
+    const iso = value => value ? new Date(value + ':00+05:30').toISOString() : '0001-01-01T00:00:00Z';
+    const read = () => ({
+        enabled: fields.enabled.checked,
+        name: fields.name.value.trim(),
+        percent: Number(fields.percent.value),
+        collections: fields.collections.value.split(',').map(name => name.trim()).filter(Boolean),
+        startsAt: iso(fields.startsAt.value),
+        endsAt: iso(fields.endsAt.value)
+    });
+    let savedSale;
+    const write = async sale => {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const data = await fetchJsonSafe('/api/admin/config/sale', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify(sale)
+            });
+            fields.enabled.checked = data.enabled;
+            savedSale = data;
+            status.textContent = data.enabled ? 'Sale saved. The schedule controls when it appears.' : 'Sale is off.';
+        } catch (err) {
+            status.textContent = err.message;
+        }
+    };
+    form.onsubmit = event => { event.preventDefault(); write(read()); };
+    document.getElementById('endSiteSale').onclick = () => {
+        if (savedSale && confirm('End the current sale now?')) write({ ...savedSale, enabled: false });
+    };
+    document.getElementById('previewSiteSale').onclick = () => {
+        const sale = read();
+        const scope = sale.collections.length ? sale.collections.join(', ') : 'all eligible styles';
+        status.textContent = (sale.name || 'Unnamed sale') + ' · ' + sale.percent + '% off · ' + scope +
+            ' · ' + (fields.startsAt.value || 'No start time') + ' to ' + (fields.endsAt.value || 'No end time') + ' IST';
+    };
+    try {
+        const token = await auth.currentUser.getIdToken();
+        const data = await fetchJsonSafe('/api/admin/config/sale', { headers: { Authorization: 'Bearer ' + token } });
+        savedSale = data;
+        fields.enabled.checked = data.enabled;
+        fields.name.value = data.name || '';
+        fields.percent.value = data.percent || '';
+        fields.collections.value = (data.collections || []).join(', ');
+        fields.startsAt.value = formatIST(data.startsAt);
+        fields.endsAt.value = formatIST(data.endsAt);
+        status.textContent = !data.enabled ? 'Sale is off.' : Date.now() < Date.parse(data.startsAt) ? 'Sale is scheduled.' :
+            Date.now() < Date.parse(data.endsAt) ? 'Sale is live.' : 'Sale has ended.';
+    } catch (err) {
+        status.textContent = err.message;
+    }
+}
+
 async function loadTabData(target) {
+    if (target === 'sales') loadSiteSale();
     if (target === 'dashboard') loadDashboard();
     if (target === 'products') loadProducts();
     if (target === 'orders') loadOrders();
@@ -833,6 +903,7 @@ function renderOrders() {
 
     let ordersToDisplay = allAdminOrders.filter(o => {
         // 1. Status Filter
+        if (filterValue === 'payment_review' && o.status !== 'payment_review') return false;
         if (filterValue === 'actual') {
             if (o.status === 'pending' || o.status === 'pending_payment' || o.status === 'cancelled') {
                 return false;
@@ -892,20 +963,46 @@ function renderOrders() {
         } else if (o.status === 'paid') {
             badgeBg = '#e3f2fd';
             badgeColor = '#0d47a1';
-        } else if (o.status === 'pending_payment') {
+        } else if (o.status === 'pending_payment' || o.status === 'payment_review') {
             badgeBg = '#ffebee';
             badgeColor = '#c62828';
         }
+        const statusLabel = o.status === 'payment_review' ? 'Payment received — review required' : o.status;
 
-        tr.innerHTML = `
-                <td style="font-weight:500">${o.id}</td>
-                <td>${o.customerEmail}</td>
-                <td>₹${o.totalAmount.toLocaleString('en-IN')}</td>
-                <td style="font-size:0.9rem; color:#555; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${itemsStr}">${itemsStr}</td>
-                <td><span style="padding:4px 8px; background:${badgeBg}; color:${badgeColor}; border-radius:4px; font-size:0.8rem; font-weight:500">${o.status}</span></td>
-                <td>${trackingStr}</td>
-                <td>${date}</td>
-            `;
+        const tdId = document.createElement('td');
+        tdId.style.fontWeight = '500';
+        tdId.textContent = o.id || '';
+        tr.appendChild(tdId);
+
+        const tdEmail = document.createElement('td');
+        tdEmail.textContent = o.customerEmail || '';
+        tr.appendChild(tdEmail);
+
+        const tdAmt = document.createElement('td');
+        tdAmt.textContent = '₹' + (o.totalAmount || 0).toLocaleString('en-IN');
+        tr.appendChild(tdAmt);
+
+        const tdItems = document.createElement('td');
+        tdItems.style.cssText = 'font-size:0.9rem; color:#555; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+        tdItems.title = itemsStr;
+        tdItems.textContent = itemsStr;
+        tr.appendChild(tdItems);
+
+        const tdStatus = document.createElement('td');
+        const spanStatus = document.createElement('span');
+        spanStatus.style.cssText = `padding:4px 8px; background:${badgeBg}; color:${badgeColor}; border-radius:4px; font-size:0.8rem; font-weight:500`;
+        spanStatus.textContent = statusLabel;
+        tdStatus.appendChild(spanStatus);
+        tr.appendChild(tdStatus);
+
+        const tdTracking = document.createElement('td');
+        tdTracking.innerHTML = trackingStr;
+        tr.appendChild(tdTracking);
+
+        const tdDate = document.createElement('td');
+        tdDate.textContent = date;
+        tr.appendChild(tdDate);
+
         body.appendChild(tr);
     });
 }
@@ -1609,17 +1706,44 @@ async function loadProfiles() {
 
         data.forEach(p => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="font-weight: 500">${p.fullName || 'No Name'}</td>
-                <td>${p.email || 'No Email'}</td>
-                <td>${p.phone || 'No Phone'}</td>
-                <td>${p.zipCode || 'No ZIP'}</td>
-                <td>${p.preferredSize || 'N/A'}</td>
-                <td>
-                    <button class="btn-primary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; margin-right: 5px;" onclick="viewProfileDetails('${p.userId}')">View Details</button>
-                    <button class="btn-primary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; background: #e53e3e; border: none; color: white;" onclick="deleteProfile('${p.userId}', '${p.email}')">Delete</button>
-                </td>
-            `;
+
+            const tdName = document.createElement('td');
+            tdName.style.fontWeight = '500';
+            tdName.textContent = p.fullName || 'No Name';
+            tr.appendChild(tdName);
+
+            const tdEmail = document.createElement('td');
+            tdEmail.textContent = p.email || 'No Email';
+            tr.appendChild(tdEmail);
+
+            const tdPhone = document.createElement('td');
+            tdPhone.textContent = p.phone || 'No Phone';
+            tr.appendChild(tdPhone);
+
+            const tdZip = document.createElement('td');
+            tdZip.textContent = p.zipCode || 'No ZIP';
+            tr.appendChild(tdZip);
+
+            const tdSize = document.createElement('td');
+            tdSize.textContent = p.preferredSize || 'N/A';
+            tr.appendChild(tdSize);
+
+            const tdActions = document.createElement('td');
+            const btnView = document.createElement('button');
+            btnView.className = 'btn-primary';
+            btnView.style.cssText = 'padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; margin-right: 5px;';
+            btnView.textContent = 'View Details';
+            btnView.addEventListener('click', () => viewProfileDetails(p.userId));
+            tdActions.appendChild(btnView);
+
+            const btnDelete = document.createElement('button');
+            btnDelete.className = 'btn-primary';
+            btnDelete.style.cssText = 'padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; background: #e53e3e; border: none; color: white;';
+            btnDelete.textContent = 'Delete';
+            btnDelete.addEventListener('click', () => deleteProfile(p.userId, p.email));
+            tdActions.appendChild(btnDelete);
+
+            tr.appendChild(tdActions);
             body.appendChild(tr);
         });
     } catch (err) {
@@ -1838,24 +1962,28 @@ async function saveProfileFromAdmin(e, userId) {
 
 async function loadSpinWin() {
     try {
-        const res = await fetch(API_BASE_URL + '/api/config/spin-wheel');
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch(API_BASE_URL + '/api/admin/config/spin-wheel', {
+            headers: { Authorization: 'Bearer ' + token },
+            cache: 'no-store'
+        });
         if (!res.ok) throw new Error("Failed to load Spin & Win config");
         const data = await res.json();
 
         document.getElementById('sw_enabled').checked = data.enabled || false;
 
-        document.getElementById('sw_new_user_threshold').value = data.new_user_kurthi_threshold || 10;
-        document.getElementById('sw_order_threshold').value = data.order_kurthi_threshold || 50;
+        document.getElementById('sw_new_user_threshold').value = data.new_user_kurthi_threshold ?? 10;
+        document.getElementById('sw_order_threshold').value = data.order_kurthi_threshold ?? 50;
 
         const ft = data.first_time_probs || {};
-        document.getElementById('sw_ft_5').value = ft.prob_5_off || 50;
-        document.getElementById('sw_ft_10').value = ft.prob_10_off || 30;
-        document.getElementById('sw_ft_fail').value = ft.prob_better_luck || 20;
+        document.getElementById('sw_ft_5').value = ft.prob_5_off ?? 50;
+        document.getElementById('sw_ft_10').value = ft.prob_10_off ?? 30;
+        document.getElementById('sw_ft_fail').value = ft.prob_better_luck ?? 20;
 
         const ret = data.returning_probs || {};
-        document.getElementById('sw_ret_5').value = ret.prob_5_off || 30;
-        document.getElementById('sw_ret_10').value = ret.prob_10_off || 10;
-        document.getElementById('sw_ret_fail').value = ret.prob_better_luck || 60;
+        document.getElementById('sw_ret_5').value = ret.prob_5_off ?? 30;
+        document.getElementById('sw_ret_10').value = ret.prob_10_off ?? 10;
+        document.getElementById('sw_ret_fail').value = ret.prob_better_luck ?? 60;
 
     } catch (err) {
         showAdminAlert(err.message, 'Config Error', 'error');
@@ -2312,27 +2440,52 @@ async function confirmStorePickup(orderId) {
                         return;
                     }
 
-                    tbody.innerHTML = messages.map(msg => `
-            <tr style="background: ${msg.status === 'unread' ? '#fff6f6' : 'transparent'}">
-                <td>${new Date(msg.createdAt).toLocaleString()}</td>
-                <td><strong>${msg.name}</strong></td>
-                <td>
-                    <a href="mailto:${msg.email}">${msg.email}</a><br/>
-                    <a href="tel:${msg.phone}">${msg.phone || 'N/A'}</a>
-                </td>
-                <td>${msg.orderId || 'N/A'}</td>
-                <td><div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${msg.message}">${msg.message}</div></td>
-                <td><span class="badge ${msg.status === 'unread' ? 'danger' : 'success'}">${msg.status}</span></td>
-                <td>
-                    ${msg.status === 'unread'
-                            ? `<button onclick="markSupportRead(${msg.id})" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Mark Read</button>`
-                            : `<button disabled class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; opacity: 0.6;">Read</button>`
+                    const rows = document.createDocumentFragment();
+                    for (const msg of messages) {
+                        const row = rows.appendChild(document.createElement('tr'));
+                        const unread = msg.status === 'unread';
+                        if (unread) row.style.background = '#fff6f6';
+                        row.insertCell().textContent = new Date(msg.createdAt).toLocaleString();
+                        row.insertCell().appendChild(document.createElement('strong')).textContent = msg.name;
+                        const contact = row.insertCell();
+                        const email = String(msg.email ?? '').trim();
+                        if (/^[^\s@?&#%]+@[^\s@?&#%]+\.[^\s@?&#%]+$/.test(email)) {
+                            const link = contact.appendChild(document.createElement('a'));
+                            link.href = 'mailto:' + email;
+                            link.textContent = email;
+                        } else {
+                            contact.append(document.createTextNode(email || 'N/A'));
                         }
-                </td>
-            </tr>
-        `).join('');
+                        contact.appendChild(document.createElement('br'));
+                        const phone = String(msg.phone ?? '').trim();
+                        const number = phone.replace(/[\s().-]/g, '');
+                        if (/^\+?\d{7,15}$/.test(number)) {
+                            const link = contact.appendChild(document.createElement('a'));
+                            link.href = 'tel:' + number;
+                            link.textContent = phone;
+                        } else {
+                            contact.append(document.createTextNode(phone || 'N/A'));
+                        }
+                        row.insertCell().textContent = msg.orderId || 'N/A';
+                        const message = row.insertCell().appendChild(document.createElement('div'));
+                        message.style.cssText = 'max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+                        message.textContent = message.title = msg.message;
+                        const badge = row.insertCell().appendChild(document.createElement('span'));
+                        badge.className = unread ? 'badge danger' : 'badge success';
+                        badge.textContent = msg.status;
+                        const button = row.insertCell().appendChild(document.createElement('button'));
+                        button.className = unread ? 'btn-primary' : 'btn-secondary';
+                        button.textContent = unread ? 'Mark Read' : 'Read';
+                        button.disabled = !unread;
+                        if (unread) button.addEventListener('click', () => markSupportRead(msg.id));
+                    }
+                    tbody.replaceChildren(rows);
                 } catch (err) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="color:red">Error: ' + err.message + '</td></tr>';
+                    tbody.replaceChildren();
+                    const cell = tbody.insertRow().insertCell();
+                    cell.colSpan = 7;
+                    cell.style.color = 'red';
+                    cell.textContent = 'Error: ' + err.message;
                 }
             }
 
@@ -2397,8 +2550,8 @@ async function confirmStorePickup(orderId) {
                 try {
                     // Fetch homepage config and store products in parallel
                     const [hpRes, prodRes] = await Promise.all([
-                        fetch(API_BASE_URL + '/api/config/homepage'),
-                        fetch(API_BASE_URL + '/api/products')
+                        fetch(API_BASE_URL + '/api/config/homepage', { cache: 'no-store' }),
+                        fetch(API_BASE_URL + '/api/products', { cache: 'no-store' })
                     ]);
 
                     if (hpRes.ok) {
@@ -3018,7 +3171,8 @@ async function confirmStorePickup(orderId) {
 
                     if (hpRes.ok) {
                         const hpData = await hpRes.json();
-                        currentFlashConfig = hpData.flash_drop || {};
+                        const config = hpData.flash_drop || {};
+                        currentFlashConfig = window.resolveLegacySpotlight(config, flashProductsList) || config;
                         applyFlashConfigToUI(currentFlashConfig);
                     }
                 } catch (err) {
@@ -3045,48 +3199,17 @@ async function confirmStorePickup(orderId) {
             }
 
             function getActiveFlashProduct() {
-                const isManual = document.getElementById('fd_mode_manual')?.checked;
-                const prodId = document.getElementById('fd_product_select')?.value;
-
-                if (isManual && prodId) {
-                    const manualProd = flashProductsList.find(p => String(p.id) === String(prodId));
-                    if (manualProd) return manualProd;
+                if (document.getElementById('fd_mode_manual')?.checked) {
+                    const id = document.getElementById('fd_product_select')?.value;
+                    return flashProductsList.find(product => String(product.id) === String(id));
                 }
-
-                // Random mode: find the currently rotating product matching storefront Home.jsx deterministic cycle
-                const durHours = parseInt(document.getElementById('fd_random_hours')?.value) ?? 6;
-                const durMins = parseInt(document.getElementById('fd_random_mins')?.value) ?? 0;
-                const totalCycleMins = (durHours * 60) + durMins;
-                const cycleMs = (totalCycleMins > 0 ? totalCycleMins : 360) * 60 * 1000;
-                const cycleStart = currentFlashConfig?.cycle_started_at
-                    ? new Date(currentFlashConfig.cycle_started_at).getTime()
-                    : 0;
-                const elapsedMs = Math.max(0, Date.now() - cycleStart);
-                const cycleBlock = Math.floor(elapsedMs / cycleMs);
-
-                const inStockKurtis = flashProductsList.filter(p => {
-                    const cat = (p.category || '').toLowerCase();
-                    const name = (p.name || '').toLowerCase();
-                    const isKurti = cat.includes('kurti') || cat.includes('tunic') || cat.includes('straight') || cat.includes('line') || name.includes('kurti');
-                    return (p.stock || 0) > 0 && isKurti;
-                });
-                const pool = inStockKurtis.length > 0
-                    ? inStockKurtis
-                    : (flashProductsList.filter(p => (p.stock || 0) > 0).length > 0 ? flashProductsList.filter(p => (p.stock || 0) > 0) : flashProductsList);
-
-                if (pool.length === 0) {
-                    return {
-                        name: 'Pink Paisley Printed Straight Kurti',
-                        price: 549,
-                        imageUrl: './images/kurthi_peach.png',
-                        stock: 5,
-                        fabric: 'Cotton',
-                        description: 'Crafted in 100% soft Jaipur cotton with vibrant floral paisley motifs.'
-                    };
+                const config = currentFlashConfig || {};
+                if (config.mode === 'random') {
+                    if (config.featured_product) return config.featured_product;
+                    return flashProductsList.find(product => String(product.id) === String(config.featured_product_id));
                 }
-
-                const index = Math.abs(cycleBlock) % pool.length;
-                return pool[index];
+                // Switching the mode in the editor does not change the live selection until Save.
+                return undefined;
             }
 
             function startAdminFlashCountdown(hours, mins, secs) {
@@ -3167,10 +3290,11 @@ async function confirmStorePickup(orderId) {
 
                 // Cycle duration for random mode
                 const randHours = document.getElementById('fd_random_hours');
-                if (randHours) randHours.value = cfg.duration_hours !== undefined ? cfg.duration_hours : 6;
+                const autoMinutes = cfg.rotation_minutes || (cfg.mode === 'random' ? (cfg.duration_hours || 0) * 60 + (cfg.duration_mins || 0) : 360) || 360;
+                if (randHours) randHours.value = Math.floor(autoMinutes / 60);
 
                 const randMins = document.getElementById('fd_random_mins');
-                if (randMins) randMins.value = cfg.duration_mins !== undefined ? cfg.duration_mins : 0;
+                if (randMins) randMins.value = autoMinutes % 60;
 
                 // Duration for manual spotlight
                 const durHours = document.getElementById('fd_duration_hours');
@@ -3340,6 +3464,11 @@ async function confirmStorePickup(orderId) {
 
             function highlightSelectedModeCard() {
                 const isManual = document.getElementById('fd_mode_manual')?.checked;
+                for (const id of ['fd_badge_text', 'fd_title', 'fd_highlight', 'fd_desc', 'fd_feature_text',
+                    'fd_remaining_stock', 'fd_total_stock']) {
+                    const field = document.getElementById(id);
+                    if (field) field.disabled = !isManual || id === 'fd_remaining_stock' || id === 'fd_total_stock';
+                }
                 const cardRandom = document.getElementById('card_mode_random');
                 const cycleBox = document.getElementById('fd_random_cycle_box');
                 const lblManual = document.getElementById('lbl_mode_manual');
@@ -3425,55 +3554,50 @@ async function confirmStorePickup(orderId) {
             }
 
             function updatePreviewCard() {
-                const activeProduct = getActiveFlashProduct();
-                if (!activeProduct) return;
-
-                const pvImg = document.getElementById('pv_img');
-                if (pvImg && activeProduct.imageUrl) pvImg.src = activeProduct.imageUrl;
-
-                const badgeVal = document.getElementById('fd_badge_text')?.value || 'SELLING FAST';
-                const pvBadge = document.getElementById('pv_badge');
-                if (pvBadge) pvBadge.innerText = badgeVal;
-
-                const titleVal = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
-                const pvTitle = document.getElementById('pv_title_prefix');
-                if (pvTitle) pvTitle.innerText = titleVal;
-
-                const customHl = document.getElementById('fd_highlight')?.value;
-                const pvHl = document.getElementById('pv_highlight');
-                if (pvHl) {
-                    pvHl.innerText = (customHl && customHl.trim() !== '') ? customHl : activeProduct.name;
+                const product = getActiveFlashProduct();
+                const manual = document.getElementById('fd_mode_manual')?.checked;
+                const input = id => document.getElementById(id)?.value?.trim();
+                const text = (id, value) => {
+                    const element = document.getElementById(id);
+                    if (element) element.textContent = value;
+                };
+                const image = document.getElementById('pv_img');
+                if (image) {
+                    image.hidden = !product?.imageUrl;
+                    if (product?.imageUrl) image.src = product.imageUrl;
+                    else image.removeAttribute('src');
+                    image.alt = product?.name || '';
                 }
-
-                const descVal = document.getElementById('fd_desc')?.value;
-                const pvDesc = document.getElementById('pv_desc');
-                if (pvDesc) {
-                    pvDesc.innerText = (descVal && descVal.trim() !== '')
-                        ? descVal
-                        : (activeProduct.description || `Crafted in 100% soft breathable ${activeProduct.fabric || 'Jaipur cotton'} with handpicked artisan detailing. Perfect for daily wear and office comfort. Only a few pieces left in stock!`);
+                text('pv_badge', manual && input('fd_badge_text') || 'Flash Spotlight Drop');
+                text('pv_title_prefix', product ? (manual && input('fd_title') || 'Featured style:') + ' ' : '');
+                text('pv_highlight', product ? (manual && input('fd_highlight') || product.name)
+                    : (currentFlashConfig.mode === 'manual' && !manual ? 'Save to start random rotation' : 'No product available'));
+                text('pv_desc', product ? manual && input('fd_desc') || product.description || '' : '');
+                text('pv_feature', product ? manual && input('fd_feature_text') || product.fabric || '' : '');
+                text('pv_price', product ? Number(product.price).toLocaleString('en-IN') : '—');
+                const sizes = Object.values(product?.sizesStock || {}).map(Number);
+                const stock = sizes.length ? sizes.reduce((sum, qty) => sum + Math.max(0, qty), 0) : Number(product?.stock || 0);
+                const lowStockLimit = 5;
+                const showStock = stock > 0 && stock <= lowStockLimit;
+                text('pv_remaining', stock);
+                const stockMeter = document.getElementById('pv_stock_line');
+                if (stockMeter) stockMeter.style.display = showStock ? 'flex' : 'none';
+                if (!manual) {
+                    for (const [id, value] of Object.entries({
+                        fd_highlight: product?.name || '',
+                        fd_desc: product?.description || '',
+                        fd_feature_text: product?.fabric || '',
+                        fd_remaining_stock: stock,
+                        fd_total_stock: stock
+                    })) {
+                        const field = document.getElementById(id);
+                        if (field) field.value = value;
+                    }
                 }
-
-                const rem = parseInt(document.getElementById('fd_remaining_stock')?.value) || Math.max(1, Math.min(activeProduct.stock || 5, 8));
-                const tot = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
-
-                const pvRem = document.getElementById('pv_remaining');
-                if (pvRem) pvRem.innerText = rem;
-
-                const pvBar = document.getElementById('pv_meter_bar');
-                if (pvBar) {
-                    const pct = Math.min(100, Math.max(10, Math.round(((tot - rem) / tot) * 100)));
-                    pvBar.style.width = `${pct}%`;
-                }
-
-                const pvPrice = document.getElementById('pv_price');
-                if (pvPrice) pvPrice.innerText = Number(activeProduct.price).toLocaleString('en-IN');
-
-                const featVal = document.getElementById('fd_feature_text')?.value;
-                const pvFeat = document.getElementById('pv_feature');
-                if (pvFeat) {
-                    pvFeat.innerText = (featVal && featVal.trim() !== '')
-                        ? featVal
-                        : (activeProduct.fabric ? `100% Pure Breathable ${activeProduct.fabric}` : '100% Pure Breathable Cotton');
+                const bar = document.getElementById('pv_meter_bar');
+                if (bar) {
+                    bar.parentElement.style.display = showStock ? 'block' : 'none';
+                    bar.style.width = showStock ? (stock / lowStockLimit * 100) + '%' : '0%';
                 }
             }
 
@@ -3515,8 +3639,6 @@ async function confirmStorePickup(orderId) {
                     }
 
                     const badgeText = document.getElementById('fd_badge_text')?.value?.trim() || 'SELLING FAST';
-                    const remainingStock = parseInt(document.getElementById('fd_remaining_stock')?.value) || 4;
-                    const totalStock = parseInt(document.getElementById('fd_total_stock')?.value) || 25;
                     const title = document.getElementById('fd_title')?.value ?? 'Customer Favorite: ';
                     const highlight = document.getElementById('fd_highlight')?.value?.trim() || '';
                     const desc = document.getElementById('fd_desc')?.value?.trim() || '';
@@ -3530,7 +3652,7 @@ async function confirmStorePickup(orderId) {
                     const activeProduct = getActiveFlashProduct();
                     const activeProdId = isManual
                         ? productId
-                        : (activeProduct?.id || (flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())?.id || ''));
+                        : '';
                     const matchedProduct = flashProductsList.find(p => String(p.id) === String(activeProdId))
                         || flashProductsList.find(p => p.name && p.name.trim().toLowerCase() === highlight.toLowerCase())
                         || activeProduct;
@@ -3546,13 +3668,16 @@ async function confirmStorePickup(orderId) {
                         original_price: activeOrigPrice,
                         duration_hours: durationHours,
                         duration_mins: durationMins,
+                        rotation_minutes: isManual
+                            ? Number(document.getElementById('fd_random_hours')?.value || 0) * 60 + Number(document.getElementById('fd_random_mins')?.value || 0)
+                            : durationHours * 60 + durationMins,
                         badge_text: badgeText,
-                        remaining_stock: remainingStock,
-                        total_stock: totalStock,
+                        remaining_stock: 0,
+                        total_stock: 0,
                         title: title,
-                        highlight: highlight,
-                        desc: desc,
-                        feature_text: featureText
+                        highlight: isManual ? highlight : '',
+                        desc: isManual ? desc : '',
+                        feature_text: isManual ? featureText : ''
                     };
 
                     console.log("[FLASH DROP] Sending payload to API:", payload);
@@ -3790,7 +3915,8 @@ async function confirmStorePickup(orderId) {
                     return;
                 }
 
-                tbody.innerHTML = orders.map(o => {
+                tbody.innerHTML = '';
+                orders.forEach(o => {
                     const id = o.id || o.ID || '';
                     const email = o.customerEmail || o.CustomerEmail || '';
                     const name = o.shippingName || o.ShippingName || '';
@@ -3799,49 +3925,117 @@ async function confirmStorePickup(orderId) {
                     const fType = o.fulfilmentType || o.FulfilmentType || '';
                     const dateStr = (o.createdAt || o.CreatedAt || '').substring(0, 10);
 
-                    let fBadge = '<span style="color: #64748b;">Standard</span>';
+                    const tr = document.createElement('tr');
+
+                    // ID Cell
+                    const tdId = document.createElement('td');
+                    const strongId = document.createElement('strong');
+                    strongId.style.cssText = 'font-size: 0.85rem; font-family: monospace;';
+                    strongId.textContent = id;
+                    tdId.appendChild(strongId);
+                    tr.appendChild(tdId);
+
+                    // Customer Cell
+                    const tdCust = document.createElement('td');
+                    const nameDiv = document.createElement('div');
+                    nameDiv.style.cssText = 'font-weight: 600; font-size: 0.88rem; color: #1e293b;';
+                    nameDiv.textContent = name || 'Customer';
+                    const emailDiv = document.createElement('div');
+                    emailDiv.style.cssText = 'font-size: 0.78rem; color: #64748b;';
+                    emailDiv.textContent = email;
+                    tdCust.appendChild(nameDiv);
+                    tdCust.appendChild(emailDiv);
+                    tr.appendChild(tdCust);
+
+                    // Fulfilment badge cell
+                    const tdF = document.createElement('td');
+                    const fBadge = document.createElement('span');
                     if (fType === 'PREORDER_STORE_PICKUP') {
-                        fBadge = '<span style="background: #f3e8ff; color: #7e22ce; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">🏪 Store Pickup</span>';
+                        fBadge.style.cssText = 'background: #f3e8ff; color: #7e22ce; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;';
+                        fBadge.textContent = 'Store Pickup';
                     } else if (fType === 'PREORDER_HOME_DELIVERY') {
-                        fBadge = '<span style="background: #dbeafe; color: #1d4ed8; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">🚚 Home Delivery</span>';
+                        fBadge.style.cssText = 'background: #dbeafe; color: #1d4ed8; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;';
+                        fBadge.textContent = 'Home Delivery';
+                    } else {
+                        fBadge.style.cssText = 'color: #64748b;';
+                        fBadge.textContent = 'Standard';
                     }
+                    tdF.appendChild(fBadge);
+                    tr.appendChild(tdF);
 
-                    let sBadge = `<span style="background: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">${status}</span>`;
+                    // Status badge cell
+                    const tdS = document.createElement('td');
+                    const sBadge = document.createElement('span');
+                    sBadge.style.cssText = 'padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;';
                     if (status === 'READY_FOR_PICKUP') {
-                        sBadge = '<span style="background: #dcfce7; color: #15803d; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">✅ Ready for Pickup</span>';
+                        sBadge.style.background = '#dcfce7';
+                        sBadge.style.color = '#15803d';
+                        sBadge.textContent = 'Ready for Pickup';
                     } else if (status === 'COLLECTED') {
-                        sBadge = '<span style="background: #f0fdf4; color: #166534; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">🎉 Collected</span>';
+                        sBadge.style.background = '#f0fdf4';
+                        sBadge.style.color = '#166534';
+                        sBadge.textContent = 'Collected';
                     } else if (status === 'AWAITING_PICKUP') {
-                        sBadge = '<span style="background: #fef3c7; color: #b45309; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">⏳ Awaiting Pickup</span>';
+                        sBadge.style.background = '#fef3c7';
+                        sBadge.style.color = '#b45309';
+                        sBadge.textContent = 'Awaiting Pickup';
                     } else if (status === 'paid') {
-                        sBadge = '<span style="background: #e0e7ff; color: #4338ca; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">Paid (In Production)</span>';
+                        sBadge.style.background = '#e0e7ff';
+                        sBadge.style.color = '#4338ca';
+                        sBadge.textContent = 'Paid (In Production)';
+                    } else {
+                        sBadge.style.background = '#f1f5f9';
+                        sBadge.style.color = '#475569';
+                        sBadge.textContent = status;
                     }
+                    tdS.appendChild(sBadge);
+                    tr.appendChild(tdS);
 
-                    let actionBtns = `<button type="button" onclick="viewPreorderAudit('${id}')" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-left: 4px;">Audit</button>`;
+                    // Amount Cell
+                    const tdAmt = document.createElement('td');
+                    const strongAmt = document.createElement('strong');
+                    strongAmt.textContent = '₹' + amount.toLocaleString('en-IN');
+                    tdAmt.appendChild(strongAmt);
+                    tr.appendChild(tdAmt);
+
+                    // Date Cell
+                    const tdDate = document.createElement('td');
+                    tdDate.style.cssText = 'font-size: 0.85rem; color: #64748b;';
+                    tdDate.textContent = dateStr;
+                    tr.appendChild(tdDate);
+
+                    // Actions Cell
+                    const tdActs = document.createElement('td');
+                    tdActs.style.textAlign = 'right';
 
                     if (fType === 'PREORDER_STORE_PICKUP') {
                         if (status !== 'READY_FOR_PICKUP' && status !== 'COLLECTED' && status !== 'cancelled' && status !== 'payment_failed') {
-                            actionBtns = `<button type="button" onclick="markPreorderReady('${id}')" style="background: #10b981; border: none; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">Mark Ready</button>` + actionBtns;
+                            const btnReady = document.createElement('button');
+                            btnReady.type = 'button';
+                            btnReady.style.cssText = 'background: #10b981; border: none; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;';
+                            btnReady.textContent = 'Mark Ready';
+                            btnReady.addEventListener('click', () => markPreorderReady(id));
+                            tdActs.appendChild(btnReady);
                         } else if (status === 'READY_FOR_PICKUP') {
-                            actionBtns = `<button type="button" onclick="confirmPreorderPickup('${id}')" style="background: #7c3aed; border: none; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">Confirm Collected</button>` + actionBtns;
+                            const btnCollect = document.createElement('button');
+                            btnCollect.type = 'button';
+                            btnCollect.style.cssText = 'background: #7c3aed; border: none; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;';
+                            btnCollect.textContent = 'Confirm Collected';
+                            btnCollect.addEventListener('click', () => confirmPreorderPickup(id));
+                            tdActs.appendChild(btnCollect);
                         }
                     }
 
-                    return `
-            <tr>
-                <td><strong style="font-size: 0.85rem; font-family: monospace;">${id}</strong></td>
-                <td>
-                    <div style="font-weight: 600; font-size: 0.88rem; color: #1e293b;">${name || 'Customer'}</div>
-                    <div style="font-size: 0.78rem; color: #64748b;">${email}</div>
-                </td>
-                <td>${fBadge}</td>
-                <td>${sBadge}</td>
-                <td><strong>₹${amount.toLocaleString('en-IN')}</strong></td>
-                <td style="font-size: 0.85rem; color: #64748b;">${dateStr}</td>
-                <td style="text-align: right;">${actionBtns}</td>
-            </tr>
-        `;
-                }).join('');
+                    const btnAudit = document.createElement('button');
+                    btnAudit.type = 'button';
+                    btnAudit.style.cssText = 'background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer;';
+                    btnAudit.textContent = 'Audit';
+                    btnAudit.addEventListener('click', () => viewPreorderAudit(id));
+                    tdActs.appendChild(btnAudit);
+
+                    tr.appendChild(tdActs);
+                    tbody.appendChild(tr);
+                });
             }
 
             async function markPreorderReady(orderId) {

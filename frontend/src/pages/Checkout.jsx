@@ -4,6 +4,7 @@ import Cart from './Cart';
 import { API_BASE_URL } from '../data/config';
 import ShippingTimeline from '../components/ShippingTimeline';
 import { fetchWithAuth } from '../utils/apiClient';
+import { cartSaleSavings, useSale } from '../context/SaleContext';
 import { Loader2 } from 'lucide-react';
 import { formatError } from '../utils/errors';
 
@@ -127,7 +128,15 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
     }, [cart, authUser, authLoading, navigate]);
 
     const subtotal = (cart || []).reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
-    let finalTotal = subtotal - (discount?.amt || 0);
+    const { sale, catalog } = useSale();
+    const saleAmount = cartSaleSavings(cart, catalog, sale);
+    const couponAmount = discount?.amt || 0;
+    const saleWins = saleAmount > 0 && saleAmount >= couponAmount;
+    let finalTotal = subtotal - Math.max(saleAmount, couponAmount);
+    const reviewKey = JSON.stringify([cart, discount?.code, selectedAddressID, checkoutType,
+        paymentMethod, preorderFulfilment, sale?.endsAt]);
+    const [reviewedPrice, setReviewedPrice] = useState(null);
+    const reviewedTotal = reviewedPrice?.key === reviewKey ? reviewedPrice.totalPaise / 100 : null;
 
     const activeAddr = authUser && addresses.length > 0 ? addresses.find(a => a.id === selectedAddressID) : null;
 
@@ -184,12 +193,6 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
         if (authUser) {
             setEmail(authUser.email || '');
 
-            fetch(`${API_BASE_URL}/api/profile/me`, {
-                headers: { 'X-User-Id': authUser.uid }
-            }).then(r => r.json()).then(data => {
-                if (data.email) setEmail(data.email);
-            }).catch(err => console.error(err));
-
             loadAddresses();
         }
     }, [authUser]);
@@ -197,9 +200,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
     const loadAddresses = async () => {
         if (!authUser) return;
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
-                headers: { 'X-User-Id': authUser.uid }
-            });
+            const response = await fetchWithAuth('/api/profile/addresses');
             if (response.ok) {
                 const data = await response.json();
                 setAddresses(data);
@@ -227,25 +228,14 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
         setAddressMessage('');
         if (!authUser) return;
         try {
-            const response = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
+            await fetchWithAuth('/api/profile/addresses', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': authUser.uid
-                },
                 body: JSON.stringify(shippingForm)
             });
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || 'Failed to save address');
-            }
-            const saved = await response.json();
             setShippingForm({ fullName: '', phone: '', addressLine: '', city: '', state: '', zipCode: '' });
             setShowNewAddressForm(false);
 
-            const loadRes = await fetch(`${API_BASE_URL}/api/profile/addresses`, {
-                headers: { 'X-User-Id': authUser.uid }
-            });
+            const loadRes = await fetchWithAuth('/api/profile/addresses');
             if (loadRes.ok) {
                 const data = await loadRes.json();
                 setAddresses(data);
@@ -263,7 +253,9 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
             navigate('/auth?redirect=/checkout');
             return;
         }
-        if (!email) return showAlert('Please enter your email address before placing an order.', 'Email Required', 'warning');
+        if (!email || !authUser.emailVerified) {
+            return showAlert('Verify your account email before placing an order.', 'Verified email required', 'warning');
+        }
 
         let order = {};
         if (isPreorder) {
@@ -280,12 +272,12 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                     paymentMethod: 'online',
                     isPreorder: true,
                     fulfilmentType: 'PREORDER_STORE_PICKUP',
-                    shippingName: authUser?.displayName || "Preorder Store Pickup Customer",
-                    shippingPhone: authUser?.phone || "0000000000",
-                    shippingAddress: preorderPickupConfig?.address || "The Ethnic Touch Store",
+                    shippingName: authUser?.displayName || authUser?.name || "Store Pickup Customer",
+                    shippingPhone: authUser?.phone || "",
+                    shippingAddress: preorderPickupConfig?.address || "The Ethnic Touch Store, Khajaguda Lake",
                     shippingCity: preorderPickupConfig?.city || "Hyderabad",
                     shippingState: preorderPickupConfig?.state || "Telangana",
-                    shippingZipCode: preorderPickupConfig?.zipCode || "500032"
+                    shippingZipCode: preorderPickupConfig?.zipCode || "500075"
                 };
             } else {
                 if (!activeAddr) {
@@ -323,12 +315,12 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                 })),
                 checkoutType: 'pickup',
                 paymentMethod: paymentMethod,
-                shippingName: "Store Pickup Customer",
-                shippingPhone: authUser?.phone || "0000000000",
-                shippingAddress: "The Ethnic Touch pickup",
+                shippingName: authUser?.displayName || authUser?.name || "Store Pickup Customer",
+                shippingPhone: authUser?.phone || "",
+                shippingAddress: "The Ethnic Touch Store, Khajaguda Lake",
                 shippingCity: "Hyderabad",
                 shippingState: "Telangana",
-                shippingZipCode: "500033"
+                shippingZipCode: "500075"
             };
         } else {
             if (!activeAddr) {
@@ -367,6 +359,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
         setOrdering(true);
 
         try {
+            order.expectedTotalPaise = Math.round((reviewedTotal ?? finalTotal) * 100);
             const res = await fetchWithAuth('/api/orders', {
                 method: 'POST',
                 body: JSON.stringify(order)
@@ -387,7 +380,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                 clearCart();
                 const effectiveCheckoutType = isPreorder ? (preorderFulfilment === 'STORE_PICKUP' ? 'pickup' : 'delivery') : 'pickup';
                 const effectiveFulfilmentType = isPreorder ? (preorderFulfilment === 'STORE_PICKUP' ? 'PREORDER_STORE_PICKUP' : 'PREORDER_HOME_DELIVERY') : '';
-                navigate('/checkout-success', {
+                navigate('/checkout-success?orderId=' + encodeURIComponent(data.orderId), {
                     state: {
                         orderId: data.orderId,
                         checkoutType: effectiveCheckoutType,
@@ -402,6 +395,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
             }
 
             // Handle Razorpay Gateway Modal
+            const orderStatusUrl = '/checkout-success?orderId=' + encodeURIComponent(data.orderId);
             const isRazorpay = data.checkoutUrl === "razorpay" && Boolean(data.razorpayKey) && Boolean(data.razorpayOrderId) && !data.razorpayOrderId.startsWith("MOCK_");
 
             if (isRazorpay) {
@@ -416,6 +410,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         prefill: { email: email },
                         theme: { color: "#B97A66" },
                         handler: async function (response) {
+                            paymentCompleteRef.current = true;
                             setVerifyingPayment(true);
                             try {
                                 const verifyRes = await fetchWithAuth(`/api/orders/verify`, {
@@ -431,8 +426,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
 
                                 if (verifyRes.ok) {
                                     const verifyData = await verifyRes.json();
-                                    paymentCompleteRef.current = true;
-                                    clearCart();
+                                    if (verifyData.status !== 'payment_review') clearCart();
                                     const effectiveCheckoutType = isPreorder
                                         ? (preorderFulfilment === 'STORE_PICKUP' ? 'pickup' : 'delivery')
                                         : (verifyData.checkoutType || checkoutType);
@@ -440,7 +434,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                                         ? (preorderFulfilment === 'STORE_PICKUP' ? 'PREORDER_STORE_PICKUP' : 'PREORDER_HOME_DELIVERY')
                                         : (verifyData.fulfilmentType || '');
 
-                                    navigate('/checkout-success', {
+                                    navigate(orderStatusUrl, {
                                         state: {
                                             orderId: data.orderId,
                                             gift: verifyData.giftCode,
@@ -463,7 +457,8 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                                     setOrdering(false);
                                 }
                             } catch (e) {
-                                showAlert("Network error verifying payment.", "Connection Error", "error");
+                                navigate(orderStatusUrl);
+                            } finally {
                                 setVerifyingPayment(false);
                                 setOrdering(false);
                             }
@@ -472,9 +467,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                             ondismiss: function () {
                                 setOrdering(false);
                                 if (data && data.orderId && !paymentCompleteRef.current) {
-                                    fetchWithAuth(`/api/orders/${data.orderId}/cancel`, {
-                                        method: 'POST'
-                                    }).catch(e => console.warn('Instant stock unlock error:', e));
+                                    navigate(orderStatusUrl);
                                 }
                             }
                         }
@@ -483,22 +476,12 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                     const rzp = new window.Razorpay(options);
                     rzp.on('payment.failed', function (resp) {
                         showAlert("Payment failed: " + ((resp && resp.error && resp.error.description) || "Payment was declined"), "Payment Failed", "error");
-                        if (data && data.orderId && !paymentCompleteRef.current) {
-                            fetchWithAuth(`/api/orders/${data.orderId}/cancel`, {
-                                method: 'POST'
-                            }).catch(() => { });
-                        }
-                        setOrdering(false);
                     });
                     rzp.open();
-                    setOrdering(false);
                 } else {
                     showAlert("Razorpay SDK is loading. Please try again in a moment.", "SDK Error", "notice");
                     setOrdering(false);
                 }
-            } else if (data.checkoutUrl && (data.checkoutUrl.startsWith('/mock-payment') || data.checkoutUrl === 'mock')) {
-                // Interactive Simulated Checkout Verification Modal
-                navigate(`/mock-payment?orderId=${data.orderId}`);
             } else {
                 showAlert("Payment gateway is temporarily unavailable. Please try again later.", "Order Error", "error");
                 if (data && data.orderId) {
@@ -507,7 +490,13 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                 setOrdering(false);
             }
         } catch (err) {
-            showAlert(formatError(err, "Error placing order. Please try again."), "Order Error", "error");
+            if (err.status === 409 && Number.isSafeInteger(err.data?.totalPaise)) {
+                setReviewedPrice({ key: reviewKey, totalPaise: err.data.totalPaise });
+                const updated = (err.data.totalPaise / 100).toLocaleString('en-IN');
+                showAlert('Your updated total is ₹' + updated + '. Review it, then select the payment button again.', 'Review updated total', 'notice');
+            } else {
+                showAlert(formatError(err, "Error placing order. Please try again."), "Order Error", "error");
+            }
             setOrdering(false);
         }
     };
@@ -756,12 +745,12 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                     )}
 
                     <div style={{ marginBottom: '1.25rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.78rem', color: '#555' }}>Confirm Email *</label>
+                        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.78rem', color: '#555' }}>Order email</label>
                         <input
                             type="email"
                             className="checkout-email-input"
                             value={email}
-                            onChange={e => setEmail(e.target.value)}
+                            readOnly
                             placeholder="you@example.com"
                             style={{ border: '1px solid #ddd', borderRadius: '8px', width: '100%', fontSize: '0.75rem', height: '34px', padding: '0.35rem 0.65rem' }}
                             disabled={ordering}
@@ -1113,12 +1102,15 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                             <span>Subtotal ({cart.reduce((sum, item) => sum + (item.quantity || 1), 0)} items):</span>
                             <span style={{ fontWeight: '600', color: '#2D2A26' }}>₹{subtotal.toLocaleString('en-IN')}</span>
                         </div>
-                        {discount && (
+                        {discount && !saleWins && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2E7D32', fontWeight: '500' }}>
                                 <span>Discount ({discount.code}):</span>
                                 <span>-₹{discount.amt.toLocaleString('en-IN')}</span>
                             </div>
                         )}
+                        {saleWins && <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2E7D32' }}>
+                            <span>{sale.name} savings</span><span>-₹{saleAmount.toLocaleString('en-IN')}</span>
+                        </div>}
                         {(checkoutType === 'delivery' || checkoutType === 'pickup') && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6C6863' }}>
                                 <span>Shipping:</span>
@@ -1147,7 +1139,7 @@ const Checkout = ({ cart, discount, clearCart, authUser, authLoading, setProfile
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(212, 163, 115, 0.35)', paddingTop: '0.65rem', marginTop: '0.3rem' }}>
                             <span style={{ fontWeight: 600, color: '#2D2A26', fontSize: '0.92rem' }}>Total Amount:</span>
-                            <strong style={{ fontSize: '1.1rem', color: '#8F5E36', fontFamily: 'var(--font-body)' }}>₹{finalTotal.toLocaleString('en-IN')}</strong>
+                            <strong style={{ fontSize: '1.1rem', color: '#8F5E36', fontFamily: 'var(--font-body)' }}>₹{(reviewedTotal ?? finalTotal).toLocaleString('en-IN')}</strong>
                         </div>
                     </div>
 

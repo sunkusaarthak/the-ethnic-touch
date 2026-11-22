@@ -10,6 +10,7 @@ import SizeGuide from '../components/SizeGuide';
 import ZoomableImage from '../components/ZoomableImage';
 import useSEO from '../utils/useSEO';
 import { createProductSlug } from '../utils/slugHelper';
+import { saleProduct, useSale } from '../context/SaleContext';
 
 const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, authUser }) => {
     const { id } = useParams();
@@ -20,7 +21,8 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
     const [isFetchingDelta, setIsFetchingDelta] = useState(true);
     const [notFound, setNotFound] = useState(false);
 
-    const product = localProduct || globalProduct;
+    const { sale } = useSale();
+    const product = useMemo(() => saleProduct(localProduct || globalProduct, sale), [localProduct, globalProduct, sale]);
 
     useSEO({
         title: product ? `${product.name} | The Ethnic Touch` : 'Jaipur Kurti | The Ethnic Touch',
@@ -507,7 +509,9 @@ const ProductDetails = ({ products, addToCart, wishlist = [], toggleWishlist, au
                     </div>
 
                     <div style={{fontSize: '1.8rem', fontWeight: '600', marginBottom: '1.5rem', color: 'var(--color-primary)'}}>
-                        ₹{product.price.toLocaleString('en-IN')} <span style={{fontSize: '0.8rem', color: '#888', fontWeight: '400'}}>(Inclusive of all taxes)</span>
+                        ₹{product.price.toLocaleString('en-IN')} {product.originalPrice > product.price && (
+                            <del style={{fontSize: '0.9rem', color: '#888'}}>₹{product.originalPrice.toLocaleString('en-IN')}</del>
+                        )} <span style={{fontSize: '0.8rem', color: '#888', fontWeight: '400'}}>(Inclusive of all taxes)</span>
                     </div>
                     
                     {/* Size Selector */}

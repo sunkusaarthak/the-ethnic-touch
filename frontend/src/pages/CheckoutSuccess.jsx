@@ -2,28 +2,38 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, Link, useLocation, useParams, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import CopyButton from '../components/CopyButton';
 import confetti from 'canvas-confetti';
+import { useAuth } from '../context/AuthContext';
+import { apiClient } from '../utils/apiClient';
 
 const CheckoutSuccess = () => {
     const location = useLocation();
     const state = location.state || {};
     const {
-        orderId,
+        orderId: stateOrderId,
         gift,
         tracking: stateTracking,
         unlockedGift,
         giftType,
         giftExpiryDate,
         checkoutType: stateCheckoutType,
-        paymentMethod,
+        paymentMethod: statePaymentMethod,
         amount: stateAmount,
         isPreorder: stateIsPreorder,
         fulfilmentType: stateFulfilmentType,
         pickupConfig: statePickupConfig,
         pickupLocationSnapshot: stateSnapshot
     } = state;
+    const orderId = new URLSearchParams(location.search).get('orderId') || stateOrderId;
     const navigate = useNavigate();
+    const { authUser, authLoading } = useAuth();
 
-    const [fetchedOrder, setFetchedOrder] = useState(null);
+    const [loadedOrder, setLoadedOrder] = useState(null);
+    const [statusError, setStatusError] = useState('');
+    const [statusRefresh, setStatusRefresh] = useState(0);
+    const [cancelling, setCancelling] = useState(false);
+    const fetchedOrder = loadedOrder?.uid === authUser?.uid && loadedOrder?.order?.id === orderId
+        ? loadedOrder.order
+        : null;
     const [pickupConfig, setPickupConfig] = useState(() => {
         if (statePickupConfig) return statePickupConfig;
         if (stateSnapshot) {
@@ -38,30 +48,54 @@ const CheckoutSuccess = () => {
             return;
         }
 
-        // Fetch order to guarantee up-to-date and accurate fulfillment info even across page reloads
-        fetch(`/api/orders?orderId=${encodeURIComponent(orderId)}`)
-            .then(res => res.ok ? res.json() : null)
-            .then(orderData => {
-                if (orderData) {
-                    setFetchedOrder(orderData);
-                    if (orderData.pickupLocationSnapshot) {
-                        try {
-                            setPickupConfig(JSON.parse(orderData.pickupLocationSnapshot));
-                        } catch (_) { }
-                    }
+        if (authLoading || !authUser) return;
+        let active = true;
+        let timer;
+        let checks = 0;
+        const loadOrder = async () => {
+            try {
+                const orderData = await apiClient.get('/api/orders?orderId=' + encodeURIComponent(orderId));
+                if (!active) return;
+                setLoadedOrder({ uid: authUser.uid, order: orderData });
+                setStatusError('');
+                if (orderData.pickupLocationSnapshot) {
+                    try {
+                        setPickupConfig(JSON.parse(orderData.pickupLocationSnapshot));
+                    } catch (_) { }
                 }
-            })
-            .catch(err => console.error("[CheckoutSuccess] Failed to refresh order details:", err));
+                if (orderData.status === 'pending' && ++checks < 8) {
+                    timer = setTimeout(loadOrder, 5000);
+                }
+            } catch (err) {
+                if (active) setStatusError(err.status === 404 ? 'Order not found for this account.' : 'We couldn’t load your order status. Try again shortly.');
+            }
+        };
+        setStatusError('');
+        loadOrder();
+        return () => {
+            active = false;
+            clearTimeout(timer);
+        };
+    }, [orderId, authLoading, authUser, navigate, statusRefresh]);
 
+    useEffect(() => {
         if (!pickupConfig) {
-            fetch('/api/config/preorder-pickup')
-                .then(res => res.ok ? res.json() : null)
+            apiClient.get('/api/config/preorder-pickup')
                 .then(cfg => {
                     if (cfg) setPickupConfig(prev => prev || cfg);
                 })
                 .catch(err => console.error("[CheckoutSuccess] Failed to refresh order details:", err));
         }
+    }, [pickupConfig]);
 
+    const paymentMethod = fetchedOrder?.paymentMethod || statePaymentMethod;
+    const orderStatus = fetchedOrder?.status;
+    const confirmed = ['paid', 'shipped', 'delivered', 'picked_up', 'ready_for_pickup',
+        'dispatched_instant', 'preorder_production', 'preorder_quality_check',
+        'AWAITING_PICKUP', 'READY_FOR_PICKUP', 'COLLECTED'].includes(orderStatus) ||
+        (orderStatus === 'pending_payment' && paymentMethod === 'offline_qr');
+    useEffect(() => {
+        if (!confirmed) return;
         try {
             confetti({
                 particleCount: 140,
@@ -90,13 +124,50 @@ const CheckoutSuccess = () => {
         } catch (err) {
             console.log("Confetti animation error:", err);
         }
-    }, [orderId, navigate]);
+    }, [confirmed]);
 
     if (!orderId) {
         return null;
     }
 
-    const displayGift = unlockedGift || gift;
+    if (!confirmed) {
+        const pending = orderStatus === 'pending';
+        const review = orderStatus === 'payment_review';
+        const failed = ['cancelled', 'payment_failed'].includes(orderStatus);
+        const title = review ? 'Payment received. Order under review' : failed ? 'Order closed' :
+            pending ? 'Waiting for payment confirmation' : 'Order status';
+        const redirect = '/checkout-success?orderId=' + encodeURIComponent(orderId);
+        const message = authLoading ? 'Loading your account…' : !authUser ? 'Sign in to check this order.' :
+            statusError || (review ? 'Your payment was received. Contact the store with your order number before trying again.' :
+                failed ? 'This order is closed. Contact the store if money was deducted.' :
+                    pending ? 'If you already paid, check this page again before making another payment.' :
+                        'Checking your order details…');
+        const cancelUnpaidOrder = async () => {
+            setCancelling(true);
+            try {
+                await apiClient.post('/api/orders/' + encodeURIComponent(orderId) + '/cancel', {});
+                setStatusRefresh(x => x + 1);
+            } catch (err) {
+                setStatusError(err.message);
+            } finally {
+                setCancelling(false);
+            }
+        };
+        return (
+            <main style={{ maxWidth: '36rem', margin: '3rem auto', padding: '0 1rem', textAlign: 'center' }}>
+                <h1>{title}</h1>
+                <p>{message}</p>
+                <p>Order {orderId}</p>
+                {!authLoading && !authUser && <Link to={'/auth?redirect=' + encodeURIComponent(redirect)}>Sign in</Link>}
+                {authUser && !failed && <button type="button" onClick={() => setStatusRefresh(x => x + 1)}>Check status again</button>}
+                {authUser && pending && <p><button type="button" disabled={cancelling} onClick={cancelUnpaidOrder}>Cancel unpaid order</button></p>}
+                {authUser && (review || failed) && <p><Link to="/contact">Contact support</Link></p>}
+                {authUser && failed && <p><Link to="/cart">Return to cart</Link></p>}
+            </main>
+        );
+    }
+
+    const displayGift = fetchedOrder?.unlockedGift || unlockedGift || gift;
     const isPhysical = giftType === 'physical';
 
     // Authoritative resolution of fulfillment & checkout type
@@ -375,7 +446,8 @@ const CheckoutSuccess = () => {
                 </div>
                 )}
 
-                {displayGift && (
+                {displayGift && !giftType && <p style={{ textAlign: 'center' }}>Order reward: <strong>{displayGift}</strong></p>}
+                {displayGift && giftType && (
                     <div style={{
                         marginTop: '1.75rem',
                         padding: '1.4rem 1rem',

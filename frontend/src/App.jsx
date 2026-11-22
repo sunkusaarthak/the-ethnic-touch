@@ -28,6 +28,7 @@ import apiClient from './utils/apiClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AlertProvider, useAlert } from './context/AlertContext';
 import { CartProvider, useCart } from './context/CartContext';
+import { SaleBanner, SaleContext, saleProduct, useStoreSale } from './context/SaleContext';
 
 const AdminRedirect = () => {
     useEffect(() => {
@@ -43,7 +44,9 @@ const AppFooterWrapper = () => {
 };
 
 const AppRoutesContent = () => {
-    const [products, setProducts] = useState([]);
+    const [catalog, setProducts] = useState([]);
+    const sale = useStoreSale();
+    const products = React.useMemo(() => catalog.map(product => saleProduct(product, sale)), [catalog, sale]);
     const [loading, setLoading] = useState(true);
     const [globalSearch, setGlobalSearch] = useState('');
     const [profileIncomplete, setProfileIncomplete] = useState(false);
@@ -108,8 +111,10 @@ const AppRoutesContent = () => {
     const cartCount = (cart || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
 
     return (
+        <SaleContext.Provider value={{ sale, catalog }}>
         <BrowserRouter>
             <ScrollToTop />
+            <SaleBanner sale={sale} />
             <AnnouncementTicker />
             <Navbar 
                 products={products}
@@ -265,6 +270,7 @@ const AppRoutesContent = () => {
                 </div>
             )}
         </BrowserRouter>
+        </SaleContext.Provider>
     );
 };
 

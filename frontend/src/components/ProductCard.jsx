@@ -2,6 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import ImageWithSkeleton from './ImageWithSkeleton';
 import { createProductSlug } from '../utils/slugHelper';
+import { saleProduct, useSale } from '../context/SaleContext';
 
 /**
  * Silently preloads a list of image URLs into the browser cache
@@ -15,7 +16,9 @@ function prefetchImages(urls = []) {
     });
 }
 
-const RenderProductCard = ({ product, wishlist, toggleWishlist, index = 99 }) => {
+const RenderProductCard = ({ product: baseProduct, wishlist, toggleWishlist, index = 99 }) => {
+    const { sale } = useSale();
+    const product = saleProduct(baseProduct, sale);
     const isWished = wishlist.some(item => item.id === product.id);
     const slug = createProductSlug(product.name);
 

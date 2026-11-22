@@ -151,6 +151,7 @@
                     </svg>
                     <span class="nav-label">Products & Inventory</span>
                 </li>
+                <li data-tab="sales" data-title="Sitewide Sale" class="admin-only"><span class="nav-label">Sitewide Sale</span></li>
                 <li data-tab="flashdrop" data-title="Flash Spotlight Drop" class="admin-only">
                     <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2">
@@ -419,6 +420,7 @@
                         style="padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; background: #fff;"
                         onchange="renderOrders()">
                         <option value="actual">Actual Orders (Confirmed/Paid)</option>
+                        <option value="payment_review">Payments Needing Review</option>
                         <option value="all">All Orders (Including Pending/Abandoned)</option>
                     </select>
                 </div>
@@ -665,6 +667,26 @@
         </div>
 
         <!-- Flash Spotlight Drop Tab -->
+        <div id="tab-sales" class="tab-content">
+            <div class="section-card">
+                <h2>Sitewide Sale</h2>
+                <form id="siteSaleForm" style="display:grid;gap:1rem;max-width:36rem">
+                    <label><input name="enabled" type="checkbox"> Enable or schedule sale</label>
+                    <label>Campaign name <input name="name" type="text" maxlength="100"></label>
+                    <label>Discount (%) <input name="percent" type="number" min="1" max="90" step="1"></label>
+                    <label>Collections <input name="collections" type="text" placeholder="All collections if left blank"></label>
+                    <small>Separate collection names with commas. Preorders and already discounted products are excluded.</small>
+                    <label>Starts (IST) <input name="startsAt" type="datetime-local"></label>
+                    <label>Ends (IST) <input name="endsAt" type="datetime-local"></label>
+                    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                        <button type="button" id="previewSiteSale" class="btn-secondary">Preview</button>
+                        <button type="submit" class="btn-primary">Save sale</button>
+                        <button type="button" id="endSiteSale" class="btn-secondary">End now</button>
+                    </div>
+                    <p id="siteSaleStatus" role="status"></p>
+                </form>
+            </div>
+        </div>
         <div id="tab-flashdrop" class="tab-content">
             <div
                 style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
@@ -955,7 +977,7 @@
                         <!-- Product Image Frame -->
                         <div
                             style="width: 190px; height: 235px; border-radius: 16px; overflow: hidden; border: 2px solid rgba(212, 163, 115, 0.4); box-shadow: 0 10px 24px rgba(0,0,0,0.5); margin-bottom: 1.25rem; background: #1a1816;">
-                            <img id="pv_img" src="./images/kurthi_peach.png" alt="Spotlight Kurti"
+                            <img id="pv_img" hidden alt=""
                                 style="width: 100%; height: 100%; object-fit: cover;">
                         </div>
 
@@ -964,21 +986,19 @@
                             style="display: inline-flex; align-items: center; gap: 7px; background: rgba(196, 109, 94, 0.22); border: 1px solid rgba(196, 109, 94, 0.45); color: #FFAAA0; font-size: 0.72rem; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; padding: 4px 12px; border-radius: 20px; margin-bottom: 0.9rem;">
                             <span
                                 style="width: 7px; height: 7px; border-radius: 50%; background: #FF6B57; box-shadow: 0 0 8px #FF6B57;"></span>
-                            <span id="pv_badge">SELLING FAST</span>
+                            <span id="pv_badge">In the spotlight</span>
                         </div>
 
                         <!-- Card Headline -->
                         <h4
                             style="font-family: var(--font-heading); font-size: 1.25rem; margin: 0 0 0.5rem; line-height: 1.3; color: #FAF5F0;">
-                            <span id="pv_title_prefix">Customer Favorite: </span>
-                            <span id="pv_highlight" style="color: #D4A373;">Pink Paisley Cotton Kurti</span>
+                            <span id="pv_title_prefix"></span>
+                            <span id="pv_highlight" style="color: #D4A373;">Loading Spotlight…</span>
                         </h4>
 
                         <!-- Card Description -->
                         <p id="pv_desc"
                             style="color: #B8B0A8; font-size: 0.85rem; line-height: 1.45; margin: 0 0 1.2rem; max-width: 320px;">
-                            Crafted in 100% soft Jaipur cotton with vibrant floral paisley motifs. Perfect for daily
-                            wear and office comfort. Only a few pieces left in stock!
                         </p>
 
                         <!-- Countdown Timer Blocks -->
@@ -1017,16 +1037,16 @@
 
                         <!-- Stock Progress Meter -->
                         <div style="width: 100%; max-width: 320px; margin-bottom: 1.25rem;">
-                            <div
-                                style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.4rem;">
+                            <div id="pv_stock_line"
+                                style="display: none; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.4rem;">
                                 <span style="color: #9E968D;">Stock Availability</span>
-                                <strong style="color: #FFF;">Only <span id="pv_remaining">4</span> Pieces
+                                <strong style="color: #FFF;">Only <span id="pv_remaining"></span> Pieces
                                     Remaining</strong>
                             </div>
-                            <div
-                                style="width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 10px; overflow: hidden;">
+                            <div aria-hidden="true"
+                                style="display: none; width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 10px; overflow: hidden;">
                                 <div id="pv_meter_bar"
-                                    style="width: 84%; height: 100%; background: #D4A373; border-radius: 10px; transition: width 0.3s ease;">
+                                    style="width: 0; height: 100%; background: #D4A373; border-radius: 10px; transition: width 0.3s ease;">
                                 </div>
                             </div>
                         </div>
@@ -1034,13 +1054,13 @@
                         <!-- CTA Button -->
                         <div
                             style="width: 100%; max-width: 320px; background: #D4A373; color: #2D2A26; font-weight: 700; font-size: 0.95rem; padding: 0.85rem; border-radius: 50px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 0.8rem; box-shadow: 0 8px 24px rgba(212,163,115,0.35);">
-                            Order Now &bull; ₹<span id="pv_price">549</span> &rarr;
+                            Order Now &bull; ₹<span id="pv_price">—</span> &rarr;
                         </div>
 
                         <!-- Feature Pill -->
                         <div
                             style="font-size: 0.78rem; color: #C4B9AD; display: flex; align-items: center; gap: 0.4rem;">
-                            ✨ <span id="pv_feature">100% Pure Breathable Cotton</span>
+                            ✨ <span id="pv_feature"></span>
                         </div>
                     </div>
                 </div>
@@ -2265,7 +2285,8 @@
     </nav>
 
     <script src="/admin/env.js"></script>
-    <script src="/admin/admin.js?v=13"></script>
+    <script src="/spotlight-compat.js"></script>
+    <script src="/admin/admin.js?v=15"></script>
 </body>
 
 </html>

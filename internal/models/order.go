@@ -1,5 +1,7 @@
 package models
 
+const OrderGiftCouponIDPrefix = "cp_gift_"
+
 // OrderItem represents an item details bought in an order
 type OrderItem struct {
 	ProductID   string  `json:"productId"`
@@ -8,6 +10,7 @@ type OrderItem struct {
 	ProductName string  `json:"productName,omitempty"`
 	Size        string  `json:"size,omitempty"`
 	IsPreorder  bool    `json:"isPreorder"`
+	ImageURL    string  `json:"imageUrl,omitempty"`
 }
 
 // CartItemInfo represents the minimal item data sent by the frontend for coupon validation
@@ -51,20 +54,21 @@ type Order struct {
 
 // OrderCreateRequest represents storefront payload to initiate booking
 type OrderCreateRequest struct {
-	CustomerEmail   string `json:"customerEmail"`
-	UserID          string `json:"userId"`
-	CouponCode      string `json:"couponCode"`
-	ShippingName    string `json:"shippingName"`
-	ShippingPhone   string `json:"shippingPhone"`
-	ShippingAddress string `json:"shippingAddress"`
-	ShippingCity    string `json:"shippingCity"`
-	ShippingState   string `json:"shippingState"`
-	ShippingZIPCode string `json:"shippingZipCode"`
-	CheckoutType    string `json:"checkoutType"`
-	PaymentMethod   string `json:"paymentMethod"`
-	FulfilmentType  string `json:"fulfilmentType"`
-	IsPreorder      bool   `json:"isPreorder"`
-	Items           []struct {
+	ExpectedTotalPaise *int64 `json:"expectedTotalPaise,omitempty"`
+	CustomerEmail      string `json:"customerEmail"`
+	UserID             string `json:"userId"`
+	CouponCode         string `json:"couponCode"`
+	ShippingName       string `json:"shippingName"`
+	ShippingPhone      string `json:"shippingPhone"`
+	ShippingAddress    string `json:"shippingAddress"`
+	ShippingCity       string `json:"shippingCity"`
+	ShippingState      string `json:"shippingState"`
+	ShippingZIPCode    string `json:"shippingZipCode"`
+	CheckoutType       string `json:"checkoutType"`
+	PaymentMethod      string `json:"paymentMethod"`
+	FulfilmentType     string `json:"fulfilmentType"`
+	IsPreorder         bool   `json:"isPreorder"`
+	Items              []struct {
 		ProductID string `json:"productId"`
 		Quantity  int    `json:"quantity"`
 		Size      string `json:"size"`
@@ -83,6 +87,7 @@ type OrderVerifyRequest struct {
 // OrderVerifyResponse represents the response containing unlocked gift info
 type OrderVerifyResponse struct {
 	Message                string  `json:"message"`
+	Status                 string  `json:"status"`
 	UnlockedGift           string  `json:"unlockedGift,omitempty"`
 	GiftType               string  `json:"giftType,omitempty"`
 	GiftCode               string  `json:"giftCode,omitempty"`

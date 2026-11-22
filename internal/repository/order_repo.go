@@ -16,12 +16,14 @@ var ErrInvalidPreorderStatus = fmt.Errorf("invalid status transition for preorde
 
 type OrderRepository interface {
 	GetOrder(orderID string) (*models.Order, error)
+	GetOrderByRazorpayID(razorpayOrderID string) (*models.Order, error)
 	GetAllOrders(email string) ([]models.Order, error)
 	GetAdminOrders(orderID string) ([]models.Order, error)
 	GetPendingDeliveryOrders() ([]models.Order, error)
 	CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
-	UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error
+	RecordCapturedPayment(orderID, paymentID string) (status string, changed bool, err error)
+	SaveOrderGift(orderID, gift string, coupon *models.Coupon) (string, error)
 	ConfirmStorePickup(orderID string) error
 	CancelPendingOrder(orderID string) error
 	// Preorder pickup methods
@@ -193,7 +195,7 @@ func (r *postgresOrderRepo) GetAllOrders(email string) ([]models.Order, error) {
 	if email != "" {
 		dbRows, err = r.db.Query(`SELECT `+orderColumns+`
 			FROM orders WHERE LOWER(customer_email) = LOWER($1)
-			AND (status NOT IN ('pending', 'cancelled', 'payment_failed') OR (checkout_type = 'pickup' AND payment_method = 'offline_qr' AND status = 'pending_payment'))
+			AND status NOT IN ('cancelled', 'payment_failed')
 			ORDER BY created_at DESC`, email)
 	} else {
 		dbRows, err = r.db.Query(`SELECT ` + orderColumns + ` FROM orders ORDER BY created_at DESC`)
@@ -374,46 +376,83 @@ func (r *postgresOrderRepo) UpdateOrderStatus(orderID, status, paymentID, tracki
 	return tx.Commit()
 }
 
-func (r *postgresOrderRepo) UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error {
+func (r *postgresOrderRepo) GetOrderByRazorpayID(razorpayOrderID string) (*models.Order, error) {
+	order, err := scanOrder(r.db.QueryRow(`SELECT `+orderColumns+` FROM orders WHERE razorpay_order_id = $1`, razorpayOrderID))
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+func (r *postgresOrderRepo) RecordCapturedPayment(orderID, paymentID string) (string, bool, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	defer tx.Rollback()
 
-	if newCoupon != nil {
-		_, err = tx.Exec(`INSERT INTO coupons (code, type, value, min_order, usage_limit, times_used, expiry_date, is_active)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			newCoupon.Code, newCoupon.Type, newCoupon.Value, newCoupon.MinOrder, newCoupon.UsageLimit, 0, newCoupon.ExpiryDate, newCoupon.IsActive)
-		if err != nil {
-			return fmt.Errorf("failed to insert coupon in transaction: %w", err)
+	var status, existingPayment, method string
+	err = tx.QueryRow(`SELECT status, COALESCE(razorpay_payment_id, ''), COALESCE(payment_method, 'online')
+		FROM orders WHERE id = $1 FOR UPDATE`, orderID).Scan(&status, &existingPayment, &method)
+	if err != nil {
+		return "", false, fmt.Errorf("lock order for payment: %w", err)
+	}
+	if method != "online" || paymentID == "" {
+		return "", false, fmt.Errorf("order is not payable online")
+	}
+	if existingPayment == paymentID {
+		return status, false, nil
+	}
+	if existingPayment != "" {
+		return "", false, fmt.Errorf("order has a different recorded payment")
+	}
+	switch status {
+	case "pending":
+		status = "paid"
+	case "cancelled":
+		// The cancellation already returned stock. Keep this out of fulfillment.
+		status = "payment_review"
+	default:
+		return "", false, fmt.Errorf("order cannot accept payment in state %s", status)
+	}
+	if _, err := tx.Exec(`UPDATE orders SET status = $1, razorpay_payment_id = $2 WHERE id = $3`,
+		status, paymentID, orderID); err != nil {
+		return "", false, fmt.Errorf("record captured payment: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", false, err
+	}
+	return status, true, nil
+}
+
+func (r *postgresOrderRepo) SaveOrderGift(orderID, gift string, coupon *models.Coupon) (string, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var existingGift string
+	if err := tx.QueryRow(`SELECT COALESCE(unlocked_gift, '') FROM orders WHERE id = $1 FOR UPDATE`, orderID).
+		Scan(&existingGift); err != nil {
+		return "", fmt.Errorf("lock order for reward: %w", err)
+	}
+	if existingGift != "" {
+		return existingGift, nil
+	}
+	if coupon != nil {
+		if _, err := tx.Exec(`INSERT INTO coupons (id, code, type, value, min_order, usage_limit, used_count, expiry_date, is_active)
+			VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8)`,
+			coupon.ID, coupon.Code, coupon.Type, coupon.Value, coupon.MinOrder, coupon.UsageLimit, coupon.ExpiryDate, coupon.IsActive); err != nil {
+			return "", fmt.Errorf("insert order reward coupon: %w", err)
 		}
 	}
-
-	query := "UPDATE orders SET status = $1"
-	args := []interface{}{status}
-	argIdx := 2
-
-	if paymentID != "" {
-		query += fmt.Sprintf(", razorpay_payment_id = $%d", argIdx)
-		args = append(args, paymentID)
-		argIdx++
+	if _, err := tx.Exec(`UPDATE orders SET unlocked_gift = $1 WHERE id = $2`, gift, orderID); err != nil {
+		return "", fmt.Errorf("save order reward: %w", err)
 	}
-	if unlockedGift != "" {
-		query += fmt.Sprintf(", unlocked_gift = $%d", argIdx)
-		args = append(args, unlockedGift)
-		argIdx++
+	if err := tx.Commit(); err != nil {
+		return "", err
 	}
-
-	query += fmt.Sprintf(" WHERE id = $%d", argIdx)
-	args = append(args, orderID)
-
-	_, err = tx.Exec(query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to update order status in transaction: %w", err)
-	}
-
-	return tx.Commit()
+	return gift, nil
 }
 
 func (r *postgresOrderRepo) CancelPendingOrder(orderID string) error {
@@ -599,6 +638,10 @@ func (r *postgresOrderRepo) MarkPreorderPickupReady(orderID string) error {
 	// Idempotent
 	if status == models.PreorderStatusReadyForPickup || status == models.PreorderStatusCollected {
 		return nil
+	}
+	switch status {
+	case "pending", "pending_payment", "payment_review", "cancelled", "payment_failed":
+		return ErrInvalidPreorderStatus
 	}
 
 	now := time.Now().Format(time.RFC3339)

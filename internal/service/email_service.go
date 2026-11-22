@@ -265,6 +265,10 @@ func isStorePickup(order *models.Order) bool {
 	if order == nil {
 		return false
 	}
+	ft := strings.ToUpper(strings.TrimSpace(order.FulfilmentType))
+	if ft == "PREORDER_STORE_PICKUP" || strings.Contains(ft, "STORE_PICKUP") || strings.Contains(ft, "PICKUP") {
+		return true
+	}
 	ct := strings.ToLower(strings.TrimSpace(order.CheckoutType))
 	if ct == "pickup" || ct == "store_pickup" || ct == "in_store" || ct == "instore" {
 		return true
@@ -331,13 +335,19 @@ func (s *emailService) SendOrderConfirmation(order *models.Order) error {
 
 	var subject string
 	if isPickup {
-		if isPaid {
+		if order.IsPreorder {
+			subject = fmt.Sprintf("Preorder Confirmed: #%s | Hyderabad Store Pickup", order.ID)
+		} else if isPaid {
 			subject = fmt.Sprintf("Order Confirmed: #%s | Prepaid Store Pickup at Hyderabad Store", order.ID)
 		} else {
 			subject = fmt.Sprintf("Order Reserved: #%s | Pay on Pickup at Hyderabad Store", order.ID)
 		}
 	} else {
-		subject = fmt.Sprintf("Order Confirmed: #%s | Preparing for Dispatch | The Ethnic Touch", order.ID)
+		if order.IsPreorder {
+			subject = fmt.Sprintf("Preorder Confirmed: #%s | Preparing Artisan Production | The Ethnic Touch", order.ID)
+		} else {
+			subject = fmt.Sprintf("Order Confirmed: #%s | Preparing for Dispatch | The Ethnic Touch", order.ID)
+		}
 	}
 
 	html := renderOrderConfirmationHTML(order)
@@ -609,6 +619,12 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 			headlineText = "Your In-Store Collection is Confirmed"
 			contextIntroText = fmt.Sprintf("Dear %s, thank you for choosing luxury Jaipuri craftsmanship. Your store collection checkout is complete and fully paid. Our store team is preparing and carefully packing your ensembles so they are ready for collection.", name)
 
+			if order.IsPreorder {
+				badgeHTML = `<span style="background: linear-gradient(135deg, #EFF8F2 0%, #E0F0E5 100%); color: #1B5832; border: 1.5px solid #75B58C; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">PREORDER CONFIRMED &bull; STORE COLLECTION</span>`
+				headlineText = "Your Preorder is Confirmed for Store Collection"
+				contextIntroText = fmt.Sprintf("Dear %s, thank you for pre-ordering your handcrafted Jaipuri ensembles. Your preorder is confirmed and fully paid. Once our artisans complete crafting and inspection, you will receive an alert to collect your garments at our Khajaguda store.", name)
+			}
+
 			scannerPassHTML = fmt.Sprintf(`
 			<!-- Store Verification Pass (Prepaid) -->
 			<div style="background: #FAF9F6; border: 1.5px solid #D4A373; border-radius: 12px; padding: 18px 14px; text-align: center; margin: 18px 0; box-shadow: 0 4px 15px rgba(212,163,115,0.08);">
@@ -680,6 +696,12 @@ func renderOrderConfirmationHTML(order *models.Order) string {
 		heroIconHTML = `<img src="https://pub-b60b66ffc0d446b288328de25bf9a315.r2.dev/email-assets/check_circle_green.png" alt="Order Confirmed" width="58" height="58" style="display: block; margin: 0 auto 14px auto; width: 58px; height: 58px; border: 0;" />`
 		headlineText = "Your Handcrafted Ensembles are Confirmed"
 		contextIntroText = fmt.Sprintf("Dear %s, thank you for choosing The Ethnic Touch. Your order has been confirmed. Our team is carefully inspecting, steaming, and packaging your Jaipuri ensembles for swift dispatch to your doorstep.", name)
+
+		if order.IsPreorder {
+			badgeHTML = `<span style="background: linear-gradient(135deg, #FCF8F2 0%, #F5EADB 100%); color: #73431A; border: 1.5px solid #C99E5F; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 25px; display: inline-block;">PREORDER CONFIRMED &bull; CRAFTING IN PROGRESS</span>`
+			headlineText = "Your Handcrafted Preorder is Confirmed"
+			contextIntroText = fmt.Sprintf("Dear %s, thank you for pre-ordering. Your bespoke ensembles are now queued with our master artisans in Jaipur. We will notify you with Delhivery live tracking as soon as your order ships.", name)
+		}
 
 		shippingAddress := fmt.Sprintf("%s, %s, %s - %s", order.ShippingAddress, order.ShippingCity, order.ShippingState, order.ShippingZIPCode)
 		phoneDisplay := ""

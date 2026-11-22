@@ -214,7 +214,7 @@ export const CartProvider = ({ children }) => {
 
     const addToCart = useCallback((product) => {
         if (!product || !product.id) return;
-        const enriched = enrichCartItem(product);
+        const enriched = enrichCartItem(product.regularPrice == null ? product : { ...product, price: product.regularPrice });
         const prodQty = enriched.quantity || 1;
         const targetSize = enriched.size || '';
 

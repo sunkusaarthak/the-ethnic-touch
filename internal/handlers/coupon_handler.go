@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"ethnictouch/internal/middleware"
 	"ethnictouch/internal/models"
 	"ethnictouch/internal/service"
 	"ethnictouch/internal/utils"
@@ -142,16 +143,23 @@ func (h *CouponHandler) HandleUserCoupons(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	reqUserID := middleware.CustomerFromContext(r.Context()).UID
+	if reqUserID == "" {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
 	coupons, err := h.svc.GetAllCoupons()
 	if err != nil {
 		http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
 		return
 	}
 
-	reqUserID := r.Header.Get("X-User-Id")
-
 	var userCoupons []map[string]interface{}
 	for _, c := range coupons {
+		// Order rewards are shown in the owner's order history.
+		if strings.HasPrefix(c.ID, models.OrderGiftCouponIDPrefix) {
+			continue
+		}
 		if c.IsActive && (c.UserID == "" || c.UserID == reqUserID) {
 			userCoupons = append(userCoupons, map[string]interface{}{
 				"id":         c.ID,

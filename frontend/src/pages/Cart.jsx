@@ -4,6 +4,7 @@ import Checkout from './Checkout';
 import AuthRequiredModal from '../components/AuthRequiredModal';
 import ShippingTimeline from '../components/ShippingTimeline';
 import { API_BASE_URL } from '../data/config';
+import { cartSaleSavings, useSale } from '../context/SaleContext';
 import { fetchWithAuth } from '../utils/apiClient';
 
 const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, authUser, wishlist = [], toggleWishlist, profileIncomplete }) => {
@@ -25,7 +26,11 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
     
     // Added a safety check (cart || []) just in case cart is ever undefined
     const subtotal = (cart || []).reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
-    const finalTotal = subtotal - (discount?.amt || discount?.value || 0);
+    const { sale, catalog } = useSale();
+    const saleAmount = cartSaleSavings(cart, catalog, sale);
+    const couponAmount = discount?.amt || 0;
+    const saleWins = saleAmount > 0 && saleAmount >= couponAmount;
+    const finalTotal = subtotal - Math.max(saleAmount, couponAmount);
 
     useEffect(() => {
         fetch(`${API_BASE_URL}/api/gift-tiers`)
@@ -440,9 +445,12 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
                                             Remove
                                         </button>
                                     </span>
-                                    <span>-₹{discount.amt.toLocaleString('en-IN')}</span>
+                                    <span>{saleWins ? 'Sale saves more' : '-₹' + couponAmount.toLocaleString('en-IN')}</span>
                                 </div>
                             )}
+                            {saleWins && <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2E7D32' }}>
+                                <span>{sale.name} savings</span><span>-₹{saleAmount.toLocaleString('en-IN')}</span>
+                            </div>}
                             {(() => {
                                 const threshold = checkoutConfig?.free_shipping_threshold || 1449.0;
                                 const amountToFreeShipping = threshold - finalTotal;
@@ -587,4 +595,4 @@ const Cart = ({ cart, updateQuantity, removeFromCart, onApplyCoupon, discount, a
     );
 };
 
-export default Cart;    
+export default Cart;

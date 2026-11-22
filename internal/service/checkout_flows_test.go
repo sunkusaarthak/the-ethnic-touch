@@ -49,13 +49,16 @@ func (m *mockOrderRepoForCheckoutFlows) UpdateOrderStatus(orderID, status, payme
 	return nil
 }
 
-func (m *mockOrderRepoForCheckoutFlows) UpdateOrderStatusWithGiftTransaction(orderID, status, paymentID, unlockedGift string, newCoupon *models.Coupon) error {
-	if o, ok := m.orders[orderID]; ok {
-		o.Status = status
-		o.RazorpayPaymentID = paymentID
-		o.UnlockedGift = unlockedGift
-	}
-	return nil
+func (m *mockOrderRepoForCheckoutFlows) GetOrderByRazorpayID(string) (*models.Order, error) {
+	return nil, models.ErrNotFound
+}
+
+func (m *mockOrderRepoForCheckoutFlows) RecordCapturedPayment(string, string) (string, bool, error) {
+	return "", false, models.ErrNotFound
+}
+
+func (m *mockOrderRepoForCheckoutFlows) SaveOrderGift(string, string, *models.Coupon) (string, error) {
+	return "", models.ErrNotFound
 }
 
 func (m *mockOrderRepoForCheckoutFlows) CancelPendingOrder(orderID string) error {

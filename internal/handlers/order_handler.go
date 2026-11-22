@@ -1,9 +1,15 @@
 package handlers
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -21,10 +27,17 @@ type OrderHandler struct {
 	profileSvc   service.ProfileService
 	configSvc    service.ConfigService
 	delhiverySvc service.DelhiveryService
+	emailSvc     service.EmailService
 }
 
-func NewOrderHandler(svc service.OrderService, profileSvc service.ProfileService, configSvc service.ConfigService, delhiverySvc service.DelhiveryService) *OrderHandler {
-	return &OrderHandler{svc: svc, profileSvc: profileSvc, configSvc: configSvc, delhiverySvc: delhiverySvc}
+func NewOrderHandler(svc service.OrderService, profileSvc service.ProfileService, configSvc service.ConfigService, delhiverySvc service.DelhiveryService, emailSvc service.EmailService) *OrderHandler {
+	return &OrderHandler{
+		svc:          svc,
+		profileSvc:   profileSvc,
+		configSvc:    configSvc,
+		delhiverySvc: delhiverySvc,
+		emailSvc:     emailSvc,
+	}
 }
 
 func (h *OrderHandler) HandleCheckout(w http.ResponseWriter, r *http.Request) {
@@ -42,10 +55,23 @@ func (h *OrderHandler) HandleCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.UserID = r.Header.Get("X-User-Id")
+	identity := middleware.CustomerFromContext(r.Context())
+	if !identity.EmailVerified || identity.Email == "" {
+		writeOrderError(w, http.StatusForbidden, "Verify your email before placing an order")
+		return
+	}
+	req.UserID = identity.UID
+	req.CustomerEmail = identity.Email
 
 	order, razorpayOrderID, checkoutURL, err := h.svc.CreateOrder(&req)
 	if err != nil {
+		var changed *service.PriceChangedError
+		if errors.As(err, &changed) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]any{"error": changed.Error(), "totalPaise": changed.TotalPaise})
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
@@ -62,6 +88,15 @@ func (h *OrderHandler) HandleCheckout(w http.ResponseWriter, r *http.Request) {
 		"paymentMethod":   order.PaymentMethod,
 	}
 
+	if order.PaymentMethod == "offline_qr" && h.emailSvc != nil {
+		orderCopy := *order
+		go func(o models.Order) {
+			if err := h.emailSvc.SendOrderConfirmation(&o); err != nil {
+				log.Printf("[Email] Error sending offline QR order confirmation for %s: %v", o.ID, err)
+			}
+		}(orderCopy)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -71,34 +106,70 @@ func (h *OrderHandler) HandleVerifyPayment(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	var req models.OrderVerifyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"Invalid request payload"}`))
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10)).Decode(&req); err != nil || req.OrderID == "" {
+		writeOrderError(w, http.StatusBadRequest, "Invalid payment verification request")
 		return
 	}
-
+	if _, ok := h.getAuthorizedOrder(w, r, req.OrderID, false); !ok {
+		return
+	}
 	resp, err := h.svc.VerifyPayment(&req)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
+		if errors.Is(err, service.ErrPaymentNeedsConfirmation) {
+			writeOrderError(w, http.StatusConflict, "Payment still needs confirmation. Check your order status before retrying payment.")
+			return
+		}
+		writeOrderError(w, http.StatusBadRequest, "Payment could not be verified")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *OrderHandler) HandleRazorpayWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	secret := os.Getenv("RAZORPAY_WEBHOOK_SECRET")
+	if secret == "" {
+		http.Error(w, "Webhook is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
+	if err != nil {
+		http.Error(w, "Invalid webhook body", http.StatusBadRequest)
+		return
+	}
+	provided, err := hex.DecodeString(r.Header.Get("X-Razorpay-Signature"))
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	if err != nil || !hmac.Equal(provided, mac.Sum(nil)) {
+		http.Error(w, "Invalid webhook signature", http.StatusUnauthorized)
 		return
 	}
 
-	if order, err := h.svc.GetOrder(req.OrderID); err == nil {
-		if h.profileSvc != nil {
-			if p, err := h.profileSvc.GetProfileByEmail(order.CustomerEmail); err == nil && p != nil && p.UserID != "" {
-				h.profileSvc.AddSpinTicket(p.UserID, 1)
-			}
-		}
-		h.configSvc.IncrementOrderKurthiCounter()
+	var event struct {
+		Event   string `json:"event"`
+		Payload struct {
+			Payment struct {
+				Entity service.RazorpayPayment `json:"entity"`
+			} `json:"payment"`
+		} `json:"payload"`
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	if err := json.Unmarshal(body, &event); err != nil {
+		http.Error(w, "Invalid webhook event", http.StatusBadRequest)
+		return
+	}
+	if event.Event == "payment.captured" {
+		if err := h.svc.RecordRazorpayCapture(event.Payload.Payment.Entity); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("Razorpay capture could not be recorded: %v", err)
+			http.Error(w, "Webhook could not be processed", http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *OrderHandler) HandleCancelOrder(w http.ResponseWriter, r *http.Request) {
@@ -106,170 +177,101 @@ func (h *OrderHandler) HandleCancelOrder(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	orderID := r.PathValue("id")
 	if orderID == "" {
 		orderID = r.URL.Query().Get("orderId")
 	}
-
-	reqEmail := ""
 	if orderID == "" {
 		var req struct {
 			OrderID string `json:"orderId"`
-			Email   string `json:"email"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		orderID = req.OrderID
-		reqEmail = req.Email
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10)).Decode(&req); err == nil {
+			orderID = req.OrderID
+		}
 	}
-
 	if orderID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"orderId is required"}`))
+		writeOrderError(w, http.StatusBadRequest, "orderId is required")
 		return
 	}
-
-	order, err := h.svc.GetOrder(orderID)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"Order not found"}`))
+	if _, ok := h.getAuthorizedOrder(w, r, orderID, false); !ok {
 		return
 	}
-
-	// Verify authorization: only admin/staff or the order customer may cancel
-	role, _ := r.Context().Value(middleware.RoleKey).(string)
-	isAdmin := role == "admin" || role == "employee"
-
-	if !isAdmin {
-		callerUserID := r.Header.Get("X-User-Id")
-		callerEmail := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
-		if callerEmail == "" {
-			callerEmail = strings.ToLower(strings.TrimSpace(reqEmail))
-		}
-
-		isOwner := false
-		if callerEmail != "" && strings.EqualFold(callerEmail, order.CustomerEmail) {
-			isOwner = true
-		} else if callerUserID != "" && h.profileSvc != nil {
-			if p, err := h.profileSvc.GetProfile(callerUserID); err == nil && p != nil {
-				if strings.EqualFold(p.Email, order.CustomerEmail) {
-					isOwner = true
-				}
-			}
-		}
-
-		if !isOwner {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte(`{"error":"Forbidden: you do not have permission to cancel this order"}`))
+	if err := h.svc.CancelOrder(orderID); err != nil {
+		if errors.Is(err, service.ErrPaymentNeedsConfirmation) {
+			writeOrderError(w, http.StatusConflict, "This order cannot be cancelled while the payment is being confirmed or after it has been recorded.")
 			return
 		}
-
-		if order.Status != "pending" && order.Status != "pending_payment" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"error":"Only pending orders can be cancelled"}`))
-			return
-		}
-	}
-
-	err = h.svc.CancelOrder(orderID)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": utils.FormatError(err)})
+		writeOrderError(w, http.StatusServiceUnavailable, "Could not check whether the order can be cancelled. Please try again.")
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Order cancelled and locked products released",
-	})
+	json.NewEncoder(w).Encode(map[string]any{"success": true, "message": "Order cancellation processed"})
 }
 
 func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	role, _ := r.Context().Value(middleware.RoleKey).(string)
+	isStaff := role == "admin" || role == "employee"
 	orderID := r.URL.Query().Get("orderId")
 	if orderID == "" {
 		orderID = r.PathValue("id")
 	}
-
-	if orderID == "" {
-		email := r.URL.Query().Get("email")
-		userID := r.Header.Get("X-User-Id")
-		if userID == "" {
-			userID = r.URL.Query().Get("userId")
-		}
-
-		if email == "" && userID != "" && h.profileSvc != nil {
-			p, err := h.profileSvc.GetProfile(userID)
-			if err == nil && p != nil {
-				email = p.Email
-			}
-		}
-
-		if email == "" {
-			role, _ := r.Context().Value(middleware.RoleKey).(string)
-			if role != "admin" && role != "employee" {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode([]models.Order{})
-				return
-			}
-		}
-
-		orders, err := h.svc.GetAllOrders(email)
-		if err != nil {
-			http.Error(w, utils.FormatError(err), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(orders)
-		return
-	}
-
-	order, err := h.svc.GetOrder(orderID)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"Order not found"}`))
-		return
-	}
-
-	// Mask PII if caller is not the owner or admin/staff
-	role, _ := r.Context().Value(middleware.RoleKey).(string)
-	isAdmin := role == "admin" || role == "employee"
-
-	if !isAdmin {
-		callerUserID := r.Header.Get("X-User-Id")
-		callerEmail := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
-		isOwner := false
-
-		if callerEmail != "" && strings.EqualFold(callerEmail, order.CustomerEmail) {
-			isOwner = true
-		} else if callerUserID != "" && h.profileSvc != nil {
-			if p, err := h.profileSvc.GetProfile(callerUserID); err == nil && p != nil {
-				if strings.EqualFold(p.Email, order.CustomerEmail) {
-					isOwner = true
-				}
-			}
-		}
-
-		if !isOwner {
-			safeOrder := *order
-			safeOrder.ShippingPhone = utils.MaskPhone(order.ShippingPhone)
-			safeOrder.ShippingAddress = utils.MaskAddress(order.ShippingAddress)
-			safeOrder.ShippingName = utils.MaskName(order.ShippingName)
-			safeOrder.CustomerEmail = utils.MaskEmail(order.CustomerEmail)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(safeOrder)
-			return
-		}
-	}
-
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(order)
+	if orderID != "" {
+		if order, ok := h.getAuthorizedOrder(w, r, orderID, isStaff); ok {
+			json.NewEncoder(w).Encode(order)
+		}
+		return
+	}
+	email := r.URL.Query().Get("email")
+	if !isStaff {
+		identity := middleware.CustomerFromContext(r.Context())
+		if !identity.EmailVerified || identity.Email == "" {
+			writeOrderError(w, http.StatusForbidden, "Verify your email to access your orders")
+			return
+		}
+		email = identity.Email
+	} else if email == "" && r.URL.Query().Get("userId") != "" && h.profileSvc != nil {
+		profile, err := h.profileSvc.GetProfile(r.URL.Query().Get("userId"))
+		if err != nil || profile == nil || profile.Email == "" {
+			writeOrderError(w, http.StatusNotFound, "Customer not found")
+			return
+		}
+		email = profile.Email
+	}
+	orders, err := h.svc.GetAllOrders(email)
+	if err != nil {
+		writeOrderError(w, http.StatusInternalServerError, "Could not load orders")
+		return
+	}
+	if orders == nil {
+		orders = []models.Order{}
+	}
+	json.NewEncoder(w).Encode(orders)
+}
+
+func (h *OrderHandler) getAuthorizedOrder(w http.ResponseWriter, r *http.Request, orderID string, allowStaff bool) (*models.Order, bool) {
+	identity := middleware.CustomerFromContext(r.Context())
+	if !allowStaff && (!identity.EmailVerified || identity.Email == "") {
+		writeOrderError(w, http.StatusForbidden, "Verify your email to access this order")
+		return nil, false
+	}
+	order, err := h.svc.GetOrder(orderID)
+	if err != nil || order == nil || (!allowStaff && !strings.EqualFold(order.CustomerEmail, identity.Email)) {
+		writeOrderError(w, http.StatusNotFound, "Order not found")
+		return nil, false
+	}
+	return order, true
+}
+
+func writeOrderError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 func (h *OrderHandler) HandleConfirmPickup(w http.ResponseWriter, r *http.Request) {
@@ -421,7 +423,7 @@ func (h *OrderHandler) HandleDelhiveryWebhook(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Missing order_id", http.StatusBadRequest)
 		return
 	}
-	
+
 	status, ok := data["status"].(string)
 	if !ok {
 		http.Error(w, "Missing status", http.StatusBadRequest)
@@ -495,7 +497,6 @@ func (h *OrderHandler) HandleTriggerDelhiveryBatch(w http.ResponseWriter, r *htt
 		"count":   len(paidDeliveryOrders),
 	})
 }
-
 
 func (h *OrderHandler) HandleGetPreorderOrders(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -613,6 +614,15 @@ func (h *OrderHandler) HandleConfirmPreorderPickup(w http.ResponseWriter, r *htt
 	if err := h.svc.ConfirmPreorderPickup(req.OrderID, adminEmail, req.Notes); err != nil {
 		http.Error(w, "Failed to confirm pickup: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if h.emailSvc != nil {
+		if o, err := h.svc.GetOrder(req.OrderID); err == nil && o != nil {
+			orderCopy := *o
+			go func(order models.Order) {
+				_ = h.emailSvc.SendOrderPickedUp(&order)
+			}(orderCopy)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
