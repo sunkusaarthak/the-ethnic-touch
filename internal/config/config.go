@@ -19,6 +19,15 @@ type Config struct {
 	RazorpayKeyID     string
 	RazorpayKeySecret string
 	ShippingProvider  string
+
+	// Email / SMTP Configuration
+	GmailUser        string
+	GmailAppPassword string
+	EmailFromName    string
+	EmailFromAddress string
+	EmailReplyTo     string
+	SMTPHost         string
+	SMTPPort         string
 }
 
 func LoadConfig() *Config {
@@ -66,6 +75,38 @@ func LoadConfig() *Config {
 		shippingProvider = "mock"
 	}
 
+	gmailUser := os.Getenv("GMAIL_USER")
+	gmailAppPassword := os.Getenv("GMAIL_APP_PASSWORD")
+
+	emailFromName := os.Getenv("EMAIL_FROM_NAME")
+	if emailFromName == "" {
+		emailFromName = "The Ethnic Touch"
+	}
+
+	emailFromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
+	if emailFromAddress == "" {
+		if gmailUser != "" {
+			emailFromAddress = gmailUser
+		} else {
+			emailFromAddress = "orders@theethnictouch.com"
+		}
+	}
+
+	emailReplyTo := os.Getenv("EMAIL_REPLY_TO")
+	if emailReplyTo == "" {
+		emailReplyTo = "theethnictouchsupport@gmail.com"
+	}
+
+	smtpHost := os.Getenv("SMTP_HOST")
+	if smtpHost == "" {
+		smtpHost = "smtp.gmail.com"
+	}
+
+	smtpPort := os.Getenv("SMTP_PORT")
+	if smtpPort == "" {
+		smtpPort = "465"
+	}
+
 	return &Config{
 		DBHost:            host,
 		DBPort:            port,
@@ -78,5 +119,12 @@ func LoadConfig() *Config {
 		RazorpayKeyID:     os.Getenv("RAZORPAY_KEY_ID"),
 		RazorpayKeySecret: os.Getenv("RAZORPAY_KEY_SECRET"),
 		ShippingProvider:  shippingProvider,
+		GmailUser:         gmailUser,
+		GmailAppPassword:  gmailAppPassword,
+		EmailFromName:     emailFromName,
+		EmailFromAddress:  emailFromAddress,
+		EmailReplyTo:      emailReplyTo,
+		SMTPHost:          smtpHost,
+		SMTPPort:          smtpPort,
 	}
 }
