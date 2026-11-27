@@ -78,7 +78,7 @@ func (a *App) setupRoutes() {
 	contactSvc := service.NewContactService(contactRepo)
 	emailSvc := service.NewEmailService(a.Config)
 	if !emailSvc.IsConfigured() {
-		a.Logger.Warn("Order emails are disabled: configure GMAIL_USER and GMAIL_APP_PASSWORD")
+		a.Logger.Warn("Order emails are disabled: configure RESEND_API_KEY or Gmail SMTP credentials")
 	}
 	orderSvc.SetPaymentConfirmedHandler(func(order *models.Order) {
 		if emailSvc.IsConfigured() {

@@ -185,11 +185,11 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	}
 
 	prepaidHTML := renderOrderConfirmationHTML(prepaidOrder)
-	if !strings.Contains(prepaidHTML, "PREPAID STORE PICKUP &bull; FULLY PAID") {
-		t.Errorf("Expected prepaid status badge in HTML")
+	if !strings.Contains(prepaidHTML, "Paid online") {
+		t.Error("Expected online payment label in HTML")
 	}
-	if !strings.Contains(prepaidHTML, "Your In-Store Collection is Confirmed") {
-		t.Errorf("Expected in-store collection confirmed headline")
+	if !strings.Contains(prepaidHTML, "Your pickup order is confirmed") {
+		t.Errorf("Expected pickup confirmation headline")
 	}
 	if !strings.Contains(prepaidHTML, "Store Verification Scanner Pass") {
 		t.Errorf("Expected scanner pass in prepaid store pickup")
@@ -209,8 +209,8 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	if strings.Contains(prepaidHTML, "Express Dispatch Promise") {
 		t.Errorf("Store pickup should NEVER contain Delhivery dispatch promise")
 	}
-	if !strings.Contains(prepaidHTML, "Dear Priya Sharma") {
-		t.Errorf("Expected greeting derived from email prefix, got HTML missing 'Dear Priya Sharma'")
+	if !strings.Contains(prepaidHTML, "Hi Priya Sharma") {
+		t.Errorf("Expected greeting derived from email prefix, got HTML missing 'Hi Priya Sharma'")
 	}
 
 	// 2. Unpaid Store Pickup (offline_qr, pending payment at boutique)
@@ -228,8 +228,8 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	}
 
 	unpaidHTML := renderOrderConfirmationHTML(unpaidOrder)
-	if !strings.Contains(unpaidHTML, "STORE PICKUP RESERVED &bull; PAY AT STORE") {
-		t.Errorf("Expected unpaid store pickup reserved badge in HTML")
+	if !strings.Contains(unpaidHTML, "Your order is reserved for pickup") || !strings.Contains(unpaidHTML, "Pay at pickup") {
+		t.Error("Expected reservation headline and payment instructions in HTML")
 	}
 	if !strings.Contains(unpaidHTML, "Payment Due on Collection: ₹1299.00") {
 		t.Errorf("Expected payment due note in unpaid store pickup")
@@ -273,8 +273,11 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	if !strings.Contains(deliveryHTML, "Banjara Hills, Road No 12") {
 		t.Errorf("Delivery order MUST show shipping address")
 	}
-	if !strings.Contains(deliveryHTML, "Express Dispatch Promise") {
-		t.Errorf("Delivery order MUST contain dispatch promise")
+	if !strings.Contains(deliveryHTML, "We’ll get it ready to ship to the address below.") {
+		t.Error("Expected confirmation to explain the next step")
+	}
+	if strings.Contains(deliveryHTML, "dispatch today") || strings.Contains(deliveryHTML, "FREE &bull; Pan-India") {
+		t.Error("Delivery confirmation should not make unverified shipping promises")
 	}
 	if strings.Contains(deliveryHTML, "Store Collection Point") {
 		t.Errorf("Delivery order should NOT contain Store Collection Point")
@@ -323,6 +326,7 @@ func TestEmailService_LiveSMTPVerification(t *testing.T) {
 	}
 	_ = godotenv.Load("../../.env")
 	cfg := config.LoadConfig()
+	cfg.ResendAPIKey = ""
 	svc := NewEmailService(cfg)
 	if !svc.IsConfigured() {
 		t.Skip("Skipping live SMTP test because email credentials are not set")

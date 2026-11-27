@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -24,7 +25,8 @@ type Config struct {
 	DelhiveryWebhookSecret string
 	DelhiveryAPIKey        string
 
-	// Email / SMTP Configuration
+	// Transactional email configuration
+	ResendAPIKey     string
 	GmailUser        string
 	GmailAppPassword string
 	EmailFromName    string
@@ -85,6 +87,7 @@ func LoadConfig() *Config {
 		shippingProvider = "delhivery"
 	}
 
+	resendAPIKey := strings.TrimSpace(os.Getenv("RESEND_API_KEY"))
 	gmailUser := os.Getenv("GMAIL_USER")
 	gmailAppPassword := os.Getenv("GMAIL_APP_PASSWORD")
 
@@ -95,7 +98,7 @@ func LoadConfig() *Config {
 
 	emailFromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
 	if emailFromAddress == "" {
-		if gmailUser != "" {
+		if resendAPIKey == "" && gmailUser != "" {
 			emailFromAddress = gmailUser
 		} else {
 			emailFromAddress = "orders@theethnictouch.com"
@@ -131,6 +134,7 @@ func LoadConfig() *Config {
 		ShippingProvider:       shippingProvider,
 		DelhiveryWebhookSecret: os.Getenv("DELHIVERY_WEBHOOK_SECRET"),
 		DelhiveryAPIKey:        os.Getenv("DELHIVERY_API_KEY"),
+		ResendAPIKey:           resendAPIKey,
 		GmailUser:              gmailUser,
 		GmailAppPassword:  gmailAppPassword,
 		EmailFromName:     emailFromName,

@@ -31,8 +31,9 @@ func main() {
 	emailSvc := service.NewEmailService(cfg)
 
 	if !emailSvc.IsConfigured() {
-		fmt.Println("⚠️  Warning: GMAIL_USER and GMAIL_APP_PASSWORD are not configured in .env")
-		fmt.Println("The email will run in [MOCK EMAIL SIMULATION] mode and print to console.")
+		log.Fatal("Configure RESEND_API_KEY and EMAIL_FROM_ADDRESS, or Gmail SMTP credentials, before sending a test email.")
+	} else if strings.TrimSpace(cfg.ResendAPIKey) != "" {
+		fmt.Println("Sending test email through the Resend HTTPS API.")
 	} else {
 		fmt.Printf("Connecting to SMTP host %s:%s...\n", cfg.SMTPHost, cfg.SMTPPort)
 		if err := emailSvc.VerifyConnection(); err != nil {
@@ -59,7 +60,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to deliver test email: %v", err)
 		}
-		fmt.Printf("Success! '%s' sent to %s\n", t, recipient)
+		fmt.Printf("Provider accepted '%s' for %s. Check the recipient inbox to verify delivery.\n", t, recipient)
 	}
 
 	fmt.Println("\nAll requested test emails completed!")
