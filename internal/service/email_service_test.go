@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -9,6 +10,21 @@ import (
 	"ethnictouch/internal/config"
 	"ethnictouch/internal/models"
 )
+
+func TestWriteMIMEBase64(t *testing.T) {
+	text := strings.Repeat("Order Confirmed ₹499\n", 100)
+	var body strings.Builder
+	writeMIMEBase64(&body, text)
+	for _, line := range strings.Split(body.String(), "\r\n") {
+		if len(line) > 76 {
+			t.Fatalf("MIME Base64 line is %d characters, want at most 76", len(line))
+		}
+	}
+	decoded, err := base64.StdEncoding.DecodeString(body.String())
+	if err != nil || string(decoded) != text {
+		t.Fatalf("MIME Base64 did not round-trip: %v", err)
+	}
+}
 
 func TestEmailService_IsConfigured(t *testing.T) {
 	svcUnconfigured := NewEmailService(&config.Config{})

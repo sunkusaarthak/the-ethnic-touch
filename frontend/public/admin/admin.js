@@ -1,5 +1,6 @@
 let currentUserRole = null;
 let currentUserEmail = null;
+let scannerOrderRequest = null;
 
 // Firebase Configuration
 const firebaseConfig = {
@@ -147,10 +148,10 @@ async function loadStaff() {
         staff.forEach(s => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><strong>${s.email}</strong></td>
-                <td><span style="background: ${s.role === 'admin' ? '#e1f5fe' : '#f5f5f5'}; color: ${s.role === 'admin' ? '#0277bd' : '#666'}; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">${s.role.toUpperCase()}</span></td>
-                <td>${s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '-'}</td>
-                <td style="text-align:right;">
+                <td data-label="Staff Email"><strong>${s.email}</strong></td>
+                <td data-label="Role"><span style="background: ${s.role === 'admin' ? '#e1f5fe' : '#f5f5f5'}; color: ${s.role === 'admin' ? '#0277bd' : '#666'}; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">${s.role.toUpperCase()}</span></td>
+                <td data-label="Added On">${s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '-'}</td>
+                <td data-label="Actions" style="text-align:right;">
                     <button class="btn-sm" style="background:#e53e3e; color:#fff; border:none; padding:4px 12px; border-radius:6px; cursor:pointer;" onclick="deleteStaff('${s.email}')">Remove</button>
                 </td>
             `;
@@ -187,7 +188,8 @@ async function handleAddStaff(e) {
 }
 
 async function deleteStaff(email) {
-    if (!confirm(`Are you sure you want to remove access for ${email}?`)) return;
+    const confirmed = await showAdminConfirm(`Are you sure you want to remove access for ${email}?`, 'Remove Staff Member', 'Remove', 'Cancel', true);
+    if (!confirmed) return;
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/admin/staff?email=${encodeURIComponent(email)}`, {
@@ -254,31 +256,148 @@ function showAdminAlert(message, title = "Admin Notice", type = "warning") {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'adminCustomAlertModal';
+        modal.className = 'admin-ui-modal-backdrop';
         modal.style.cssText = `
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px);
+            background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(5px);
             display: flex; align-items: center; justify-content: center;
-            z-index: 999999; padding: 1.5rem;
+            z-index: 1000000; padding: 1.25rem; box-sizing: border-box;
         `;
         document.body.appendChild(modal);
     }
 
-    const iconColor = type === 'error' ? '#d32f2f' : type === 'success' ? '#2e7d32' : '#b97a66';
-    const iconBg = type === 'error' ? '#ffebee' : type === 'success' ? '#e8f5e9' : '#fff0e9';
+    const iconColor = type === 'error' ? '#dc2626' : (type === 'success' ? '#16a34a' : (type === 'info' ? '#2563eb' : '#d97706'));
+    const iconBg = type === 'error' ? '#fee2e2' : (type === 'success' ? '#dcfce7' : (type === 'info' ? '#dbeafe' : '#fef3c7'));
+    const iconSymbol = type === 'error' ? '✕' : (type === 'success' ? '✓' : (type === 'info' ? 'ℹ' : '!'));
 
     modal.innerHTML = `
-        <div style="background: #ffffff; border-radius: 16px; max-width: 440px; width: 100%; padding: 2rem 1.8rem; box-shadow: 0 25px 60px rgba(0,0,0,0.2); text-align: center; position: relative; font-family: inherit;">
-            <button onclick="document.getElementById('adminCustomAlertModal').style.display='none'" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.2rem; color: #aaa; cursor: pointer; padding: 0.3rem;">✕</button>
-            <div style="width: 60px; height: 60px; border-radius: 50%; background-color: ${iconBg}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.2rem; font-size: 1.8rem; font-weight: bold;">
-                ${type === 'error' ? '✕' : type === 'success' ? '✓' : '!'}
+        <div style="background: #ffffff; border-radius: 18px; max-width: 440px; width: 100%; padding: 2rem 1.8rem; box-shadow: 0 20px 45px rgba(0,0,0,0.22); text-align: center; position: relative; font-family: inherit; box-sizing: border-box; animation: adminModalFadeIn 0.22s ease-out;">
+            <button onclick="document.getElementById('adminCustomAlertModal').style.display='none'" aria-label="Close" style="position: absolute; top: 1.1rem; right: 1.1rem; background: transparent; border: none; font-size: 1.25rem; color: #94a3b8; cursor: pointer; padding: 0.3rem; line-height: 1; border-radius: 6px;">✕</button>
+            <div style="width: 58px; height: 58px; border-radius: 50%; background-color: ${iconBg}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.1rem; font-size: 1.6rem; font-weight: bold;">
+                ${iconSymbol}
             </div>
-            <h3 style="font-size: 1.3rem; font-weight: 600; color: #2D2A26; margin: 0 0 0.6rem;">${title}</h3>
-            <p style="font-size: 0.95rem; color: #6C6863; line-height: 1.6; margin: 0 0 1.5rem;">${message}</p>
-            <button onclick="document.getElementById('adminCustomAlertModal').style.display='none'" style="width: 100%; padding: 0.8rem; font-size: 0.95rem; font-weight: 600; background: #2D2A26; color: #ffffff; border: none; border-radius: 8px; cursor: pointer;">Acknowledge</button>
+            <h3 style="font-size: 1.25rem; font-weight: 700; color: #1e293b; margin: 0 0 0.6rem;">${escapeHTML(title)}</h3>
+            <div style="font-size: 0.94rem; color: #475569; line-height: 1.55; margin: 0 0 1.6rem; word-break: break-word; white-space: pre-line; max-height: 60vh; overflow-y: auto;">${escapeHTML(message)}</div>
+            <button onclick="document.getElementById('adminCustomAlertModal').style.display='none'" style="width: 100%; padding: 0.8rem 1rem; font-size: 0.94rem; font-weight: 600; background: #8C5835; color: #ffffff; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">Acknowledge</button>
         </div>
     `;
     modal.style.display = 'flex';
+    modal.onclick = (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    };
 }
+
+function showAdminConfirm(message, title = "Confirm Action", confirmText = "Confirm", cancelText = "Cancel", isDestructive = false) {
+    return new Promise((resolve) => {
+        let modal = document.getElementById('adminCustomConfirmModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'adminCustomConfirmModal';
+            modal.className = 'admin-ui-modal-backdrop';
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(5px);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 1000000; padding: 1.25rem; box-sizing: border-box;
+            `;
+            document.body.appendChild(modal);
+        }
+
+        const confirmBg = isDestructive ? '#dc2626' : '#8C5835';
+        const iconBg = isDestructive ? '#fee2e2' : '#fef3c7';
+        const iconColor = isDestructive ? '#dc2626' : '#d97706';
+        const iconChar = isDestructive ? '🗑' : '?';
+
+        modal.innerHTML = `
+            <div style="background: #ffffff; border-radius: 18px; max-width: 440px; width: 100%; padding: 2rem 1.8rem; box-shadow: 0 20px 45px rgba(0,0,0,0.22); text-align: center; position: relative; font-family: inherit; box-sizing: border-box; animation: adminModalFadeIn 0.22s ease-out;">
+                <button id="adminConfirmCloseBtn" aria-label="Close" style="position: absolute; top: 1.1rem; right: 1.1rem; background: transparent; border: none; font-size: 1.25rem; color: #94a3b8; cursor: pointer; padding: 0.3rem; line-height: 1; border-radius: 6px;">✕</button>
+                <div style="width: 58px; height: 58px; border-radius: 50%; background-color: ${iconBg}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.1rem; font-size: 1.6rem; font-weight: bold;">
+                    ${iconChar}
+                </div>
+                <h3 style="font-size: 1.25rem; font-weight: 700; color: #1e293b; margin: 0 0 0.6rem;">${escapeHTML(title)}</h3>
+                <div style="font-size: 0.94rem; color: #475569; line-height: 1.55; margin: 0 0 1.6rem; word-break: break-word; white-space: pre-line;">${escapeHTML(message)}</div>
+                <div style="display: flex; gap: 0.75rem; justify-content: center;">
+                    <button id="adminConfirmCancelBtn" style="flex: 1; padding: 0.8rem 1rem; font-size: 0.92rem; font-weight: 600; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 10px; cursor: pointer; transition: background 0.15s;">${escapeHTML(cancelText)}</button>
+                    <button id="adminConfirmOkBtn" style="flex: 1; padding: 0.8rem 1rem; font-size: 0.92rem; font-weight: 600; background: ${confirmBg}; color: #ffffff; border: none; border-radius: 10px; cursor: pointer; transition: background 0.15s; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">${escapeHTML(confirmText)}</button>
+                </div>
+            </div>
+        `;
+        modal.style.display = 'flex';
+
+        let isResolved = false;
+        const close = (result) => {
+            if (isResolved) return;
+            isResolved = true;
+            modal.style.display = 'none';
+            resolve(result);
+        };
+
+        document.getElementById('adminConfirmOkBtn').onclick = () => close(true);
+        document.getElementById('adminConfirmCancelBtn').onclick = () => close(false);
+        document.getElementById('adminConfirmCloseBtn').onclick = () => close(false);
+        modal.onclick = (e) => {
+            if (e.target === modal) close(false);
+        };
+    });
+}
+
+function showAdminPrompt(message, defaultValue = "", title = "Input Required", confirmText = "Submit", cancelText = "Cancel") {
+    return new Promise((resolve) => {
+        let modal = document.getElementById('adminCustomPromptModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'adminCustomPromptModal';
+            modal.className = 'admin-ui-modal-backdrop';
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(5px);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 1000000; padding: 1.25rem; box-sizing: border-box;
+            `;
+            document.body.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+            <div style="background: #ffffff; border-radius: 18px; max-width: 440px; width: 100%; padding: 2rem 1.8rem; box-shadow: 0 20px 45px rgba(0,0,0,0.22); text-align: left; position: relative; font-family: inherit; box-sizing: border-box; animation: adminModalFadeIn 0.22s ease-out;">
+                <button id="adminPromptCloseBtn" aria-label="Close" style="position: absolute; top: 1.1rem; right: 1.1rem; background: transparent; border: none; font-size: 1.25rem; color: #94a3b8; cursor: pointer; padding: 0.3rem; line-height: 1; border-radius: 6px;">✕</button>
+                <h3 style="font-size: 1.25rem; font-weight: 700; color: #1e293b; margin: 0 0 0.6rem;">${escapeHTML(title)}</h3>
+                <div style="font-size: 0.94rem; color: #475569; line-height: 1.55; margin: 0 0 1.2rem; word-break: break-word; white-space: pre-line;">${escapeHTML(message)}</div>
+                <input type="text" id="adminPromptInput" value="${escapeHTML(defaultValue || '')}" style="width: 100%; box-sizing: border-box; padding: 0.8rem 0.9rem; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; margin-bottom: 1.4rem; font-family: inherit; outline: none; transition: border-color 0.15s;" />
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                    <button id="adminPromptCancelBtn" style="padding: 0.75rem 1.25rem; font-size: 0.92rem; font-weight: 600; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 10px; cursor: pointer;">${escapeHTML(cancelText)}</button>
+                    <button id="adminPromptOkBtn" style="padding: 0.75rem 1.25rem; font-size: 0.92rem; font-weight: 600; background: #8C5835; color: #ffffff; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">${escapeHTML(confirmText)}</button>
+                </div>
+            </div>
+        `;
+        modal.style.display = 'flex';
+        const input = document.getElementById('adminPromptInput');
+        input.focus();
+        input.select();
+
+        let isResolved = false;
+        const close = (val) => {
+            if (isResolved) return;
+            isResolved = true;
+            modal.style.display = 'none';
+            resolve(val);
+        };
+
+        document.getElementById('adminPromptOkBtn').onclick = () => close(input.value);
+        document.getElementById('adminPromptCancelBtn').onclick = () => close(null);
+        document.getElementById('adminPromptCloseBtn').onclick = () => close(null);
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') close(input.value);
+            if (e.key === 'Escape') close(null);
+        };
+        modal.onclick = (e) => {
+            if (e.target === modal) close(null);
+        };
+    });
+}
+
+window.showAdminAlert = showAdminAlert;
+window.showAdminConfirm = showAdminConfirm;
+window.showAdminPrompt = showAdminPrompt;
 
 const AVAILABLE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
@@ -497,6 +616,7 @@ function initAuthFlow() {
     }
 
     auth.onAuthStateChanged(async (user) => {
+        window.configureAdminOrderAlerts?.(null);
         if (user) {
             console.log("[Admin Auth] User detected:", user.email);
             try {
@@ -517,9 +637,13 @@ function initAuthFlow() {
 
                     // Apply RBAC UI
                     applyRoleBasedUI();
+                    window.configureAdminOrderAlerts?.(user, API_BASE_URL);
 
-                    // Load default tab
-                    loadDashboard();
+                    if (window.location.hash === '#orders') {
+                        handleUrlHashChange();
+                    } else {
+                        loadDashboard();
+                    }
                 } else {
                     const errText = await res.text();
                     console.warn("[Admin Auth] Backend rejected user:", user.email, errText);
@@ -750,8 +874,10 @@ async function loadSiteSale() {
         }
     };
     form.onsubmit = event => { event.preventDefault(); write(read()); };
-    document.getElementById('endSiteSale').onclick = () => {
-        if (savedSale && confirm('End the current sale now?')) write({ ...savedSale, enabled: false });
+    document.getElementById('endSiteSale').onclick = async () => {
+        if (!savedSale) return;
+        const confirmed = await showAdminConfirm('End the current sale now?', 'End Sale', 'End Sale', 'Keep Running', true);
+        if (confirmed) write({ ...savedSale, enabled: false });
     };
     document.getElementById('previewSiteSale').onclick = () => {
         const sale = read();
@@ -794,6 +920,7 @@ async function loadTabData(target) {
         loadPreorderOrders('');
     }
     if (target === 'pickup-scanner') {
+        scannerOrderRequest?.abort();
         const card = document.getElementById('pickupOrderCard');
         const msg = document.getElementById('scannerMessage');
         const inp = document.getElementById('scannerOrderIdInput');
@@ -853,14 +980,14 @@ async function loadProducts() {
             const imageCount = (p.galleryImages && p.galleryImages.length) ? p.galleryImages.length : 1;
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><img src="${p.imageUrl}" style="width:44px; height:52px; border-radius:4px; object-fit:cover;"></td>
-                <td style="font-weight:500">${p.name}${p.isPreorder ? ' <span style="display:inline-block; margin-left:6px; background:#f3e8ff; color:#7e22ce; padding:2px 7px; border-radius:12px; font-size:0.7rem; font-weight:700; border:1px solid #d8b4fe;">PREORDER</span>' : ''}</td>
-                <td><span style="background:#f5f5f5; padding:2px 8px; border-radius:4px; font-size:0.8rem;">${p.category}</span></td>
-                <td>₹${p.price.toLocaleString('en-IN')}</td>
-                <td>${p.stock}</td>
-                <td style="font-size:0.85rem; color:#666;">${sizesDisplay}</td>
-                <td style="font-size:0.8rem; color:#888;">${imageCount} photo${imageCount !== 1 ? 's' : ''}</td>
-                <td style="text-align:right;">
+                <td data-label="Image"><img src="${p.imageUrl}" style="width:44px; height:52px; border-radius:4px; object-fit:cover;"></td>
+                <td data-label="Product" style="font-weight:500">${p.name}${p.isPreorder ? ' <span style="display:inline-block; margin-left:6px; background:#f3e8ff; color:#7e22ce; padding:2px 7px; border-radius:12px; font-size:0.7rem; font-weight:700; border:1px solid #d8b4fe;">PREORDER</span>' : ''}</td>
+                <td data-label="Category"><span style="background:#f5f5f5; padding:2px 8px; border-radius:4px; font-size:0.8rem;">${p.category}</span></td>
+                <td data-label="Price">₹${p.price.toLocaleString('en-IN')}</td>
+                <td data-label="Stock">${p.stock}</td>
+                <td data-label="Sizes" style="font-size:0.85rem; color:#666;">${sizesDisplay}</td>
+                <td data-label="Photos" style="font-size:0.8rem; color:#888;">${imageCount} photo${imageCount !== 1 ? 's' : ''}</td>
+                <td data-label="Actions" style="text-align:right;">
                     <button type="button" class="btn-sm" style="background:#2D2A26; color:#fff; border:none; padding:4px 12px; border-radius:6px; cursor:pointer; font-weight:500; font-size:0.76rem;" onclick="openEditProductModal('${p.id}')">Edit</button>
                     <button type="button" class="btn-sm" style="background:#e53e3e; color:#fff; border:none; padding:4px 12px; border-radius:6px; cursor:pointer; font-weight:500; font-size:0.76rem; margin-left: 0.5rem;" onclick="deleteProduct('${p.id}')">Delete</button>
                 </td>
@@ -873,17 +1000,18 @@ async function loadProducts() {
 }
 
 let allAdminOrders = [];
+let ordersOffset = 0;
+const ORDERS_LIMIT = 25;
+let hasMoreOrders = true;
+let isLoadingOrders = false;
+let ordersObserver = null;
+let orderSearchDebounceTimer = null;
 
-async function loadOrders() {
-    const body = document.querySelector('#ordersTable tbody');
-    body.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
-
-    try {
-        allAdminOrders = await fetchJsonSafe('/api/admin/orders', { headers: getAuthHeader() });
-        renderOrders();
-    } catch (err) {
-        body.innerHTML = '<tr><td colspan="7" style="color:red">Failed to load orders or Unauthorized. Error: ' + err.message + '</td></tr>';
-    }
+function handleOrderSearchInput(val) {
+    clearTimeout(orderSearchDebounceTimer);
+    orderSearchDebounceTimer = setTimeout(() => {
+        loadOrders(true);
+    }, 300);
 }
 
 function dispatchNeedsReview(order) {
@@ -891,157 +1019,251 @@ function dispatchNeedsReview(order) {
         (!order.dispatchStartedAt || Date.now() - Date.parse(order.dispatchStartedAt) >= 120000));
 }
 
-function renderOrders() {
-    const body = document.querySelector('#ordersTable tbody');
-    body.innerHTML = '';
+function isHomeDeliveryOrder(order) {
+    if (order.fulfilmentType === 'PREORDER_STORE_PICKUP') return false;
+    return order.fulfilmentType === 'PREORDER_HOME_DELIVERY' || order.checkoutType === 'delivery';
+}
 
-    if (!Array.isArray(allAdminOrders) || allAdminOrders.length === 0) {
-        body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999">No orders placed yet.</td></tr>';
-        return;
+function renderSingleOrderRow(o, body) {
+    const tr = document.createElement('tr');
+    const date = new Date(o.createdAt).toLocaleDateString();
+
+    // Format order items list
+    const itemsStr = o.items ? o.items.map(it => `${it.productName || it.productId} (x${it.quantity})`).join(', ') : 'No Details';
+
+    // Determine tracking badge
+    let trackingStr = o.trackingNumber ? '' : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
+
+    if (o.checkoutType === 'pickup') {
+        trackingStr = `<span style="font-family:monospace; color:#6b4c35; font-weight:600">🏪 Store Pickup</span>` + (o.paymentMethod === 'offline_qr' ? ` <span style="font-size:0.75rem; background:#fff3cd; color:#856404; padding:2px 4px; border-radius:3px;">Offline QR</span>` : ' (Online)');
+    } else if (o.checkoutType === 'hyderabad_instant') {
+        trackingStr = `<div style="font-family:monospace; color:#bf7c00; font-weight:600">⚡ Hyderabad Instant</div>`;
     }
 
-    const filterEl = document.getElementById('ordersFilter');
-    const filterValue = filterEl ? filterEl.value : 'actual';
+    // Status label style
+    let badgeBg = '#ffe0b2';
+    let badgeColor = '#e65100';
+    if (o.status === 'shipped') {
+        badgeBg = '#e8f5e9';
+        badgeColor = '#2e7d32';
+    } else if (o.status === 'ready_for_pickup') {
+        badgeBg = '#fff8e1';
+        badgeColor = '#f57f17';
+    } else if (o.status === 'picked_up') {
+        badgeBg = '#e8f5e9';
+        badgeColor = '#1b5e20';
+    } else if (o.status === 'dispatched_instant') {
+        badgeBg = '#efebe9';
+        badgeColor = '#4e342e';
+    } else if (o.status === 'paid') {
+        badgeBg = '#e3f2fd';
+        badgeColor = '#0d47a1';
+    } else if (o.status === 'pending_payment' || o.status === 'payment_review') {
+        badgeBg = '#ffebee';
+        badgeColor = '#c62828';
+    }
+    const needsDispatchReview = dispatchNeedsReview(o);
+    const statusLabel = needsDispatchReview ? 'Verify carrier booking' :
+        o.status === 'payment_review' ? 'Payment received — review required' : o.status;
 
-    const typeFilterEl = document.getElementById('ordersTypeFilter');
-    const typeFilterValue = typeFilterEl ? typeFilterEl.value : 'all';
+    const tdId = document.createElement('td');
+    tdId.setAttribute('data-label', 'Order ID');
+    tdId.style.fontWeight = '500';
+    tdId.textContent = o.id || '';
+    tr.appendChild(tdId);
 
-    let ordersToDisplay = allAdminOrders.filter(o => {
-        // 1. Status Filter
-        if (filterValue === 'payment_review' && o.status !== 'payment_review') return false;
-        if (filterValue === 'dispatch_review' && !dispatchNeedsReview(o) && !o.dispatchError) return false;
-        if (filterValue === 'actual') {
-            if (o.status === 'pending' || o.status === 'pending_payment' || o.status === 'cancelled') {
-                return false;
+    const tdActions = document.createElement('td');
+    tdActions.setAttribute('data-label', 'Actions');
+    const details = document.createElement('button');
+    details.type = 'button';
+    details.className = 'btn-secondary order-details-button';
+    details.textContent = 'More details';
+    details.setAttribute('aria-label', `More details for order ${o.id}`);
+    details.addEventListener('click', () => openOrderInScanner(o.id));
+    tdActions.appendChild(details);
+    tr.appendChild(tdActions);
+
+    const tdEmail = document.createElement('td');
+    tdEmail.setAttribute('data-label', 'Customer');
+    tdEmail.textContent = o.customerEmail || '';
+    tr.appendChild(tdEmail);
+
+    const tdAmt = document.createElement('td');
+    tdAmt.setAttribute('data-label', 'Amount');
+    tdAmt.textContent = '₹' + (o.totalAmount || 0).toLocaleString('en-IN');
+    tr.appendChild(tdAmt);
+
+    const tdItems = document.createElement('td');
+    tdItems.setAttribute('data-label', 'Items');
+    tdItems.style.cssText = 'font-size:0.9rem; color:#555; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+    tdItems.title = itemsStr;
+    tdItems.textContent = itemsStr;
+    tr.appendChild(tdItems);
+
+    const tdStatus = document.createElement('td');
+    tdStatus.setAttribute('data-label', 'Status');
+    const spanStatus = document.createElement('span');
+    spanStatus.style.cssText = `padding:4px 8px; background:${badgeBg}; color:${badgeColor}; border-radius:4px; font-size:0.8rem; font-weight:500`;
+    spanStatus.textContent = statusLabel;
+    tdStatus.appendChild(spanStatus);
+    tr.appendChild(tdStatus);
+
+    const tdTracking = document.createElement('td');
+    tdTracking.setAttribute('data-label', 'Tracking');
+    tdTracking.innerHTML = trackingStr;
+    if (o.checkoutType !== 'pickup' && o.trackingNumber) {
+        const tracking = document.createElement('span');
+        tracking.textContent = o.trackingNumber;
+        tdTracking.appendChild(tracking);
+    }
+    if (o.dispatchError) {
+        const error = document.createElement('div');
+        error.textContent = o.dispatchError;
+        tdTracking.appendChild(error);
+    }
+    if (currentUserRole === 'admin' && needsDispatchReview) {
+        const review = document.createElement('button');
+        review.type = 'button';
+        review.textContent = 'Review dispatch';
+        review.addEventListener('click', () => resolveDelhiveryDispatch(o.id));
+        tdTracking.appendChild(review);
+    }
+    if (currentUserRole === 'admin' && o.status === 'paid' && o.fulfilmentType === 'PREORDER_HOME_DELIVERY' && !o.trackingNumber) {
+        const dispatch = document.createElement('button');
+        dispatch.type = 'button';
+        dispatch.textContent = 'Dispatch ready preorder';
+        dispatch.addEventListener('click', () => triggerDelhiveryBatchPickup(o.id, dispatch));
+        tdTracking.appendChild(dispatch);
+    }
+    tr.appendChild(tdTracking);
+
+    const tdDate = document.createElement('td');
+    tdDate.setAttribute('data-label', 'Date');
+    tdDate.textContent = date;
+    tr.appendChild(tdDate);
+
+    body.appendChild(tr);
+}
+
+async function loadOrders(reset = true) {
+    if (isLoadingOrders) return;
+    isLoadingOrders = true;
+
+    const body = document.querySelector('#ordersTable tbody');
+    const loadMoreBtn = document.getElementById('btnLoadMoreOrders');
+    const spinner = document.getElementById('ordersLoadingSpinner');
+    const endMsg = document.getElementById('ordersEndMessage');
+
+    if (reset) {
+        ordersOffset = 0;
+        hasMoreOrders = true;
+        allAdminOrders = [];
+        body.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:1.8rem; color:#8C5835;"><span style="display:inline-block; width:16px; height:16px; border:2px solid #D4A373; border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:8px;"></span>Loading orders...</td></tr>';
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+        if (endMsg) endMsg.style.display = 'none';
+    }
+
+    if (spinner) spinner.style.display = 'inline-block';
+    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+
+    try {
+        const filterEl = document.getElementById('ordersFilter');
+        const filterValue = filterEl ? filterEl.value : 'actual';
+
+        const typeFilterEl = document.getElementById('ordersTypeFilter');
+        const typeFilterValue = typeFilterEl ? typeFilterEl.value : 'all';
+
+        const searchEl = document.getElementById('orderSearchInput');
+        const searchValue = searchEl ? searchEl.value.trim() : '';
+
+        const params = new URLSearchParams({
+            limit: ORDERS_LIMIT.toString(),
+            offset: ordersOffset.toString(),
+            status: filterValue,
+            type: typeFilterValue,
+            search: searchValue
+        });
+
+        const batch = await fetchJsonSafe(`/api/admin/orders?${params.toString()}`, { headers: getAuthHeader() });
+        const orders = Array.isArray(batch) ? batch : [];
+
+        if (reset) {
+            body.innerHTML = '';
+            if (orders.length === 0) {
+                body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999; padding:2rem;">No orders match the selected filter.</td></tr>';
+                hasMoreOrders = false;
             }
         }
 
-        // 2. Type Filter
-        if (typeFilterValue === 'pickup') {
-            if (o.checkoutType !== 'pickup') return false;
-        } else if (typeFilterValue === 'delivery') {
-            if (o.checkoutType !== 'delivery' && o.checkoutType !== 'hyderabad_instant') return false;
+        orders.forEach(o => {
+            allAdminOrders.push(o);
+            renderSingleOrderRow(o, body);
+        });
+
+        ordersOffset += orders.length;
+        if (orders.length < ORDERS_LIMIT) {
+            hasMoreOrders = false;
         }
 
-        return true;
-    });
+        if (endMsg) {
+            endMsg.style.display = (!hasMoreOrders && allAdminOrders.length > 0) ? 'block' : 'none';
+            if (!hasMoreOrders && allAdminOrders.length > 0) {
+                endMsg.textContent = `All ${allAdminOrders.length} orders loaded`;
+            }
+        }
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = hasMoreOrders ? 'inline-block' : 'none';
+        }
 
-    if (ordersToDisplay.length === 0) {
-        body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999">No orders match the selected filter.</td></tr>';
-        return;
+        setupOrdersIntersectionObserver();
+    } catch (err) {
+        if (reset) {
+            body.innerHTML = '<tr><td colspan="8" style="color:red; text-align:center; padding:1.5rem;">Failed to load orders or Unauthorized. Error: ' + window.escapeHTML(err.message) + '</td></tr>';
+        }
+    } finally {
+        isLoadingOrders = false;
+        if (spinner) spinner.style.display = 'none';
     }
-
-    ordersToDisplay.forEach(o => {
-
-        const tr = document.createElement('tr');
-        const date = new Date(o.createdAt).toLocaleDateString();
-
-        // Format order items list
-        const itemsStr = o.items ? o.items.map(it => `${it.productName || it.productId} (x${it.quantity})`).join(', ') : 'No Details';
-
-        // Determine tracking badge
-        let trackingStr = o.trackingNumber ? '' : `<span style="color:#777; font-style:italic">Pending checkout / paid dispatch</span>`;
-
-        if (o.checkoutType === 'pickup') {
-            trackingStr = `<span style="font-family:monospace; color:#6b4c35; font-weight:600">🏪 Store Pickup</span>` + (o.paymentMethod === 'offline_qr' ? ` <span style="font-size:0.75rem; background:#fff3cd; color:#856404; padding:2px 4px; border-radius:3px;">Offline QR</span>` : ' (Online)');
-        } else if (o.checkoutType === 'hyderabad_instant') {
-            trackingStr = `<div style="font-family:monospace; color:#bf7c00; font-weight:600">⚡ Hyderabad Instant</div>`;
-        }
-
-        // Status label style
-        let badgeBg = '#ffe0b2';
-        let badgeColor = '#e65100';
-        if (o.status === 'shipped') {
-            badgeBg = '#e8f5e9';
-            badgeColor = '#2e7d32';
-        } else if (o.status === 'ready_for_pickup') {
-            badgeBg = '#fff8e1';
-            badgeColor = '#f57f17';
-        } else if (o.status === 'picked_up') {
-            badgeBg = '#e8f5e9';
-            badgeColor = '#1b5e20';
-        } else if (o.status === 'dispatched_instant') {
-            badgeBg = '#efebe9';
-            badgeColor = '#4e342e';
-        } else if (o.status === 'paid') {
-            badgeBg = '#e3f2fd';
-            badgeColor = '#0d47a1';
-        } else if (o.status === 'pending_payment' || o.status === 'payment_review') {
-            badgeBg = '#ffebee';
-            badgeColor = '#c62828';
-        }
-        const needsDispatchReview = dispatchNeedsReview(o);
-        const statusLabel = needsDispatchReview ? 'Verify carrier booking' :
-            o.status === 'payment_review' ? 'Payment received — review required' : o.status;
-
-        const tdId = document.createElement('td');
-        tdId.style.fontWeight = '500';
-        tdId.textContent = o.id || '';
-        tr.appendChild(tdId);
-
-        const tdEmail = document.createElement('td');
-        tdEmail.textContent = o.customerEmail || '';
-        tr.appendChild(tdEmail);
-
-        const tdAmt = document.createElement('td');
-        tdAmt.textContent = '₹' + (o.totalAmount || 0).toLocaleString('en-IN');
-        tr.appendChild(tdAmt);
-
-        const tdItems = document.createElement('td');
-        tdItems.style.cssText = 'font-size:0.9rem; color:#555; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
-        tdItems.title = itemsStr;
-        tdItems.textContent = itemsStr;
-        tr.appendChild(tdItems);
-
-        const tdStatus = document.createElement('td');
-        const spanStatus = document.createElement('span');
-        spanStatus.style.cssText = `padding:4px 8px; background:${badgeBg}; color:${badgeColor}; border-radius:4px; font-size:0.8rem; font-weight:500`;
-        spanStatus.textContent = statusLabel;
-        tdStatus.appendChild(spanStatus);
-        tr.appendChild(tdStatus);
-
-        const tdTracking = document.createElement('td');
-        tdTracking.innerHTML = trackingStr;
-        if (o.checkoutType !== 'pickup' && o.trackingNumber) {
-            const tracking = document.createElement('span');
-            tracking.textContent = o.trackingNumber;
-            tdTracking.appendChild(tracking);
-        }
-        if (o.dispatchError) {
-            const error = document.createElement('div');
-            error.textContent = o.dispatchError;
-            tdTracking.appendChild(error);
-        }
-        if (currentUserRole === 'admin' && needsDispatchReview) {
-            const review = document.createElement('button');
-            review.type = 'button';
-            review.textContent = 'Review dispatch';
-            review.addEventListener('click', () => resolveDelhiveryDispatch(o.id));
-            tdTracking.appendChild(review);
-        }
-        if (currentUserRole === 'admin' && o.status === 'paid' && o.fulfilmentType === 'PREORDER_HOME_DELIVERY' && !o.trackingNumber) {
-            const dispatch = document.createElement('button');
-            dispatch.type = 'button';
-            dispatch.textContent = 'Dispatch ready preorder';
-            dispatch.addEventListener('click', () => triggerDelhiveryBatchPickup(o.id, dispatch));
-            tdTracking.appendChild(dispatch);
-        }
-        tr.appendChild(tdTracking);
-
-        const tdDate = document.createElement('td');
-        tdDate.textContent = date;
-        tr.appendChild(tdDate);
-
-        body.appendChild(tr);
-    });
 }
 
+async function loadMoreOrders() {
+    if (hasMoreOrders && !isLoadingOrders) {
+        await loadOrders(false);
+    }
+}
+
+function setupOrdersIntersectionObserver() {
+    if (ordersObserver) {
+        ordersObserver.disconnect();
+    }
+    const sentinel = document.getElementById('ordersScrollSentinel');
+    if (!sentinel || !hasMoreOrders) return;
+
+    if ('IntersectionObserver' in window) {
+        ordersObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && hasMoreOrders && !isLoadingOrders) {
+                loadMoreOrders();
+            }
+        }, { rootMargin: '200px' });
+        ordersObserver.observe(sentinel);
+    }
+}
+
+function renderOrders() {
+    loadOrders(true);
+}
+
+window.loadOrders = loadOrders;
+window.loadMoreOrders = loadMoreOrders;
 window.renderOrders = renderOrders;
+window.handleOrderSearchInput = handleOrderSearchInput;
 
 async function triggerDelhiveryBatchPickup(orderId, rowButton) {
     const btn = rowButton || document.getElementById('btnDelhiveryBatch');
     const originalText = btn ? btn.innerHTML : '🚚 Dispatch Delhivery Batch';
-    if (!confirm(orderId ? `Is preorder ${orderId} ready to ship?` : 'Dispatch the next batch of paid delivery orders?')) {
+    const confirmPrompt = orderId ? `Is preorder ${orderId} ready to ship?` : 'Dispatch the next batch of paid delivery orders?';
+    const confirmed = await showAdminConfirm(confirmPrompt, 'Dispatch Delivery Orders', 'Dispatch', 'Cancel');
+    if (!confirmed) {
         return;
     }
     try {
@@ -1054,9 +1276,9 @@ async function triggerDelhiveryBatchPickup(orderId, rowButton) {
             method: 'POST',
             headers: getAuthHeader()
         });
-        alert(`Dispatched ${res.dispatched || 0}. Need attention: ${res.failed || 0}.`);
+        showAdminAlert(`Dispatched ${res.dispatched || 0}. Need attention: ${res.failed || 0}.`, 'Dispatch Complete', 'info');
     } catch (err) {
-        alert("Failed to trigger Delhivery batch: " + (err.message || err));
+        showAdminAlert("Failed to trigger Delhivery batch: " + (err.message || err), 'Dispatch Error', 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -1068,10 +1290,25 @@ async function triggerDelhiveryBatchPickup(orderId, rowButton) {
 window.triggerDelhiveryBatchPickup = triggerDelhiveryBatchPickup;
 
 async function resolveDelhiveryDispatch(orderId) {
-    const value = prompt(`Look up ${orderId} in Delhivery One. Enter its waybill if booked. Leave blank only if you verified that no booking exists.`);
+    const value = await showAdminPrompt(
+        `Look up ${orderId} in Delhivery One. Enter its waybill if booked. Leave blank only if you verified that no booking exists.`,
+        '',
+        'Resolve Delhivery Dispatch',
+        'Continue',
+        'Cancel'
+    );
     if (value === null) return;
     const waybill = value.trim();
-    if (!waybill && !confirm('Confirm you verified that Delhivery has no booking for this order. The order will be eligible to dispatch again.')) return;
+    if (!waybill) {
+        const confirmed = await showAdminConfirm(
+            'Confirm you verified that Delhivery has no booking for this order. The order will be eligible to dispatch again.',
+            'Confirm No Booking',
+            'Confirm No Booking',
+            'Cancel',
+            true
+        );
+        if (!confirmed) return;
+    }
     try {
         await fetchJsonSafe('/api/admin/delhivery/resolve-dispatch', {
             method: 'POST',
@@ -1080,7 +1317,7 @@ async function resolveDelhiveryDispatch(orderId) {
         });
         await loadOrders();
     } catch (err) {
-        alert(err.message || 'Could not save the dispatch review.');
+        showAdminAlert(err.message || 'Could not save the dispatch review.', 'Review Error', 'error');
     }
 }
 
@@ -1369,13 +1606,13 @@ async function loadCoupons() {
                 : `<span style="background: #FFEBEE; color: #C62828; padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600;">Inactive</span>`;
 
             tr.innerHTML = `
-                <td><code style="font-weight: 700; color: #C49363; background: #FAF7F2; padding: 3px 8px; border-radius: 4px;">${c.code}</code></td>
-                <td style="text-transform: capitalize;">${c.type || 'Percentage'}</td>
-                <td style="font-weight: 600;">${valDisplay}</td>
-                <td>${minDisplay}</td>
-                <td>${usageDisplay}</td>
-                <td>${statusBadge}</td>
-                <td>
+                <td data-label="Coupon Code"><code style="font-weight: 700; color: #C49363; background: #FAF7F2; padding: 3px 8px; border-radius: 4px;">${c.code}</code></td>
+                <td data-label="Discount Type" style="text-transform: capitalize;">${c.type || 'Percentage'}</td>
+                <td data-label="Discount" style="font-weight: 600;">${valDisplay}</td>
+                <td data-label="Min Spend">${minDisplay}</td>
+                <td data-label="Usage">${usageDisplay}</td>
+                <td data-label="Status">${statusBadge}</td>
+                <td data-label="Actions">
                     <button type="button" onclick="deleteCoupon('${c.code}')" style="background: #FFF5F5; color: #C62828; border: 1px solid #FFCDD2; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 0.78rem; font-weight: 600;">
                         Delete
                     </button>
@@ -1392,7 +1629,8 @@ async function loadCoupons() {
 }
 
 async function deleteCoupon(code) {
-    if (!confirm(`Are you sure you want to delete coupon code "${code}"?`)) return;
+    const confirmed = await showAdminConfirm(`Are you sure you want to delete coupon code "${code}"?`, 'Delete Coupon', 'Delete', 'Cancel', true);
+    if (!confirmed) return;
     try {
         const res = await fetch(API_BASE_URL + `/api/admin/coupons?code=${encodeURIComponent(code)}`, {
             method: 'DELETE',
@@ -1539,11 +1777,11 @@ function renderTiersTable() {
         }
 
         tr.innerHTML = `
-            <td style="font-weight: 500;">${tier.name}</td>
-            <td>₹${parseFloat(tier.threshold).toLocaleString('en-IN')}</td>
-            <td style="text-transform: capitalize;">${tier.rewardType}</td>
-            <td>${detailsStr}</td>
-            <td style="text-align: right; white-space: nowrap; width: 160px;">
+            <td data-label="Tier Name" style="font-weight: 500;">${tier.name}</td>
+            <td data-label="Min Spent">₹${parseFloat(tier.threshold).toLocaleString('en-IN')}</td>
+            <td data-label="Reward Type" style="text-transform: capitalize;">${tier.rewardType}</td>
+            <td data-label="Reward Details">${detailsStr}</td>
+            <td data-label="Actions" style="text-align: right; white-space: nowrap; width: 160px;">
                 <div style="display: inline-flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
                     <button type="button" onclick="editTier(${idx})" style="display: inline-flex; align-items: center; gap: 0.35rem; background: #FAF7F2; color: #8F5E36; border: 1px solid rgba(212, 163, 115, 0.4); padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -1603,8 +1841,9 @@ function editTier(idx) {
     }
 }
 
-function deleteTier(idx) {
-    if (confirm("Are you sure you want to delete this reward tier?")) {
+async function deleteTier(idx) {
+    const confirmed = await showAdminConfirm("Are you sure you want to delete this reward tier?", "Delete Reward Tier", "Delete", "Cancel", true);
+    if (confirmed) {
         currentTiers.splice(idx, 1);
         saveTiersToServer();
     }
@@ -1739,69 +1978,178 @@ async function saveTiersToServer() {
     }
 }
 
-async function loadProfiles() {
+let allAdminProfiles = [];
+let profilesOffset = 0;
+const PROFILES_LIMIT = 25;
+let hasMoreProfiles = true;
+let isLoadingProfiles = false;
+let profilesObserver = null;
+let profileSearchDebounceTimer = null;
+
+function handleCustomerSearchInput(val) {
+    clearTimeout(profileSearchDebounceTimer);
+    profileSearchDebounceTimer = setTimeout(() => {
+        loadProfiles(true);
+    }, 300);
+}
+
+function renderSingleProfileRow(p, body) {
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    tdName.setAttribute('data-label', 'Customer');
+    tdName.style.fontWeight = '500';
+    tdName.textContent = p.fullName || 'No Name';
+    tr.appendChild(tdName);
+
+    const tdEmail = document.createElement('td');
+    tdEmail.setAttribute('data-label', 'Email');
+    tdEmail.textContent = p.email || 'No Email';
+    tr.appendChild(tdEmail);
+
+    const tdPhone = document.createElement('td');
+    tdPhone.setAttribute('data-label', 'Phone');
+    tdPhone.textContent = p.phone || 'No Phone';
+    tr.appendChild(tdPhone);
+
+    const tdZip = document.createElement('td');
+    tdZip.setAttribute('data-label', 'ZIP Code');
+    tdZip.textContent = p.zipCode || 'No ZIP';
+    tr.appendChild(tdZip);
+
+    const tdSize = document.createElement('td');
+    tdSize.setAttribute('data-label', 'Preferred Size');
+    tdSize.textContent = p.preferredSize || 'N/A';
+    tr.appendChild(tdSize);
+
+    const tdActions = document.createElement('td');
+    tdActions.setAttribute('data-label', 'Actions');
+    const btnView = document.createElement('button');
+    btnView.className = 'btn-primary';
+    btnView.style.cssText = 'padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; margin-right: 5px;';
+    btnView.textContent = 'View Details';
+    btnView.addEventListener('click', () => viewProfileDetails(p.userId));
+    tdActions.appendChild(btnView);
+
+    const btnDelete = document.createElement('button');
+    btnDelete.className = 'btn-primary';
+    btnDelete.style.cssText = 'padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; background: #e53e3e; border: none; color: white;';
+    btnDelete.textContent = 'Delete';
+    btnDelete.addEventListener('click', () => deleteProfile(p.userId, p.email));
+    tdActions.appendChild(btnDelete);
+
+    tr.appendChild(tdActions);
+    body.appendChild(tr);
+}
+
+async function loadProfiles(reset = true) {
+    if (isLoadingProfiles) return;
+    isLoadingProfiles = true;
+
     const body = document.querySelector('#profilesTable tbody');
-    body.innerHTML = '<tr><td colspan="6">Loading profiles...</td></tr>';
+    const loadMoreBtn = document.getElementById('btnLoadMoreProfiles');
+    const spinner = document.getElementById('profilesLoadingSpinner');
+    const endMsg = document.getElementById('profilesEndMessage');
+    const countBadge = document.getElementById('profilesCountBadge');
+
+    if (reset) {
+        profilesOffset = 0;
+        hasMoreProfiles = true;
+        allAdminProfiles = [];
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1.8rem; color:#8C5835;"><span style="display:inline-block; width:16px; height:16px; border:2px solid #D4A373; border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:8px;"></span>Loading customer profiles...</td></tr>';
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+        if (endMsg) endMsg.style.display = 'none';
+    }
+
+    if (spinner) spinner.style.display = 'inline-block';
+    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
 
     try {
-        const data = await fetchJsonSafe('/api/admin/profiles', { headers: getAuthHeader() });
-        body.innerHTML = '';
+        const searchEl = document.getElementById('customerSearchInput');
+        const searchVal = searchEl ? searchEl.value.trim() : '';
 
-        if (!Array.isArray(data) || data.length === 0) {
-            body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">No user profiles completed yet.</td></tr>';
-            return;
+        const params = new URLSearchParams({
+            limit: PROFILES_LIMIT.toString(),
+            offset: profilesOffset.toString(),
+            search: searchVal
+        });
+
+        const batch = await fetchJsonSafe(`/api/admin/profiles?${params.toString()}`, { headers: getAuthHeader() });
+        const profiles = Array.isArray(batch) ? batch : [];
+
+        if (reset) {
+            body.innerHTML = '';
+            if (profiles.length === 0) {
+                body.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999; padding:2rem;">No customer profiles match your search.</td></tr>';
+                hasMoreProfiles = false;
+            }
         }
 
-        data.forEach(p => {
-            const tr = document.createElement('tr');
-
-            const tdName = document.createElement('td');
-            tdName.style.fontWeight = '500';
-            tdName.textContent = p.fullName || 'No Name';
-            tr.appendChild(tdName);
-
-            const tdEmail = document.createElement('td');
-            tdEmail.textContent = p.email || 'No Email';
-            tr.appendChild(tdEmail);
-
-            const tdPhone = document.createElement('td');
-            tdPhone.textContent = p.phone || 'No Phone';
-            tr.appendChild(tdPhone);
-
-            const tdZip = document.createElement('td');
-            tdZip.textContent = p.zipCode || 'No ZIP';
-            tr.appendChild(tdZip);
-
-            const tdSize = document.createElement('td');
-            tdSize.textContent = p.preferredSize || 'N/A';
-            tr.appendChild(tdSize);
-
-            const tdActions = document.createElement('td');
-            const btnView = document.createElement('button');
-            btnView.className = 'btn-primary';
-            btnView.style.cssText = 'padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; margin-right: 5px;';
-            btnView.textContent = 'View Details';
-            btnView.addEventListener('click', () => viewProfileDetails(p.userId));
-            tdActions.appendChild(btnView);
-
-            const btnDelete = document.createElement('button');
-            btnDelete.className = 'btn-primary';
-            btnDelete.style.cssText = 'padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; background: #e53e3e; border: none; color: white;';
-            btnDelete.textContent = 'Delete';
-            btnDelete.addEventListener('click', () => deleteProfile(p.userId, p.email));
-            tdActions.appendChild(btnDelete);
-
-            tr.appendChild(tdActions);
-            body.appendChild(tr);
+        profiles.forEach(p => {
+            allAdminProfiles.push(p);
+            renderSingleProfileRow(p, body);
         });
+
+        profilesOffset += profiles.length;
+        if (profiles.length < PROFILES_LIMIT) {
+            hasMoreProfiles = false;
+        }
+
+        if (countBadge) {
+            countBadge.textContent = allAdminProfiles.length > 0 ? `Showing ${allAdminProfiles.length} customer${allAdminProfiles.length === 1 ? '' : 's'}` : '';
+        }
+        if (endMsg) {
+            endMsg.style.display = (!hasMoreProfiles && allAdminProfiles.length > 0) ? 'block' : 'none';
+            if (!hasMoreProfiles && allAdminProfiles.length > 0) {
+                endMsg.textContent = `All ${allAdminProfiles.length} customer profiles loaded`;
+            }
+        }
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = hasMoreProfiles ? 'inline-block' : 'none';
+        }
+
+        setupProfilesIntersectionObserver();
     } catch (err) {
         console.warn("Profiles load notice:", err);
-        body.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#777; padding: 1.5rem;">No user profiles found or backend API server needs to be restarted.<br><small style="color:#999">Run: go run main.go</small></td></tr>`;
+        if (reset) {
+            body.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#777; padding: 1.5rem;">No user profiles found or backend API server needs to be restarted.<br><small style="color:#999">Run: go run main.go</small></td></tr>`;
+        }
+    } finally {
+        isLoadingProfiles = false;
+        if (spinner) spinner.style.display = 'none';
     }
 }
 
+async function loadMoreProfiles() {
+    if (hasMoreProfiles && !isLoadingProfiles) {
+        await loadProfiles(false);
+    }
+}
+
+function setupProfilesIntersectionObserver() {
+    if (profilesObserver) {
+        profilesObserver.disconnect();
+    }
+    const sentinel = document.getElementById('profilesScrollSentinel');
+    if (!sentinel || !hasMoreProfiles) return;
+
+    if ('IntersectionObserver' in window) {
+        profilesObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && hasMoreProfiles && !isLoadingProfiles) {
+                loadMoreProfiles();
+            }
+        }, { rootMargin: '200px' });
+        profilesObserver.observe(sentinel);
+    }
+}
+
+window.loadProfiles = loadProfiles;
+window.loadMoreProfiles = loadMoreProfiles;
+window.handleCustomerSearchInput = handleCustomerSearchInput;
+
 async function deleteProfile(userId, email) {
-    if (!confirm(`Are you sure you want to permanently delete the profile for ${email || userId}? This cannot be undone.`)) return;
+    const confirmed = await showAdminConfirm(`Are you sure you want to permanently delete the profile for ${email || userId}? This cannot be undone.`, 'Delete Profile', 'Delete Permanently', 'Cancel', true);
+    if (!confirmed) return;
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/admin/profiles/delete?userId=${encodeURIComponent(userId)}`, {
@@ -2089,7 +2437,8 @@ window.resetTierForm = resetTierForm;
 window.handleSaveTier = handleSaveTier;
 window.viewProfileDetails = viewProfileDetails;
 async function deleteProduct(productId) {
-    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) return;
+    const confirmed = await showAdminConfirm('Are you sure you want to delete this product? This action cannot be undone.', 'Delete Product', 'Delete Product', 'Cancel', true);
+    if (!confirmed) return;
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/products/${productId}`, {
@@ -2116,7 +2465,15 @@ window.initProductModal = initProductModal;
 window.uploadImageFile = uploadImageFile;
 window.uploadGalleryRowFile = uploadGalleryRowFile;
 
-// --- VERIFY & CONFIRM STORE PICKUPS ---
+// --- LOOK UP ORDERS & CONFIRM STORE PICKUPS ---
+function openOrderInScanner(orderId) {
+    document.querySelector('nav li[data-tab="pickup-scanner"]').click();
+    const input = document.getElementById('scannerOrderIdInput');
+    input.value = orderId;
+    input.focus();
+    return searchPickupOrder(orderId);
+}
+
 function triggerSearchPickupOrder() {
     const input = document.getElementById('scannerOrderIdInput');
     if (!input) return;
@@ -2193,32 +2550,42 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function searchPickupOrder(orderId) {
-    const msgEl = document.getElementById('scannerMessage');
+    scannerOrderRequest?.abort();
+    const request = new AbortController();
+    scannerOrderRequest = request;
     const cardEl = document.getElementById('pickupOrderCard');
-    if (msgEl) msgEl.style.display = 'none';
     if (cardEl) cardEl.style.display = 'none';
+    showScannerMessage('Loading order details…', '#6b4c35', '#faf7f2');
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/admin/orders?orderId=${encodeURIComponent(orderId)}`, {
-            headers: getAuthHeader()
+            headers: getAuthHeader(),
+            signal: request.signal
         });
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
+            if (request.signal.aborted) return;
             showScannerMessage(errData.error || `Failed to fetch order. Status: ${res.status}`, "red", "#fff5f5");
             return;
         }
 
         const data = await res.json();
+        if (request.signal.aborted) return;
         if (!data || (Array.isArray(data) && data.length === 0) || (!Array.isArray(data) && !data.id)) {
             showScannerMessage(`Order Reference "${orderId}" not found in database.`, "red", "#fff5f5");
             return;
         }
 
         const order = Array.isArray(data) ? data[0] : data;
+        document.getElementById('scannerMessage').style.display = 'none';
         displayPickupOrderDetails(order);
 
     } catch (err) {
-        showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
+        if (!request.signal.aborted) {
+            showScannerMessage(`Connection error: ${err.message}`, "red", "#fff5f5");
+        }
+    } finally {
+        if (scannerOrderRequest === request) scannerOrderRequest = null;
     }
 }
 
@@ -2227,21 +2594,40 @@ function displayPickupOrderDetails(order) {
     if (!cardEl) return;
 
     // Fill fields
-    document.getElementById('poCardOrderId').innerHTML = `Order #${order.id} <button type="button" onclick="copyTextToClipboard('${order.id}', this)" style="margin-left:8px; padding:2px 8px; font-size:0.75rem; border-radius:4px; border:1px solid #ddd; background:#fff; cursor:pointer">Copy ID</button>`;
+    document.getElementById('poCardOrderId').textContent = `Order #${order.id}`;
+    const copyButton = document.getElementById('poCardCopyId');
+    copyButton.onclick = () => copyTextToClipboard(order.id, copyButton);
     document.getElementById('poCardCustomer').innerText = order.customerEmail;
-    
+
+    const isHomeDelivery = isHomeDeliveryOrder(order);
     let coTypeLabel = order.checkoutType;
     if (order.fulfilmentType === 'PREORDER_STORE_PICKUP') {
         coTypeLabel = '🏪 Preorder Store Pickup';
-    } else if (order.checkoutType === 'pickup') {
-        coTypeLabel = '🏪 Boutique Store Pickup';
     } else if (order.fulfilmentType === 'PREORDER_HOME_DELIVERY') {
         coTypeLabel = '🚚 Preorder Home Delivery';
+    } else if (isHomeDelivery) {
+        coTypeLabel = '🚚 Home Delivery';
+    } else if (order.checkoutType === 'pickup') {
+        coTypeLabel = '🏪 Store Pickup';
+    } else if (order.checkoutType === 'hyderabad_instant') {
+        coTypeLabel = '⚡ Hyderabad Instant';
     }
     document.getElementById('poCardCheckoutType').innerText = coTypeLabel;
     document.getElementById('poCardPaymentMethod').innerText = order.paymentMethod === 'offline_qr' ? '💳 Offline UPI QR Pass' : '🌐 Paid Online (RazorPay)';
     document.getElementById('poCardDate').innerText = new Date(order.createdAt).toLocaleString();
     document.getElementById('poCardAmount').innerText = `₹${order.totalAmount.toLocaleString('en-IN')}`;
+
+    const showShippingAddress = isHomeDelivery || (order.checkoutType === 'hyderabad_instant' && order.fulfilmentType !== 'PREORDER_STORE_PICKUP');
+    document.getElementById('poCardShipping').hidden = !showShippingAddress;
+    const shippingAddress = document.getElementById('poCardShippingAddress');
+    const shippingContact = document.getElementById('poCardShippingContact');
+    shippingAddress.textContent = '';
+    shippingContact.textContent = '';
+    if (showShippingAddress) {
+        const locality = [order.shippingCity, order.shippingState, order.shippingZipCode].filter(Boolean).join(', ');
+        shippingAddress.textContent = [order.shippingAddress, locality].filter(Boolean).join('\n') || 'Address unavailable';
+        shippingContact.textContent = [order.shippingName, order.shippingPhone].filter(Boolean).join(' · ');
+    }
 
     // Status Badge
     const badge = document.getElementById('poCardStatusBadge');
@@ -2274,7 +2660,7 @@ function displayPickupOrderDetails(order) {
             const unitPrice = it.priceAtQty || 0;
             const lineTotal = unitPrice * qty;
             const li = document.createElement('li');
-            li.innerHTML = `<strong>${it.productName || it.productId}</strong> ${it.size ? `<span style="font-size:0.8rem; background:#fff0e9; color:#b97a66; padding:1px 5px; border-radius:3px; margin-left:4px">Size: ${it.size}</span>` : ''} &times; <strong>${qty}</strong> — <strong>₹${lineTotal.toLocaleString('en-IN')}</strong> ${qty > 1 ? `<small style="color:#888">(₹${unitPrice.toLocaleString('en-IN')} each)</small>` : ''}`;
+            li.innerHTML = `<strong>${window.escapeHTML(it.productName || it.productId)}</strong> ${it.size ? `<span style="font-size:0.8rem; background:#fff0e9; color:#b97a66; padding:1px 5px; border-radius:3px; margin-left:4px">Size: ${window.escapeHTML(it.size)}</span>` : ''} &times; <strong>${window.escapeHTML(qty)}</strong> — <strong>₹${lineTotal.toLocaleString('en-IN')}</strong> ${qty > 1 ? `<small style="color:#888">(₹${unitPrice.toLocaleString('en-IN')} each)</small>` : ''}`;
             itemsList.appendChild(li);
         });
     } else {
@@ -2290,10 +2676,10 @@ function displayPickupOrderDetails(order) {
         infoMsg.style.cssText = 'padding: 0.8rem; background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; border-radius: 8px; font-weight: 500; font-size: 0.9rem; flex: 1; text-align: center;';
         infoMsg.innerText = '✓ Order is already Picked Up & Fulfilled.';
         actions.appendChild(infoMsg);
-    } else if (order.checkoutType !== 'pickup' && order.fulfilmentType !== 'PREORDER_STORE_PICKUP') {
+    } else if (isHomeDelivery || (order.checkoutType !== 'pickup' && order.fulfilmentType !== 'PREORDER_STORE_PICKUP')) {
         const warnMsg = document.createElement('div');
         warnMsg.style.cssText = 'padding: 0.8rem; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 8px; font-size: 0.9rem; flex: 1;';
-        warnMsg.innerHTML = `⚠️ <strong>Warning:</strong> This order fulfillment method is <strong>${order.checkoutType}</strong>. Verify dispatch details instead.`;
+        warnMsg.textContent = `⚠️ ${coTypeLabel} order. Verify dispatch details in Orders & Fulfillment.`;
         actions.appendChild(warnMsg);
     } else {
         // Render verification details & Action button!
@@ -2321,7 +2707,8 @@ function displayPickupOrderDetails(order) {
 }
 
 async function confirmStorePickup(orderId) {
-    if (!confirm(`Are you sure you want to confirm pickup for Order #${orderId}?`)) return;
+    const confirmed = await showAdminConfirm(`Are you sure you want to confirm pickup for Order #${orderId}?`, 'Confirm Store Pickup', 'Confirm Pickup', 'Cancel');
+    if (!confirmed) return;
 
     try {
         const res = await fetch(API_BASE_URL + '/api/admin/orders/confirm-pickup', {
@@ -2350,6 +2737,10 @@ async function confirmStorePickup(orderId) {
 
             function handleUrlHashChange() {
                 const hash = window.location.hash || '';
+                if (hash === '#orders') {
+                    if (currentUserRole) document.querySelector('nav li[data-tab="orders"]')?.click();
+                    return;
+                }
                 if (hash.startsWith('#pickup-scanner') || hash.startsWith('#confirm-pickup')) {
                     const qIdx = hash.indexOf('?');
                     let orderId = '';
@@ -2500,9 +2891,16 @@ async function confirmStorePickup(orderId) {
                         const row = rows.appendChild(document.createElement('tr'));
                         const unread = msg.status === 'unread';
                         if (unread) row.style.background = '#fff6f6';
-                        row.insertCell().textContent = new Date(msg.createdAt).toLocaleString();
-                        row.insertCell().appendChild(document.createElement('strong')).textContent = msg.name;
+                        const cDate = row.insertCell();
+                        cDate.setAttribute('data-label', 'Date');
+                        cDate.textContent = new Date(msg.createdAt).toLocaleString();
+
+                        const cCust = row.insertCell();
+                        cCust.setAttribute('data-label', 'Customer');
+                        cCust.appendChild(document.createElement('strong')).textContent = msg.name;
+
                         const contact = row.insertCell();
+                        contact.setAttribute('data-label', 'Contact Info');
                         const email = String(msg.email ?? '').trim();
                         if (/^[^\s@?&#%]+@[^\s@?&#%]+\.[^\s@?&#%]+$/.test(email)) {
                             const link = contact.appendChild(document.createElement('a'));
@@ -2521,14 +2919,26 @@ async function confirmStorePickup(orderId) {
                         } else {
                             contact.append(document.createTextNode(phone || 'N/A'));
                         }
-                        row.insertCell().textContent = msg.orderId || 'N/A';
-                        const message = row.insertCell().appendChild(document.createElement('div'));
+
+                        const cOrder = row.insertCell();
+                        cOrder.setAttribute('data-label', 'Order ID');
+                        cOrder.textContent = msg.orderId || 'N/A';
+
+                        const cMsg = row.insertCell();
+                        cMsg.setAttribute('data-label', 'Message');
+                        const message = cMsg.appendChild(document.createElement('div'));
                         message.style.cssText = 'max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
                         message.textContent = message.title = msg.message;
-                        const badge = row.insertCell().appendChild(document.createElement('span'));
+
+                        const cStatus = row.insertCell();
+                        cStatus.setAttribute('data-label', 'Status');
+                        const badge = cStatus.appendChild(document.createElement('span'));
                         badge.className = unread ? 'badge danger' : 'badge success';
                         badge.textContent = msg.status;
-                        const button = row.insertCell().appendChild(document.createElement('button'));
+
+                        const cAction = row.insertCell();
+                        cAction.setAttribute('data-label', 'Actions');
+                        const button = cAction.appendChild(document.createElement('button'));
                         button.className = unread ? 'btn-primary' : 'btn-secondary';
                         button.textContent = unread ? 'Mark Read' : 'Read';
                         button.disabled = !unread;
@@ -3012,7 +3422,8 @@ async function confirmStorePickup(orderId) {
                 const reel = currentReelsList.find(r => String(r.id) === String(reelId));
                 const title = reel ? reel.title : 'this reel';
 
-                if (!confirm(`Are you sure you want to remove "${title}" from the homepage?`)) {
+                const confirmed = await showAdminConfirm(`Are you sure you want to remove "${title}" from the homepage?`, 'Remove Reel', 'Remove', 'Cancel', true);
+                if (!confirmed) {
                     return;
                 }
 
@@ -3928,14 +4339,14 @@ async function confirmStorePickup(orderId) {
                             feedback.style.display = 'inline-block';
                             setTimeout(() => { feedback.style.display = 'none'; }, 3500);
                         }
-                        alert('Preorder Pickup configuration saved successfully!');
+                        showAdminAlert('Preorder Pickup configuration saved successfully!', 'Configuration Saved', 'success');
                         loadPreorderPickupConfig();
                     } else {
                         const err = await res.text();
-                        alert('Failed to save configuration: ' + err);
+                        showAdminAlert('Failed to save configuration: ' + err, 'Save Error', 'error');
                     }
                 } catch (err) {
-                    alert('Error saving configuration: ' + err.message);
+                    showAdminAlert('Error saving configuration: ' + err.message, 'Save Error', 'error');
                 }
             }
 
@@ -3987,6 +4398,7 @@ async function confirmStorePickup(orderId) {
 
                     // ID Cell
                     const tdId = document.createElement('td');
+                    tdId.setAttribute('data-label', 'Order ID');
                     const strongId = document.createElement('strong');
                     strongId.style.cssText = 'font-size: 0.85rem; font-family: monospace;';
                     strongId.textContent = id;
@@ -3995,6 +4407,7 @@ async function confirmStorePickup(orderId) {
 
                     // Customer Cell
                     const tdCust = document.createElement('td');
+                    tdCust.setAttribute('data-label', 'Customer');
                     const nameDiv = document.createElement('div');
                     nameDiv.style.cssText = 'font-weight: 600; font-size: 0.88rem; color: #1e293b;';
                     nameDiv.textContent = name || 'Customer';
@@ -4007,6 +4420,7 @@ async function confirmStorePickup(orderId) {
 
                     // Fulfilment badge cell
                     const tdF = document.createElement('td');
+                    tdF.setAttribute('data-label', 'Fulfillment');
                     const fBadge = document.createElement('span');
                     if (fType === 'PREORDER_STORE_PICKUP') {
                         fBadge.style.cssText = 'background: #f3e8ff; color: #7e22ce; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;';
@@ -4023,6 +4437,7 @@ async function confirmStorePickup(orderId) {
 
                     // Status badge cell
                     const tdS = document.createElement('td');
+                    tdS.setAttribute('data-label', 'Status');
                     const sBadge = document.createElement('span');
                     sBadge.style.cssText = 'padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;';
                     if (status === 'READY_FOR_PICKUP') {
@@ -4051,6 +4466,7 @@ async function confirmStorePickup(orderId) {
 
                     // Amount Cell
                     const tdAmt = document.createElement('td');
+                    tdAmt.setAttribute('data-label', 'Amount');
                     const strongAmt = document.createElement('strong');
                     strongAmt.textContent = '₹' + amount.toLocaleString('en-IN');
                     tdAmt.appendChild(strongAmt);
@@ -4058,12 +4474,14 @@ async function confirmStorePickup(orderId) {
 
                     // Date Cell
                     const tdDate = document.createElement('td');
+                    tdDate.setAttribute('data-label', 'Date');
                     tdDate.style.cssText = 'font-size: 0.85rem; color: #64748b;';
                     tdDate.textContent = dateStr;
                     tr.appendChild(tdDate);
 
                     // Actions Cell
                     const tdActs = document.createElement('td');
+                    tdActs.setAttribute('data-label', 'Actions');
                     tdActs.style.textAlign = 'right';
 
                     if (fType === 'PREORDER_STORE_PICKUP') {
@@ -4097,7 +4515,13 @@ async function confirmStorePickup(orderId) {
             }
 
             async function markPreorderReady(orderId) {
-                if (!confirm(`Mark preorder ${orderId} as READY FOR PICKUP? This will trigger the ready-for-pickup customer notification.`)) return;
+                const confirmed = await showAdminConfirm(
+                    `Mark preorder ${orderId} as READY FOR PICKUP? This will trigger the ready-for-pickup customer notification.`,
+                    'Mark Ready for Pickup',
+                    'Mark Ready',
+                    'Cancel'
+                );
+                if (!confirmed) return;
 
                 try {
                     const res = await fetch(`${API_BASE_URL}/api/admin/preorder/mark-ready`, {
@@ -4109,14 +4533,14 @@ async function confirmStorePickup(orderId) {
                         body: JSON.stringify({ orderId })
                     });
                     if (res.ok) {
-                        alert('Order marked as READY FOR PICKUP! Customer notification sent.');
+                        showAdminAlert('Order marked as READY FOR PICKUP! Customer notification sent.', 'Preorder Ready', 'success');
                         loadPreorderOrders(currentPreorderFilter);
                     } else {
                         const err = await res.text();
-                        alert('Failed: ' + err);
+                        showAdminAlert('Failed: ' + err, 'Error', 'error');
                     }
                 } catch (e) {
-                    alert('Error: ' + e.message);
+                    showAdminAlert('Error: ' + e.message, 'Error', 'error');
                 }
             }
 
@@ -4132,7 +4556,8 @@ async function confirmStorePickup(orderId) {
                     ? `Mark ${count} eligible store pickup order(s) as READY FOR PICKUP? This will update their status and trigger customer ready notifications.`
                     : `Mark all eligible store pickup preorder orders as READY FOR PICKUP?`;
 
-                if (!confirm(confirmMsg)) return;
+                const confirmed = await showAdminConfirm(confirmMsg, 'Mark All Preorders Ready', 'Mark All Ready', 'Cancel');
+                if (!confirmed) return;
 
                 const btn = document.getElementById('markAllReadyBtn');
                 const oldHtml = btn ? btn.innerHTML : '';
@@ -4151,14 +4576,14 @@ async function confirmStorePickup(orderId) {
                     });
                     if (res.ok) {
                         const data = await res.json();
-                        alert(data.message || `Successfully marked ${data.count || count} orders as READY FOR PICKUP!`);
+                        showAdminAlert(data.message || `Successfully marked ${data.count || count} orders as READY FOR PICKUP!`, 'Orders Ready', 'success');
                         loadPreorderOrders(currentPreorderFilter);
                     } else {
                         const err = await res.text();
-                        alert('Failed to mark all as ready: ' + err);
+                        showAdminAlert('Failed to mark all as ready: ' + err, 'Error', 'error');
                     }
                 } catch (e) {
-                    alert('Network error: ' + e.message);
+                    showAdminAlert('Network error: ' + e.message, 'Error', 'error');
                 } finally {
                     if (btn) {
                         btn.disabled = false;
@@ -4168,9 +4593,13 @@ async function confirmStorePickup(orderId) {
             }
 
             async function confirmPreorderPickup(orderId) {
-                const notes = prompt(`Confirm in-store collection for order ${orderId}.
-
-Enter operator notes (optional):`);
+                const notes = await showAdminPrompt(
+                    `Confirm in-store collection for order ${orderId}.\n\nEnter operator notes (optional):`,
+                    '',
+                    'Confirm In-Store Collection',
+                    'Confirm Collection',
+                    'Cancel'
+                );
                 if (notes === null) return;
 
                 try {
@@ -4183,14 +4612,14 @@ Enter operator notes (optional):`);
                         body: JSON.stringify({ orderId, notes: notes || '' })
                     });
                     if (res.ok) {
-                        alert('Order successfully marked as COLLECTED!');
+                        showAdminAlert('Order successfully marked as COLLECTED!', 'Order Collected', 'success');
                         loadPreorderOrders(currentPreorderFilter);
                     } else {
                         const err = await res.text();
-                        alert('Failed: ' + err);
+                        showAdminAlert('Failed: ' + err, 'Error', 'error');
                     }
                 } catch (e) {
-                    alert('Error: ' + e.message);
+                    showAdminAlert('Error: ' + e.message, 'Error', 'error');
                 }
             }
 
@@ -4203,7 +4632,7 @@ Enter operator notes (optional):`);
                     const data = await res.json();
                     const list = data.audit || [];
                     if (list.length === 0) {
-                        alert(`No audit entries recorded yet for order ${orderId}.`);
+                        showAdminAlert(`No audit entries recorded yet for order ${orderId}.`, 'Audit Trail', 'info');
                         return;
                     }
 
@@ -4215,9 +4644,9 @@ Enter operator notes (optional):`);
                         return '• ' + dt + '\n  Action: ' + act + '\n  By: ' + by + n;
                     }).join('\n\n');
 
-                    alert(`Audit Trail for Order ${orderId}:\n\n${formatted}`);
+                    showAdminAlert(formatted, `Audit Trail: Order ${orderId}`, 'info');
                 } catch (e) {
-                    alert('Failed to load audit trail: ' + e.message);
+                    showAdminAlert('Failed to load audit trail: ' + e.message, 'Audit Error', 'error');
                 }
             }
 
@@ -4243,7 +4672,7 @@ Enter operator notes (optional):`);
                 try {
                     const p = loadedProductsMap[productId];
                     if (!p) {
-                        alert('Product not found in cache.');
+                        showAdminAlert('Product not found in cache.', 'Update Preorder', 'warning');
                         return;
                     }
 
@@ -4265,9 +4694,9 @@ Enter operator notes (optional):`);
                         loadProducts();
                     } else {
                         const err = await res.text();
-                        alert('Failed to update preorder status: ' + err);
+                        showAdminAlert('Failed to update preorder status: ' + err, 'Update Error', 'error');
                     }
                 } catch (err) {
-                    alert('Error updating product preorder status: ' + err.message);
+                    showAdminAlert('Error updating product preorder status: ' + err.message, 'Update Error', 'error');
                 }
             }

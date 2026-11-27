@@ -66,40 +66,54 @@ func (s *emailService) VerifyConnection() error {
 	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
 	targetAddr := net.JoinHostPort(smtpHost, smtpPort)
 
-	if smtpPort == "465" {
-		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", targetAddr, &tls.Config{
-			ServerName: smtpHost,
-		})
-		if err != nil {
-			return fmt.Errorf("SMTP SSL dial failed on %s: %w", targetAddr, err)
-		}
-		defer conn.Close()
-
-		client, err := smtp.NewClient(conn, smtpHost)
-		if err != nil {
-			return fmt.Errorf("SMTP client failed: %w", err)
-		}
-		defer client.Close()
-
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("SMTP authentication failed for %s: %w", smtpUser, err)
-		}
-		return client.Quit()
-	}
-
-	client, err := smtp.Dial(targetAddr)
+	client, err := connectSMTP(targetAddr, smtpHost, smtpPort == "465")
 	if err != nil {
-		return fmt.Errorf("SMTP dial failed: %w", err)
+		return err
 	}
 	defer client.Close()
 
-	if err := client.StartTLS(&tls.Config{ServerName: smtpHost}); err != nil {
-		return fmt.Errorf("SMTP STARTTLS failed: %w", err)
-	}
 	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("SMTP authentication failed for %s: %w", smtpUser, err)
+		return fmt.Errorf("SMTP authentication failed: %w", err)
 	}
 	return client.Quit()
+}
+
+func connectSMTP(address, host string, implicitTLS bool) (*smtp.Client, error) {
+	conn, err := net.DialTimeout("tcp", address, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("connect to SMTP server %s: %w", address, err)
+	}
+	if err := conn.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("set SMTP deadline: %w", err)
+	}
+	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+	if implicitTLS {
+		conn = tls.Client(conn, tlsConfig)
+	}
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("initialize SMTP session: %w", err)
+	}
+	if !implicitTLS {
+		if err := client.StartTLS(tlsConfig); err != nil {
+			client.Close()
+			return nil, fmt.Errorf("SMTP STARTTLS failed: %w", err)
+		}
+	}
+	return client, nil
+}
+
+func writeMIMEBase64(body *strings.Builder, text string) {
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+	for len(encoded) > 76 {
+		body.WriteString(encoded[:76])
+		body.WriteString("\r\n")
+		encoded = encoded[76:]
+	}
+	body.WriteString(encoded)
+	body.WriteString("\r\n")
 }
 
 // sanitizeHeaderField strips carriage returns and newlines to prevent SMTP header injection
@@ -148,15 +162,11 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 	}
 
 	fromName := "The Ethnic Touch"
-	fromAddress := "orders@theethnictouch.com"
 	replyTo := "theethnictouchsupport@gmail.com"
 
 	if s.cfg != nil {
 		if s.cfg.EmailFromName != "" {
 			fromName = s.cfg.EmailFromName
-		}
-		if s.cfg.EmailFromAddress != "" {
-			fromAddress = s.cfg.EmailFromAddress
 		}
 		if s.cfg.EmailReplyTo != "" {
 			replyTo = s.cfg.EmailReplyTo
@@ -170,13 +180,7 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 
 	// Mock / Preview Mode when credentials are not configured
 	if !s.IsConfigured() {
-		log.Println("--------------------------------------------------")
-		log.Println("[MOCK EMAIL SIMULATION]")
-		log.Printf("From:    \"%s\" <%s>\n", cleanFromName, fromAddress)
-		log.Printf("To:      %s\n", cleanTo)
-		log.Printf("Subject: %s\n", cleanSubject)
-		log.Println("Status:  Delivered (Mock Mode - configure GMAIL_USER & GMAIL_APP_PASSWORD for live delivery)")
-		log.Println("--------------------------------------------------")
+		log.Println("[Email] Simulation only. No message sent because SMTP credentials are missing.")
 		return nil
 	}
 
@@ -211,15 +215,13 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 	body.WriteString(fmt.Sprintf("--%s\r\n", boundary))
 	body.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	body.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-	body.WriteString(base64.StdEncoding.EncodeToString([]byte(textBody)))
-	body.WriteString("\r\n")
+	writeMIMEBase64(&body, textBody)
 
 	// HTML section
 	body.WriteString(fmt.Sprintf("--%s\r\n", boundary))
 	body.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
 	body.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-	body.WriteString(base64.StdEncoding.EncodeToString([]byte(htmlBody)))
-	body.WriteString("\r\n")
+	writeMIMEBase64(&body, htmlBody)
 
 	// End boundary
 	body.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
@@ -230,65 +232,26 @@ func (s *emailService) SendEmail(to, subject, htmlBody, textBody string) error {
 	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
 	targetAddr := net.JoinHostPort(smtpHost, smtpPort)
 
-	if smtpPort == "465" {
-		tlsConfig := &tls.Config{
-			ServerName:         smtpHost,
-			InsecureSkipVerify: false,
-		}
-
-		conn, err := tls.Dial("tcp", targetAddr, tlsConfig)
-		if err != nil {
-			return fmt.Errorf("failed to dial SMTP SSL on %s: %w", targetAddr, err)
-		}
-		defer conn.Close()
-
-		client, err := smtp.NewClient(conn, smtpHost)
-		if err != nil {
-			return fmt.Errorf("failed to create SMTP client: %w", err)
-		}
-		defer client.Close()
-
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("SMTP auth failed for %s: %w", smtpUser, err)
-		}
-		if err := client.Mail(smtpUser); err != nil {
-			return fmt.Errorf("SMTP MAIL failed: %w", err)
-		}
-		if err := client.Rcpt(cleanTo); err != nil {
-			return fmt.Errorf("SMTP RCPT failed: %w", err)
-		}
-		if err := writeSMTPBody(client, rawMessage); err != nil {
-			return err
-		}
-		_ = client.Quit()
-	} else {
-		client, err := smtp.Dial(targetAddr)
-		if err != nil {
-			return fmt.Errorf("failed to dial SMTP on %s: %w", targetAddr, err)
-		}
-		defer client.Close()
-
-		tlsConfig := &tls.Config{ServerName: smtpHost}
-		if err := client.StartTLS(tlsConfig); err != nil {
-			return fmt.Errorf("failed to start TLS on %s: %w", targetAddr, err)
-		}
-
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("SMTP auth failed for %s: %w", smtpUser, err)
-		}
-		if err := client.Mail(smtpUser); err != nil {
-			return fmt.Errorf("SMTP MAIL failed: %w", err)
-		}
-		if err := client.Rcpt(cleanTo); err != nil {
-			return fmt.Errorf("SMTP RCPT failed: %w", err)
-		}
-		if err := writeSMTPBody(client, rawMessage); err != nil {
-			return err
-		}
-		_ = client.Quit()
+	client, err := connectSMTP(targetAddr, smtpHost, smtpPort == "465")
+	if err != nil {
+		return err
 	}
+	defer client.Close()
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("SMTP authentication failed: %w", err)
+	}
+	if err := client.Mail(smtpUser); err != nil {
+		return fmt.Errorf("SMTP MAIL failed: %w", err)
+	}
+	if err := client.Rcpt(cleanTo); err != nil {
+		return fmt.Errorf("SMTP RCPT failed: %w", err)
+	}
+	if err := writeSMTPBody(client, rawMessage); err != nil {
+		return err
+	}
+	_ = client.Quit()
 
-	log.Printf("[Email Sent] Successfully delivered email to %s | Subject: %s", cleanTo, cleanSubject)
+	log.Printf("[Email] SMTP accepted message | Subject: %s", cleanSubject)
 	return nil
 }
 

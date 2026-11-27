@@ -37,6 +37,7 @@ type mockConcurrentOrderRepo struct {
 
 func (m *mockConcurrentOrderRepo) GetOrder(orderID string) (*models.Order, error) { return nil, nil }
 func (m *mockConcurrentOrderRepo) GetAllOrders(email string) ([]models.Order, error) { return nil, nil }
+func (m *mockConcurrentOrderRepo) GetOrdersPaginated(email string, limit, offset int, search, status, orderType string) ([]models.Order, int, error) { return nil, 0, nil }
 func (m *mockConcurrentOrderRepo) GetAdminOrders(orderID string) ([]models.Order, error) { return nil, nil }
 
 func (m *mockConcurrentOrderRepo) CreateOrderWithTransaction(order *models.Order, stockDeductions map[string]int, couponCode string) error {

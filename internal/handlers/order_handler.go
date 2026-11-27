@@ -255,6 +255,31 @@ func (h *OrderHandler) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
 		}
 		email = profile.Email
 	}
+
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		limit, _ := strconv.Atoi(limitStr)
+		if limit > 0 {
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			search := r.URL.Query().Get("search")
+			statusFilter := r.URL.Query().Get("status")
+			typeFilter := r.URL.Query().Get("type")
+
+			orders, total, err := h.svc.GetOrdersPaginated(email, limit, offset, search, statusFilter, typeFilter)
+			if err != nil {
+				writeOrderError(w, http.StatusInternalServerError, "Could not load orders")
+				return
+			}
+			if orders == nil {
+				orders = []models.Order{}
+			}
+			w.Header().Set("X-Total-Count", strconv.Itoa(total))
+			w.Header().Set("Access-Control-Expose-Headers", "X-Total-Count")
+			json.NewEncoder(w).Encode(orders)
+			return
+		}
+	}
+
 	orders, err := h.svc.GetAllOrders(email)
 	if err != nil {
 		writeOrderError(w, http.StatusInternalServerError, "Could not load orders")

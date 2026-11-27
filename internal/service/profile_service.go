@@ -11,6 +11,7 @@ type ProfileService interface {
 	GetProfile(userID string) (*models.Profile, error)
 	GetProfileByEmail(email string) (*models.Profile, error)
 	GetAllProfiles() ([]models.Profile, error)
+	GetProfilesPaginated(limit, offset int, search string) ([]models.Profile, int, error)
 	UpsertProfile(p *models.Profile) error
 	GetAddresses(userID string) ([]models.Address, error)
 	CreateAddress(addr *models.Address) error
@@ -40,6 +41,10 @@ func (s *profileService) GetProfileByEmail(email string) (*models.Profile, error
 
 func (s *profileService) GetAllProfiles() ([]models.Profile, error) {
 	return s.repo.GetAllProfiles()
+}
+
+func (s *profileService) GetProfilesPaginated(limit, offset int, search string) ([]models.Profile, int, error) {
+	return s.repo.GetProfilesPaginated(limit, offset, search)
 }
 
 func (s *profileService) UpsertProfile(p *models.Profile) error {

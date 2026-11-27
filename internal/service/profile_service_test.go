@@ -42,6 +42,26 @@ func (m *mockProfileRepo) GetAllProfiles() ([]models.Profile, error) {
 	return profiles, nil
 }
 
+func (m *mockProfileRepo) GetProfilesPaginated(limit, offset int, search string) ([]models.Profile, int, error) {
+	all, _ := m.GetAllProfiles()
+	var filtered []models.Profile
+	search = strings.ToLower(strings.TrimSpace(search))
+	for _, p := range all {
+		if search == "" || strings.Contains(strings.ToLower(p.FullName), search) || strings.Contains(strings.ToLower(p.Email), search) || strings.Contains(p.Phone, search) {
+			filtered = append(filtered, p)
+		}
+	}
+	total := len(filtered)
+	if offset > len(filtered) {
+		return []models.Profile{}, total, nil
+	}
+	end := offset + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[offset:end], total, nil
+}
+
 func (m *mockProfileRepo) UpsertProfile(p *models.Profile) error {
 	m.profiles[p.UserID] = p
 	return nil

@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"ethnictouch/internal/models"
 )
@@ -11,6 +12,7 @@ type ProfileRepository interface {
 	GetProfile(userID string) (*models.Profile, error)
 	GetProfileByEmail(email string) (*models.Profile, error)
 	GetAllProfiles() ([]models.Profile, error)
+	GetProfilesPaginated(limit, offset int, search string) ([]models.Profile, int, error)
 	UpsertProfile(p *models.Profile) error
 	GetAddresses(userID string) ([]models.Address, error)
 	CreateAddress(addr *models.Address) error
@@ -81,6 +83,58 @@ func (r *postgresProfileRepo) GetAllProfiles() ([]models.Profile, error) {
 		profiles = []models.Profile{}
 	}
 	return profiles, nil
+}
+
+func (r *postgresProfileRepo) GetProfilesPaginated(limit, offset int, search string) ([]models.Profile, int, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	whereClause := ""
+	var args []any
+	argIdx := 1
+
+	if strings.TrimSpace(search) != "" {
+		pattern := "%" + strings.ToLower(strings.TrimSpace(search)) + "%"
+		whereClause = fmt.Sprintf("WHERE (LOWER(full_name) LIKE $%d OR LOWER(email) LIKE $%d OR phone LIKE $%d OR zip_code LIKE $%d)", argIdx, argIdx, argIdx, argIdx)
+		args = append(args, pattern)
+		argIdx++
+	}
+
+	var total int
+	countQuery := "SELECT COUNT(*) FROM profiles " + whereClause
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	selectQuery := fmt.Sprintf(`
+		SELECT user_id, COALESCE(email, ''), COALESCE(full_name, ''), COALESCE(phone, ''), 
+		COALESCE(address, ''), COALESCE(city, ''), COALESCE(state, ''), COALESCE(zip_code, ''), 
+		COALESCE(preferred_size, ''), COALESCE(style_notes, ''), spin_count, available_spins, COALESCE(created_at, ''), COALESCE(updated_at, '')
+		FROM profiles %s ORDER BY updated_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var profiles []models.Profile
+	for rows.Next() {
+		var p models.Profile
+		if err := rows.Scan(&p.UserID, &p.Email, &p.FullName, &p.Phone, &p.Address, &p.City, &p.State, &p.ZIPCode,
+			&p.PreferredSize, &p.StyleNotes, &p.SpinCount, &p.AvailableSpins, &p.CreatedAt, &p.UpdatedAt); err == nil {
+			profiles = append(profiles, p)
+		}
+	}
+	if profiles == nil {
+		profiles = []models.Profile{}
+	}
+	return profiles, total, nil
 }
 
 func (r *postgresProfileRepo) UpsertProfile(p *models.Profile) error {
