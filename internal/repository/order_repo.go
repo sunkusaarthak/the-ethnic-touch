@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -15,11 +16,32 @@ var ErrAlreadyCollected = fmt.Errorf("order already marked as collected")
 var ErrInvalidPreorderStatus = fmt.Errorf("invalid status transition for preorder order")
 var ErrInvalidShipmentTransition = fmt.Errorf("order is not eligible for this shipment update")
 
+func RecentConfirmedOrderIDs(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id FROM orders
+		WHERE (NULLIF(razorpay_payment_id, '') IS NOT NULL AND status NOT IN ('pending', 'pending_payment', 'cancelled', 'payment_review'))
+		   OR status IN ('paid', 'picked_up', 'COLLECTED')
+		ORDER BY created_at DESC, id DESC LIMIT 50`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 type OrderRepository interface {
 	GetOrder(orderID string) (*models.Order, error)
 	GetOrderDetails(order *models.Order) error
 	GetOrderByRazorpayID(razorpayOrderID string) (*models.Order, error)
 	GetAllOrders(email string) ([]models.Order, error)
+	GetOrdersPaginated(email string, limit, offset int, search, status, orderType string) ([]models.Order, int, error)
 	GetAdminOrders(orderID string) ([]models.Order, error)
 	GetPendingDeliveryOrders() ([]models.Order, error)
 	ClaimPendingDeliveryOrders(limit int, orderID string) ([]models.Order, error)
@@ -278,6 +300,97 @@ func (r *postgresOrderRepo) GetAllOrders(email string) ([]models.Order, error) {
 	}
 
 	return orders, nil
+}
+
+func (r *postgresOrderRepo) GetOrdersPaginated(email string, limit, offset int, search, status, orderType string) ([]models.Order, int, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var conditions []string
+	var args []any
+	argIdx := 1
+
+	if email != "" {
+		conditions = append(conditions, fmt.Sprintf("LOWER(customer_email) = LOWER($%d)", argIdx))
+		args = append(args, email)
+		argIdx++
+	}
+
+	if strings.TrimSpace(search) != "" {
+		searchPattern := "%" + strings.ToLower(strings.TrimSpace(search)) + "%"
+		conditions = append(conditions, fmt.Sprintf("(LOWER(id) LIKE $%d OR LOWER(customer_email) LIKE $%d OR LOWER(shipping_name) LIKE $%d OR LOWER(shipping_phone) LIKE $%d OR LOWER(tracking_number) LIKE $%d)", argIdx, argIdx, argIdx, argIdx, argIdx))
+		args = append(args, searchPattern)
+		argIdx++
+	}
+
+	if status != "" {
+		switch status {
+		case "actual":
+			conditions = append(conditions, "status NOT IN ('pending', 'pending_payment', 'cancelled')")
+		case "payment_review":
+			conditions = append(conditions, "status = 'payment_review'")
+		case "dispatch_review":
+			conditions = append(conditions, "(status IN ('dispatch_review', 'dispatching') OR (dispatch_error IS NOT NULL AND dispatch_error != ''))")
+		case "all":
+			// no status filter
+		default:
+			conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
+			args = append(args, status)
+			argIdx++
+		}
+	}
+
+	if orderType != "" && orderType != "all" {
+		switch orderType {
+		case "pickup":
+			conditions = append(conditions, "checkout_type = 'pickup'")
+		case "delivery":
+			conditions = append(conditions, "checkout_type IN ('delivery', 'hyderabad_instant')")
+		}
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	countQuery := "SELECT COUNT(*) FROM orders " + whereClause
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	selectQuery := fmt.Sprintf("SELECT %s FROM orders %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", orderColumns, whereClause, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		o, err := scanOrder(rows)
+		if err == nil {
+			orders = append(orders, o)
+		}
+	}
+
+	for i := range orders {
+		items, _ := r.getOrderItems(orders[i])
+		orders[i].Items = items
+	}
+
+	if orders == nil {
+		orders = []models.Order{}
+	}
+
+	return orders, total, nil
 }
 
 func (r *postgresOrderRepo) GetAdminOrders(orderID string) ([]models.Order, error) {

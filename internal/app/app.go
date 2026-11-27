@@ -77,17 +77,28 @@ func (a *App) setupRoutes() {
 	cartSvc := service.NewCartService(cartRepo)
 	contactSvc := service.NewContactService(contactRepo)
 	emailSvc := service.NewEmailService(a.Config)
+	if !emailSvc.IsConfigured() {
+		a.Logger.Warn("Order emails are disabled: configure RESEND_API_KEY or Gmail SMTP credentials")
+	}
 	orderSvc.SetPaymentConfirmedHandler(func(order *models.Order) {
-		configSvc.IncrementOrderKurthiCounter()
-		if emailSvc != nil {
-			go func() {
-				if fullOrder, err := orderSvc.GetOrder(order.ID); err == nil {
-					order = fullOrder
+		if emailSvc.IsConfigured() {
+			go func(confirmed models.Order) {
+				// Keep the confirmed status snapshot when reloading order items.
+				if len(confirmed.Items) == 0 {
+					fullOrder, err := orderSvc.GetOrder(confirmed.ID)
+					if err != nil {
+						a.Logger.Error("Could not load items for order confirmation", "order_id", confirmed.ID, "error", err)
+					} else {
+						confirmed.Items = fullOrder.Items
+					}
 				}
-				if err := emailSvc.SendOrderConfirmation(order); err != nil {
-					a.Logger.Error("Could not send order confirmation", "order_id", order.ID, "error", err)
+				if err := emailSvc.SendOrderConfirmation(&confirmed); err != nil {
+					a.Logger.Error("Could not send order confirmation", "order_id", confirmed.ID, "error", err)
 				}
-			}()
+			}(*order)
+		}
+		if err := configSvc.IncrementOrderKurthiCounter(); err != nil {
+			a.Logger.Error("Could not update the order counter", "order_id", order.ID, "error", err)
 		}
 	})
 
@@ -187,6 +198,21 @@ func (a *App) setupRoutes() {
 
 	// Admin API Endpoints
 	a.Router.HandleFunc("/api/admin/orders", adminOrEmployee(http.HandlerFunc(orderHandler.HandleGetOrder)).ServeHTTP)
+	a.Router.Handle("GET /api/admin/orders/alerts", adminOrEmployee(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		ids, err := repository.RecentConfirmedOrderIDs(ctx, a.DB)
+		if err != nil {
+			a.Logger.Error("Could not check confirmed orders for admin alerts", "error", err)
+			http.Error(w, "Could not check order alerts", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(ids); err != nil {
+			a.Logger.Debug("Could not send order alerts", "error", err)
+		}
+	})))
 	a.Router.HandleFunc("/api/admin/orders/confirm-pickup", adminOrEmployee(http.HandlerFunc(orderHandler.HandleConfirmPickup)).ServeHTTP)
 	a.Router.HandleFunc("/api/admin/delhivery/batch-pickup", adminOnly(http.HandlerFunc(orderHandler.HandleTriggerDelhiveryBatch)).ServeHTTP)
 	a.Router.Handle("/api/admin/delhivery/resolve-dispatch", adminOnly(http.HandlerFunc(orderHandler.HandleResolveDelhiveryDispatch)))

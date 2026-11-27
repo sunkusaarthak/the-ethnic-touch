@@ -31,6 +31,7 @@ type OrderService interface {
 	GetOrder(orderID string) (*models.Order, error)
 	LoadOrderDetails(order *models.Order) error
 	GetAllOrders(email string) ([]models.Order, error)
+	GetOrdersPaginated(email string, limit, offset int, search, status, orderType string) ([]models.Order, int, error)
 	ConfirmPickup(orderID string) error
 	UpdateOrderStatus(orderID, status, paymentID, tracking, shippedAt, unlockedGift string) error
 	ApplyCarrierTrackingUpdate(orderID, carrierStatus, trackingNumber, eventTime string) error
@@ -721,6 +722,10 @@ func (s *orderService) RefreshShipmentTracking(ctx context.Context) error {
 
 func (s *orderService) GetAllOrders(email string) ([]models.Order, error) {
 	return s.orderRepo.GetAllOrders(email)
+}
+
+func (s *orderService) GetOrdersPaginated(email string, limit, offset int, search, status, orderType string) ([]models.Order, int, error) {
+	return s.orderRepo.GetOrdersPaginated(email, limit, offset, search, status, orderType)
 }
 
 func (s *orderService) ConfirmPickup(orderID string) error {

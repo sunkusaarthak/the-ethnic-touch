@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -9,6 +10,21 @@ import (
 	"ethnictouch/internal/config"
 	"ethnictouch/internal/models"
 )
+
+func TestWriteMIMEBase64(t *testing.T) {
+	text := strings.Repeat("Order Confirmed ₹499\n", 100)
+	var body strings.Builder
+	writeMIMEBase64(&body, text)
+	for _, line := range strings.Split(body.String(), "\r\n") {
+		if len(line) > 76 {
+			t.Fatalf("MIME Base64 line is %d characters, want at most 76", len(line))
+		}
+	}
+	decoded, err := base64.StdEncoding.DecodeString(body.String())
+	if err != nil || string(decoded) != text {
+		t.Fatalf("MIME Base64 did not round-trip: %v", err)
+	}
+}
 
 func TestEmailService_IsConfigured(t *testing.T) {
 	svcUnconfigured := NewEmailService(&config.Config{})
@@ -169,11 +185,11 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	}
 
 	prepaidHTML := renderOrderConfirmationHTML(prepaidOrder)
-	if !strings.Contains(prepaidHTML, "PREPAID STORE PICKUP &bull; FULLY PAID") {
-		t.Errorf("Expected prepaid status badge in HTML")
+	if !strings.Contains(prepaidHTML, "Paid online") {
+		t.Error("Expected online payment label in HTML")
 	}
-	if !strings.Contains(prepaidHTML, "Your In-Store Collection is Confirmed") {
-		t.Errorf("Expected in-store collection confirmed headline")
+	if !strings.Contains(prepaidHTML, "Your pickup order is confirmed") {
+		t.Errorf("Expected pickup confirmation headline")
 	}
 	if !strings.Contains(prepaidHTML, "Store Verification Scanner Pass") {
 		t.Errorf("Expected scanner pass in prepaid store pickup")
@@ -193,8 +209,8 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	if strings.Contains(prepaidHTML, "Express Dispatch Promise") {
 		t.Errorf("Store pickup should NEVER contain Delhivery dispatch promise")
 	}
-	if !strings.Contains(prepaidHTML, "Dear Priya Sharma") {
-		t.Errorf("Expected greeting derived from email prefix, got HTML missing 'Dear Priya Sharma'")
+	if !strings.Contains(prepaidHTML, "Hi Priya Sharma") {
+		t.Errorf("Expected greeting derived from email prefix, got HTML missing 'Hi Priya Sharma'")
 	}
 
 	// 2. Unpaid Store Pickup (offline_qr, pending payment at boutique)
@@ -212,8 +228,8 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	}
 
 	unpaidHTML := renderOrderConfirmationHTML(unpaidOrder)
-	if !strings.Contains(unpaidHTML, "STORE PICKUP RESERVED &bull; PAY AT STORE") {
-		t.Errorf("Expected unpaid store pickup reserved badge in HTML")
+	if !strings.Contains(unpaidHTML, "Your order is reserved for pickup") || !strings.Contains(unpaidHTML, "Pay at pickup") {
+		t.Error("Expected reservation headline and payment instructions in HTML")
 	}
 	if !strings.Contains(unpaidHTML, "Payment Due on Collection: ₹1299.00") {
 		t.Errorf("Expected payment due note in unpaid store pickup")
@@ -257,8 +273,11 @@ func TestEmailService_StorePickupContexts(t *testing.T) {
 	if !strings.Contains(deliveryHTML, "Banjara Hills, Road No 12") {
 		t.Errorf("Delivery order MUST show shipping address")
 	}
-	if !strings.Contains(deliveryHTML, "Express Dispatch Promise") {
-		t.Errorf("Delivery order MUST contain dispatch promise")
+	if !strings.Contains(deliveryHTML, "We’ll get it ready to ship to the address below.") {
+		t.Error("Expected confirmation to explain the next step")
+	}
+	if strings.Contains(deliveryHTML, "dispatch today") || strings.Contains(deliveryHTML, "FREE &bull; Pan-India") {
+		t.Error("Delivery confirmation should not make unverified shipping promises")
 	}
 	if strings.Contains(deliveryHTML, "Store Collection Point") {
 		t.Errorf("Delivery order should NOT contain Store Collection Point")
@@ -307,6 +326,7 @@ func TestEmailService_LiveSMTPVerification(t *testing.T) {
 	}
 	_ = godotenv.Load("../../.env")
 	cfg := config.LoadConfig()
+	cfg.ResendAPIKey = ""
 	svc := NewEmailService(cfg)
 	if !svc.IsConfigured() {
 		t.Skip("Skipping live SMTP test because email credentials are not set")
@@ -315,5 +335,67 @@ func TestEmailService_LiveSMTPVerification(t *testing.T) {
 	err := svc.VerifyConnection()
 	if err != nil {
 		t.Fatalf("Live SMTP handshake and authentication failed: %v", err)
+	}
+}
+
+func TestEmailService_SecuritySanitization(t *testing.T) {
+	svc := NewEmailService(nil)
+
+	// 1. CRLF in recipient email address must be rejected
+	crlfAddrs := []string{
+		"victim@example.com\r\nBcc: evil@example.com",
+		"victim@example.com\nSubject: Injected",
+		"victim@example.com\rTo: another@example.com",
+		"victim@example.com\x00attacker@evil.com",
+	}
+	for _, addr := range crlfAddrs {
+		err := svc.SendEmail(addr, "Safe Subject", "<p>Hello</p>", "Hello")
+		if err == nil {
+			t.Errorf("Expected error for recipient address with control/CRLF chars %q, got nil", addr)
+		}
+	}
+
+	// 2. HTML injection in customer name, address, and product names must be escaped
+	xssOrder := &models.Order{
+		ID:              "ORD_XSS_001",
+		CustomerEmail:   "safe@example.com",
+		ShippingName:    `<script>alert("XSS")</script>`,
+		ShippingAddress: `123 Main St <b onmouseover="alert(1)">`,
+		ShippingCity:    `<iframe src="evil.com">`,
+		ShippingState:   `Telangana`,
+		ShippingZIPCode: `500075`,
+		ShippingPhone:   `+91 9999999999" onfocus="alert(1)`,
+		PaymentMethod:   `online" onfocus="alert(1)`,
+		CouponCode:      `DISCOUNT<script>`,
+		UnlockedGift:    `Silk Stole<img src=x onerror=alert(1)>`,
+		Items: []models.OrderItem{
+			{
+				ProductID:   `PROD" onmouseover="alert(1)`,
+				ProductName: `Jaipur Kurti <img src=x onerror=alert(1)>`,
+				Size:        `M<script>`,
+				Quantity:    1,
+				PriceAtQty:  1999.00,
+			},
+		},
+	}
+
+	htmlOutput := renderOrderConfirmationHTML(xssOrder)
+	if strings.Contains(htmlOutput, "<script>") || strings.Contains(htmlOutput, "</script>") {
+		t.Errorf("Rendered HTML contains unescaped <script> tag: %s", htmlOutput)
+	}
+	if strings.Contains(htmlOutput, `<iframe src="evil.com">`) {
+		t.Errorf("Rendered HTML contains unescaped <iframe> tag")
+	}
+	if strings.Contains(htmlOutput, `<img src=x onerror=alert(1)>`) {
+		t.Errorf("Rendered HTML contains unescaped img onerror injection")
+	}
+	if !strings.Contains(htmlOutput, `&lt;script&gt;`) {
+		t.Errorf("Rendered HTML expected to contain escaped &lt;script&gt;")
+	}
+
+	// 3. Plain text email should strip carriage returns
+	textOutput := renderOrderConfirmationText(xssOrder)
+	if strings.Contains(textOutput, "\r") {
+		t.Errorf("Plain text email should not contain carriage returns")
 	}
 }

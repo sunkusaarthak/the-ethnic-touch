@@ -158,6 +158,27 @@ func (h *ProfileHandler) HandleAddresses(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ProfileHandler) HandleAdminProfiles(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		limit, _ := strconv.Atoi(limitStr)
+		if limit > 0 {
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			search := r.URL.Query().Get("search")
+			profiles, total, err := h.svc.GetProfilesPaginated(limit, offset, search)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`[]`))
+				return
+			}
+			w.Header().Set("X-Total-Count", strconv.Itoa(total))
+			w.Header().Set("Access-Control-Expose-Headers", "X-Total-Count")
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(profiles)
+			return
+		}
+	}
+
 	profiles, err := h.svc.GetAllProfiles()
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
